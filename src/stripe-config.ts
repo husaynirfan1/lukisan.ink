@@ -11,11 +11,11 @@ export interface StripeProduct {
 export const stripeProducts: StripeProduct[] = [
   {
     id: 'prod_SS8qfUAqwAY4PO',
-    priceId: 'price_1RXGXoRpbZohf2L5Alr7U8Ag',
-    name: 'Lukisan Pro',
-    description: '100 credits of AI logo generation token.',
+    priceId: 'price_1RXNtTRpbZohf2L5guw1FjOX',
+    name: 'Pro',
+    description: '100 credits of AI logo and video generation token.',
     mode: 'subscription',
-    price: 4.99,
+    price: 13.99,
     currency: 'MYR'
   }
 ];

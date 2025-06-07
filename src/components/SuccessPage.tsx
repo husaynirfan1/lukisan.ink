@@ -16,7 +16,7 @@ export const SuccessPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [refetchUser]);
 
-  const product = stripeProducts[0]; // Lukisan Pro
+  const product = stripeProducts[0]; // Pro product
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4">
@@ -50,7 +50,7 @@ export const SuccessPage: React.FC = () => {
             transition={{ delay: 0.4 }}
             className="text-gray-600 mb-8 text-lg"
           >
-            Thank you for subscribing to {product.name}! Your account has been upgraded and you now have access to 100 AI logo generation credits per month.
+            Thank you for subscribing to {product.name}! Your account has been upgraded and you now have access to 100 AI logo and video generation credits per month.
           </motion.p>
 
           <motion.div
@@ -67,6 +67,10 @@ export const SuccessPage: React.FC = () => {
               <li className="flex items-center space-x-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />
                 <span>100 monthly logo generation credits</span>
+              </li>
+              <li className="flex items-center space-x-2">
+                <Sparkles className="h-4 w-4 text-yellow-500" />
+                <span>AI video generation capabilities</span>
               </li>
               <li className="flex items-center space-x-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />

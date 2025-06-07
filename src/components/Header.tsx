@@ -11,7 +11,7 @@ export const Header: React.FC = () => {
 
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
-  const product = stripeProducts[0]; // Lukisan Pro
+  const product = stripeProducts[0]; // Pro product
 
   const handleLogoClick = () => {
     if (user) {

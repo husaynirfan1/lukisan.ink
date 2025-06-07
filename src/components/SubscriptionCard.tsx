@@ -35,7 +35,7 @@ export const SubscriptionCard: React.FC = () => {
       return;
     }
 
-    const product = stripeProducts[0]; // Lukisan Pro
+    const product = stripeProducts[0]; // Pro product
     setIsLoading(true);
 
     try {
@@ -57,7 +57,7 @@ export const SubscriptionCard: React.FC = () => {
 
   if (!user) return null;
 
-  const product = stripeProducts[0]; // Lukisan Pro
+  const product = stripeProducts[0]; // Pro product
   const isActive = subscription?.subscription_status === 'active';
 
   return (
@@ -99,6 +99,12 @@ export const SubscriptionCard: React.FC = () => {
               <Check className="h-3 w-3 text-green-600" />
             </div>
             <span className="text-lg">100 AI logo generation credits per month</span>
+          </li>
+          <li className="flex items-center space-x-3">
+            <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
+              <Check className="h-3 w-3 text-green-600" />
+            </div>
+            <span className="text-lg">AI video generation capabilities</span>
           </li>
           <li className="flex items-center space-x-3">
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
