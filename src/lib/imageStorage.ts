@@ -138,7 +138,7 @@ export const deleteImageFromSupabase = async (path: string): Promise<void> => {
       throw new Error(`Failed to delete image: ${error.message}`);
     }
 
-    console.log('Image deleted successfully:', path);
+    console.log('Logo deleted successfully:', path);
   } catch (error) {
     console.error('Error deleting image from Supabase:', error);
     throw error;
