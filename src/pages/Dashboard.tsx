@@ -1,18 +1,15 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Images, Crown, BarChart3 } from 'lucide-react';
+import { Sparkles, Images, Crown } from 'lucide-react';
 import { LogoGenerator } from '../components/LogoGenerator';
 import { ImageLibrary } from '../components/ImageLibrary';
-import { DashboardStats } from '../components/DashboardStats';
 import { SubscriptionCard } from '../components/SubscriptionCard';
 import { useAuth } from '../hooks/useAuth';
-import { useDashboardData } from '../hooks/useDashboardData';
 
-type DashboardTab = 'generate' | 'library' | 'stats';
+type DashboardTab = 'generate' | 'library';
 
 export const Dashboard: React.FC = () => {
   const { user, getUserTier } = useAuth();
-  const { data: dashboardData, loading: dataLoading } = useDashboardData();
   const [activeTab, setActiveTab] = useState<DashboardTab>('generate');
 
   const userTier = getUserTier();
@@ -31,22 +28,9 @@ export const Dashboard: React.FC = () => {
       icon: Images,
       description: 'View and manage your generated images',
     },
-    {
-      id: 'stats' as DashboardTab,
-      name: 'Analytics',
-      icon: BarChart3,
-      description: 'View your usage statistics',
-      proOnly: true,
-    },
   ];
 
   const handleTabChange = (tabId: DashboardTab) => {
-    // Check if tab requires Pro and user is not Pro
-    const tab = tabs.find(t => t.id === tabId);
-    if (tab?.proOnly && !isProUser) {
-      return; // Don't switch to Pro-only tabs for free users
-    }
-    
     setActiveTab(tabId);
     
     // Update URL without page reload
@@ -118,29 +102,21 @@ export const Dashboard: React.FC = () => {
               {tabs.map((tab) => {
                 const IconComponent = tab.icon;
                 const isActive = activeTab === tab.id;
-                const isDisabled = tab.proOnly && !isProUser;
                 
                 return (
                   <motion.button
                     key={tab.id}
-                    whileHover={{ scale: isDisabled ? 1 : 1.02 }}
-                    whileTap={{ scale: isDisabled ? 1 : 0.98 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => handleTabChange(tab.id)}
-                    disabled={isDisabled}
                     className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-all duration-200 relative ${
                       isActive
                         ? 'bg-white text-indigo-600 shadow-sm'
-                        : isDisabled
-                        ? 'text-gray-400 cursor-not-allowed'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
                     }`}
                   >
                     <IconComponent className="h-5 w-5" />
                     <span className="font-medium">{tab.name}</span>
-                    
-                    {tab.proOnly && !isProUser && (
-                      <Crown className="h-4 w-4 text-yellow-500" />
-                    )}
                   </motion.button>
                 );
               })}
@@ -165,26 +141,6 @@ export const Dashboard: React.FC = () => {
           )}
           
           {activeTab === 'library' && <ImageLibrary />}
-          
-          {activeTab === 'stats' && isProUser && (
-            <DashboardStats 
-              data={dashboardData} 
-              loading={dataLoading}
-              user={user}
-            />
-          )}
-          
-          {activeTab === 'stats' && !isProUser && (
-            <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-8 border border-yellow-200/50 text-center">
-              <Crown className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Pro Feature</h3>
-              <p className="text-gray-600 mb-6">
-                Analytics and detailed statistics are available for Pro users. 
-                Upgrade to track your usage patterns and optimize your creative workflow.
-              </p>
-              <SubscriptionCard />
-            </div>
-          )}
         </motion.div>
       </div>
     </div>
