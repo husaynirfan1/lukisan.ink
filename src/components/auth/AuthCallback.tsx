@@ -38,7 +38,7 @@ export const AuthCallback: React.FC = () => {
         });
         toast.error('Authentication timeout');
         setTimeout(() => {
-          window.location.href = '/';
+          window.location.href = '/dashboard';
         }, 2000);
       }, 20000); // 20 second timeout
 
@@ -62,7 +62,7 @@ export const AuthCallback: React.FC = () => {
           });
           toast.error('Authentication failed');
           setTimeout(() => {
-            window.location.href = '/';
+            window.location.href = '/dashboard';
           }, 3000);
           return;
         }
@@ -135,9 +135,9 @@ export const AuthCallback: React.FC = () => {
           });
           toast.success('Successfully signed in!');
           
-          // Redirect to dashboard after a short delay
+          // Redirect directly to dashboard after a short delay
           setTimeout(() => {
-            window.location.href = '/';
+            window.location.href = '/dashboard';
           }, 2000);
         } else {
           debugLog('No user session found in callback');
@@ -149,7 +149,7 @@ export const AuthCallback: React.FC = () => {
           });
           toast.error('Authentication failed - no session');
           setTimeout(() => {
-            window.location.href = '/';
+            window.location.href = '/dashboard';
           }, 3000);
         }
       } catch (error) {
@@ -162,7 +162,7 @@ export const AuthCallback: React.FC = () => {
         });
         toast.error('Authentication failed');
         setTimeout(() => {
-          window.location.href = '/';
+          window.location.href = '/dashboard';
         }, 3000);
       }
     };
@@ -229,7 +229,7 @@ export const AuthCallback: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1 }}
-              onClick={() => window.location.href = '/'}
+              onClick={() => window.location.href = '/dashboard'}
               className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
             >
               Return to Dashboard
