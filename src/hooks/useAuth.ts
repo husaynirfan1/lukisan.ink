@@ -387,7 +387,7 @@ export const useAuth = () => {
           }
           
           // Clear guest session after successful transfer
-          clearGuestSession();
+          await clearGuestSession();
         } catch (transferError) {
           console.warn('Failed to transfer guest images:', transferError);
           // Don't fail the auth flow for transfer errors
@@ -410,7 +410,7 @@ export const useAuth = () => {
           }
           
           // Clear guest session after successful transfer
-          clearGuestSession();
+          await clearGuestSession();
         } catch (transferError) {
           console.warn('Failed to transfer guest images:', transferError);
           // Don't fail the auth flow for transfer errors
@@ -476,7 +476,7 @@ export const useAuth = () => {
       setState(prev => ({ ...prev, loading: true, authStep: 'signing_out' }));
       
       // Clear guest session data on sign out
-      clearGuestSession();
+      await clearGuestSession();
       
       // Set a timeout for sign out operation
       const signOutTimeout = setTimeout(() => {

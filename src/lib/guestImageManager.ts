@@ -1,5 +1,14 @@
 import { supabase } from './supabase';
-import { urlToBlob, handleSaveGeneratedLogo } from './logoSaver';
+import { handleSaveGeneratedLogo } from './logoSaver';
+import { 
+  saveGuestImageLocally, 
+  transferGuestImagesToUserAccount,
+  getGuestImages,
+  createGuestImageDisplayUrl,
+  cleanupAllGuestImages,
+  cleanupExpiredGuestImages,
+  GuestImageData
+} from './guestImageStorage';
 
 export interface GuestSession {
   sessionId: string;
@@ -31,7 +40,6 @@ export interface TransferResult {
 
 // Session management
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-const TEMP_IMAGE_DURATION = 2 * 60 * 60 * 1000; // 2 hours
 
 /**
  * Creates or retrieves a guest session identifier
@@ -66,7 +74,7 @@ export const getOrCreateGuestSession = (): GuestSession => {
 };
 
 /**
- * Stores a temporary image for guest users
+ * Stores a temporary image for guest users using IndexedDB
  */
 export const storeTempImage = async (params: {
   imageUrl: string;
@@ -75,27 +83,47 @@ export const storeTempImage = async (params: {
   aspectRatio: string;
 }): Promise<{ success: boolean; tempImage?: TempImage; error?: string }> => {
   try {
-    const session = getOrCreateGuestSession();
+    console.log('Converting image URL to blob for storage...');
     
+    // Convert the image URL to a Blob
+    const response = await fetch(params.imageUrl, {
+      mode: 'cors',
+      headers: { 'Accept': 'image/*' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+
+    const imageBlob = await response.blob();
+    console.log('Successfully converted URL to blob, size:', imageBlob.size);
+
+    // Save the blob to IndexedDB using our new function
+    const saveResult = await saveGuestImageLocally(
+      imageBlob,
+      params.prompt,
+      params.category,
+      params.aspectRatio
+    );
+
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || 'Failed to save image locally');
+    }
+
+    // Create a temporary image object for compatibility
     const tempImage: TempImage = {
-      id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
-      sessionId: session.sessionId,
-      imageUrl: params.imageUrl,
+      id: saveResult.imageId!,
+      sessionId: getOrCreateGuestSession().sessionId,
+      imageUrl: params.imageUrl, // Keep original URL for reference
       prompt: params.prompt,
       category: params.category,
       aspectRatio: params.aspectRatio,
       createdAt: Date.now(),
-      expiresAt: Date.now() + TEMP_IMAGE_DURATION,
+      expiresAt: Date.now() + (2 * 60 * 60 * 1000), // 2 hours
       transferred: false
     };
     
-    // Store in localStorage (for demo - in production, use a temporary storage service)
-    const existingImages = getTempImages(session.sessionId);
-    const updatedImages = [...existingImages, tempImage];
-    
-    localStorage.setItem(`temp_images_${session.sessionId}`, JSON.stringify(updatedImages));
-    
-    console.log('Stored temporary image:', tempImage.id);
+    console.log('Successfully stored guest image:', saveResult.imageId);
     
     return { success: true, tempImage };
   } catch (error: any) {
@@ -105,25 +133,24 @@ export const storeTempImage = async (params: {
 };
 
 /**
- * Retrieves temporary images for a session
+ * Retrieves temporary images for display (now from IndexedDB)
  */
-export const getTempImages = (sessionId: string): TempImage[] => {
+export const getTempImages = async (sessionId?: string): Promise<TempImage[]> => {
   try {
-    const stored = localStorage.getItem(`temp_images_${sessionId}`);
-    if (!stored) return [];
+    const guestImages = await getGuestImages();
     
-    const images: TempImage[] = JSON.parse(stored);
-    
-    // Filter out expired images
-    const now = Date.now();
-    const validImages = images.filter(img => now < img.expiresAt && !img.transferred);
-    
-    // Update storage if we filtered out any images
-    if (validImages.length !== images.length) {
-      localStorage.setItem(`temp_images_${sessionId}`, JSON.stringify(validImages));
-    }
-    
-    return validImages;
+    // Convert GuestImageData to TempImage format for compatibility
+    return guestImages.map(imageData => ({
+      id: imageData.id,
+      sessionId: sessionId || 'current',
+      imageUrl: createGuestImageDisplayUrl(imageData), // Create blob URL for display
+      prompt: imageData.prompt,
+      category: imageData.category,
+      aspectRatio: imageData.aspectRatio,
+      createdAt: imageData.createdAt,
+      expiresAt: imageData.expiresAt,
+      transferred: false
+    }));
   } catch (error) {
     console.error('Error retrieving temporary images:', error);
     return [];
@@ -182,7 +209,7 @@ export const checkUserCredits = async (userId: string): Promise<{
 };
 
 /**
- * Transfers temporary images to user's permanent library
+ * Transfers temporary images to user's permanent library using the new IndexedDB approach
  */
 export const transferTempImagesToUser = async (userId: string): Promise<TransferResult> => {
   const result: TransferResult = {
@@ -198,78 +225,63 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
   try {
     console.log('Starting image transfer for user:', userId);
     
-    // Get current session
-    const session = getOrCreateGuestSession();
-    const tempImages = getTempImages(session.sessionId);
+    // Get guest images from IndexedDB
+    const guestImages = await getGuestImages();
     
-    if (tempImages.length === 0) {
-      console.log('No temporary images to transfer');
+    if (guestImages.length === 0) {
+      console.log('No guest images to transfer');
       result.success = true;
       return result;
     }
 
-    console.log(`Found ${tempImages.length} temporary images to transfer`);
+    console.log(`Found ${guestImages.length} guest images to transfer`);
     
     // Check user credits
     const creditInfo = await checkUserCredits(userId);
     result.creditsAvailable = creditInfo.available;
-    result.creditsNeeded = tempImages.length;
+    result.creditsNeeded = guestImages.length;
     
-    if (!creditInfo.canGenerate || creditInfo.available < tempImages.length) {
+    if (!creditInfo.canGenerate || creditInfo.available < guestImages.length) {
       console.log('Insufficient credits for transfer');
       result.insufficientCredits = true;
-      result.errors.push(`Insufficient credits. Need ${tempImages.length}, have ${creditInfo.available}`);
-      
-      // Apply grey overlay to images (handled in UI)
+      result.errors.push(`Insufficient credits. Need ${guestImages.length}, have ${creditInfo.available}`);
       return result;
     }
 
-    // Process each temporary image
-    for (const tempImage of tempImages) {
-      try {
-        console.log(`Transferring image: ${tempImage.id}`);
-        
-        // Convert URL to blob
-        const imageBlob = await urlToBlob(tempImage.imageUrl);
-        
-        // Save to user's permanent library
-        const saveResult = await handleSaveGeneratedLogo({
-          imageBlob,
-          prompt: tempImage.prompt,
-          category: tempImage.category,
-          userId,
-          aspectRatio: tempImage.aspectRatio
-        });
+    // Create upload function that matches our existing API
+    const uploadAndSaveLogo = async (
+      blob: Blob, 
+      prompt: string, 
+      category: string, 
+      userId: string, 
+      aspectRatio?: string
+    ) => {
+      return await handleSaveGeneratedLogo({
+        imageBlob: blob,
+        prompt,
+        category,
+        userId,
+        aspectRatio
+      });
+    };
 
-        if (saveResult.success) {
-          result.transferredCount++;
-          console.log(`Successfully transferred image: ${tempImage.id}`);
-          
-          // Mark as transferred
-          tempImage.transferred = true;
-        } else {
-          result.failedCount++;
-          result.errors.push(`Failed to transfer ${tempImage.id}: ${saveResult.error}`);
-          console.error(`Failed to transfer image ${tempImage.id}:`, saveResult.error);
-        }
-      } catch (error: any) {
-        result.failedCount++;
-        result.errors.push(`Error processing ${tempImage.id}: ${error.message}`);
-        console.error(`Error processing image ${tempImage.id}:`, error);
-      }
-    }
+    // Use the new transfer function
+    const transferResult = await transferGuestImagesToUserAccount(
+      { id: userId }, // User object
+      uploadAndSaveLogo
+    );
+
+    // Update our result with the transfer results
+    result.transferredCount = transferResult.transferredCount;
+    result.failedCount = transferResult.failedCount;
+    result.errors = transferResult.errors;
+    result.success = transferResult.success;
 
     // Update user credits if any images were transferred
     if (result.transferredCount > 0) {
       await deductUserCredits(userId, result.transferredCount, creditInfo.isProUser);
     }
 
-    // Clean up transferred images
-    const remainingImages = tempImages.filter(img => !img.transferred);
-    localStorage.setItem(`temp_images_${session.sessionId}`, JSON.stringify(remainingImages));
-
-    result.success = result.transferredCount > 0;
-    
     console.log(`Transfer completed: ${result.transferredCount} transferred, ${result.failedCount} failed`);
     
     return result;
@@ -341,13 +353,10 @@ const deductUserCredits = async (userId: string, count: number, isProUser: boole
 /**
  * Cleans up expired temporary images
  */
-export const cleanupExpiredTempImages = (): void => {
+export const cleanupExpiredTempImages = async (): Promise<void> => {
   try {
-    const session = getOrCreateGuestSession();
-    const tempImages = getTempImages(session.sessionId);
-    
-    // getTempImages already filters expired images and updates storage
-    console.log(`Cleanup completed. ${tempImages.length} valid images remaining`);
+    await cleanupExpiredGuestImages();
+    console.log('Cleanup of expired guest images completed');
   } catch (error) {
     console.error('Error during cleanup:', error);
   }
@@ -356,14 +365,15 @@ export const cleanupExpiredTempImages = (): void => {
 /**
  * Clears all temporary data for a session
  */
-export const clearGuestSession = (sessionId?: string): void => {
+export const clearGuestSession = async (sessionId?: string): Promise<void> => {
   try {
-    const targetSessionId = sessionId || getOrCreateGuestSession().sessionId;
+    // Clean up IndexedDB
+    await cleanupAllGuestImages();
     
-    localStorage.removeItem(`temp_images_${targetSessionId}`);
+    // Clean up localStorage
     localStorage.removeItem('guest_session');
     
-    console.log('Cleared guest session data');
+    console.log('Cleared all guest session data');
   } catch (error) {
     console.error('Error clearing guest session:', error);
   }
@@ -372,11 +382,11 @@ export const clearGuestSession = (sessionId?: string): void => {
 /**
  * Gets current session info for debugging
  */
-export const getSessionInfo = (): {
+export const getSessionInfo = async (): Promise<{
   session: GuestSession | null;
   tempImageCount: number;
   isExpired: boolean;
-} => {
+}> => {
   try {
     const sessionData = localStorage.getItem('guest_session');
     if (!sessionData) {
@@ -384,16 +394,27 @@ export const getSessionInfo = (): {
     }
 
     const session: GuestSession = JSON.parse(sessionData);
-    const tempImages = getTempImages(session.sessionId);
+    const guestImages = await getGuestImages();
     const isExpired = Date.now() > session.expiresAt;
 
     return {
       session,
-      tempImageCount: tempImages.length,
+      tempImageCount: guestImages.length,
       isExpired
     };
   } catch (error) {
     console.error('Error getting session info:', error);
     return { session: null, tempImageCount: 0, isExpired: true };
   }
+};
+
+// Export the new functions for external use
+export { 
+  saveGuestImageLocally, 
+  transferGuestImagesToUserAccount,
+  getGuestImages,
+  createGuestImageDisplayUrl,
+  cleanupAllGuestImages,
+  cleanupExpiredGuestImages,
+  type GuestImageData
 };
