@@ -56,6 +56,23 @@ const stylePrompts = {
     prefix: "You are a food branding specialist who understands the psychology of appetite. Create an appetizing 'Food & Beverage' logo for:",
     styleElements: "Core Principles: Deliciousness, Freshness, Quality, and Trust. Design Elements: Typography should match the food's character (friendly and rounded for cafes, elegant serifs for fine dining). Use a color palette that stimulates the appetite (warm reds, fresh greens, rich browns, golden yellows). Imagery should be clean, stylized icons of food, utensils, or shapes that evoke steam or sizzle.",
     suffix: "The logo must look delicious, clean, and inviting. It should make the viewer feel hungry or thirsty and convey quality and freshness. Generate a welcoming, vector-style design that looks great on menus, packaging, and signage."
+  },
+  real_estate: {
+    prefix: "You are an architect and brand strategist. Design a solid and trustworthy 'Real Estate & Architecture' theme logo for:",
+    styleElements: "Core Principles: Trust, Stability, Professionalism, and Elegance. Design Elements: Typography should be strong and clear, using either a classic serif for a sense of establishment or a clean sans-serif for modernity. The color palette should be grounded and sophisticated—think deep blues, charcoal grays, earthy tones, with metallic accents like gold or silver. Imagery should incorporate architectural elements: abstract rooflines, geometric shapes representing floor plans, stylized pillars, or minimalist house/building forms.",
+    suffix: "The final logo must convey a strong sense of reliability and premium quality. It should be clean, scalable, and look impeccable on both digital platforms and physical materials like business cards and signage."
+  },
+
+  kids: {
+    prefix: "You are a cheerful children's book illustrator and toy designer. Create a fun and friendly 'Kids & Toys' theme logo for:",
+    styleElements: "Core Principles: Playfulness, Imagination, Safety, and Joy. Design Elements: Typography must be soft, approachable, and easy to read, using rounded sans-serifs, bubbly letters, or a friendly, handwritten style. The color palette should be bright and vibrant, featuring primary colors or soft pastels to create a welcoming and energetic feel. Imagery should be simple and charming: cute animal mascots, smiling characters, basic shapes like stars or clouds, or stylized toys like blocks and rockets.",
+    suffix: "The logo needs to be instantly appealing to both children and parents. It must be safe, friendly, and full of personality, sparking a sense of fun and adventure. Ensure the design is simple enough to be easily recognizable and reproducible on packaging."
+  },
+
+  futuristic: {
+    prefix: "You are a sci-fi concept artist and a specialist in high-tech branding. Design a visionary 'Futuristic' theme logo for:",
+    styleElements: "Core Principles: Innovation, Advancement, Sleekness, and Vision. Design Elements: Typography should be cutting-edge, utilizing geometric sans-serifs, extended character spacing, or even custom digital or glitch-style fonts. The color palette should be electric and dynamic—neon blues, vibrant greens, silver chrome, deep space blacks, and energetic light streaks. Imagery should draw from sci-fi motifs: planetary rings, circuit board patterns, sleek rocket silhouettes, abstract data flows, or atomic structures.",
+    suffix: "The logo must look like it's from the future. It needs to be sharp, intelligent, and dynamic, conveying a sense of forward-thinking technology and limitless possibility. Generate a high-tech, polished design suitable for a groundbreaking brand."
   }
 };
 
