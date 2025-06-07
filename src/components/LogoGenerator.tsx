@@ -174,7 +174,7 @@ export const LogoGenerator: React.FC = () => {
     toast.success(`New random seed generated: ${randomSeed}`);
   };
 
-  // Store image in Supabase Storage
+  // Store image in Supabase Storage using the new function
   const storeLogoImage = async (logo: GeneratedLogo, index: number) => {
     if (!user || logo.storedUrl) return logo; // Already stored
 
@@ -184,34 +184,36 @@ export const LogoGenerator: React.FC = () => {
         i === index ? { ...l, isStoring: true } : l
       ));
 
-      const filename = `${selectedCategory}-${logo.name.toLowerCase().replace(/\s+/g, '-')}-${logo.ratio.replace(':', 'x')}`;
-      const storedImage = await storeImageInSupabase(logo.url, user.id, filename);
+      // Convert URL to blob
+      const imageBlob = await urlToBlob(logo.url);
 
-      const updatedLogo = {
-        ...logo,
-        storedUrl: storedImage.publicUrl,
-        storagePath: storedImage.path,
-        isStoring: false
-      };
+      // Save using the new function
+      const saveResult = await handleSaveGeneratedLogo({
+        imageBlob: imageBlob,
+        prompt: prompt,
+        category: selectedCategory,
+        userId: user.id,
+        aspectRatio: logo.ratio
+      });
 
-      // Update the logo in the array
-      setGeneratedLogos(prev => prev.map((l, i) => 
-        i === index ? updatedLogo : l
-      ));
+      if (saveResult.success) {
+        const updatedLogo = {
+          ...logo,
+          storedUrl: saveResult.publicUrl,
+          storagePath: saveResult.storagePath,
+          isStoring: false
+        };
 
-      // Update database with stored URL
-      const { error: updateError } = await supabase
-        .from('logo_generations')
-        .update({ image_url: storedImage.publicUrl })
-        .eq('user_id', user.id)
-        .eq('image_url', logo.url);
+        // Update the logo in the array
+        setGeneratedLogos(prev => prev.map((l, i) => 
+          i === index ? updatedLogo : l
+        ));
 
-      if (updateError) {
-        console.error('Failed to update database with stored URL:', updateError);
+        console.log(`Logo ${index + 1} stored successfully in Supabase Storage`);
+        return updatedLogo;
+      } else {
+        throw new Error(saveResult.error || 'Failed to save logo');
       }
-
-      console.log(`Logo ${index + 1} stored successfully in Supabase Storage`);
-      return updatedLogo;
 
     } catch (error) {
       console.error(`Failed to store logo ${index + 1}:`, error);
@@ -226,42 +228,151 @@ export const LogoGenerator: React.FC = () => {
     }
   };
 
-// In your LogoGenerator component, after getting the image from the API:
-
-const handleGenerate = async () => {
-  try {
-    // 1. Generate the logo (your existing code)
-    const logoUrl = await generateLogo({
-      prompt: prompt,
-      category: selectedCategory,
-      // ... other params
-    });
-
-    // 2. Convert the URL to a Blob
-    const imageBlob = await urlToBlob(logoUrl);
-
-    // 3. Save to Supabase Storage and database
-    const saveResult = await handleSaveGeneratedLogo({
-      imageBlob: imageBlob,
-      prompt: prompt,
-      category: selectedCategory,
-      userId: user.id,
-      aspectRatio: selectedAspectRatios[0] // Note: This needs to be updated for multiple aspect ratios
-    });
-
-    if (saveResult.success) {
-      console.log('Logo saved successfully!');
-      // The permanent URL is now: saveResult.publicUrl
-      // This URL will work after page reload
-    } else {
-      console.error('Failed to save logo:', saveResult.error);
+  const handleGenerate = async () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
     }
 
-  } catch (error) {
-    console.error('Generation error:', error);
-  }
-};
+    if (!prompt.trim()) {
+      toast.error('Please enter a description for your logo');
+      return;
+    }
 
+    if (!selectedCategory) {
+      toast.error('Please select a category');
+      return;
+    }
+
+    if (selectedAspectRatios.length === 0) {
+      toast.error('Please select at least one aspect ratio');
+      return;
+    }
+
+    if (!canGenerateAll) {
+      toast.error(`Not enough credits. You need ${creditsNeeded} credits but only have ${remainingCredits}.`);
+      return;
+    }
+
+    // Check if user is trying to use Pro aspect ratios without Pro subscription
+    const hasProRatios = selectedAspectRatios.some(ratioId => {
+      const ratioData = aspectRatios.find(r => r.id === ratioId);
+      return ratioData && !ratioData.free;
+    });
+
+    if (hasProRatios && !isProUser && !debugAllowAllAspectRatios) {
+      toast.error('Premium aspect ratios are available for Pro users only');
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationProgress({ current: 0, total: selectedAspectRatios.length });
+    setGeneratedLogos([]);
+    
+    try {
+      const generatedLogos: GeneratedLogo[] = [];
+      const baseSeed = seed === -1 ? Math.floor(Math.random() * 2147483647) : seed;
+
+      // Generate logos for each selected aspect ratio
+      for (let i = 0; i < selectedAspectRatios.length; i++) {
+        const aspectRatioId = selectedAspectRatios[i];
+        const aspectRatioData = aspectRatios.find(r => r.id === aspectRatioId);
+        
+        if (!aspectRatioData) continue;
+
+        setGenerationProgress({ current: i + 1, total: selectedAspectRatios.length });
+
+        // Use the same base seed but add index to ensure slight variation
+        const currentSeed = baseSeed + i;
+
+        console.log(`Generating logo ${i + 1}/${selectedAspectRatios.length} for ${aspectRatioData.name} (${aspectRatioData.ratio})`);
+
+        const logoUrl = await generateLogo({
+          prompt: prompt,
+          category: selectedCategory,
+          size: '1024x1024',
+          aspectRatio: aspectRatioId,
+          guidanceScale: guidanceScale,
+          numInferenceSteps: numInferenceSteps,
+          seed: currentSeed
+        });
+
+        const generatedLogo: GeneratedLogo = {
+          aspectRatio: aspectRatioId,
+          url: logoUrl,
+          name: aspectRatioData.name,
+          ratio: aspectRatioData.ratio,
+          isStoring: false
+        };
+
+        generatedLogos.push(generatedLogo);
+
+        // Update the UI with the current logo immediately
+        setGeneratedLogos([...generatedLogos]);
+      }
+
+      // Update user credits/daily count for all generations
+      const today = new Date().toISOString();
+      const updates: any = {
+        last_generation_date: today,
+      };
+
+      if (isProUser) {
+        updates.credits_remaining = Math.max(0, user.credits_remaining - creditsNeeded);
+      } else {
+        const todayDate = today.split('T')[0];
+        const lastGenDate = user.last_generation_date?.split('T')[0];
+        
+        if (lastGenDate === todayDate) {
+          updates.daily_generations = user.daily_generations + creditsNeeded;
+        } else {
+          updates.daily_generations = creditsNeeded;
+        }
+      }
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Update error:', updateError);
+      }
+
+      setGeneratedLogos(generatedLogos);
+      refetchUser();
+      
+      const ratioNames = selectedAspectRatios.map(id => {
+        const ratio = aspectRatios.find(r => r.id === id);
+        return ratio?.name || id;
+      }).join(', ');
+      
+      toast.success(`${generatedLogos.length} logo variants generated successfully! (${ratioNames})`);
+      
+      // Store images in Supabase Storage in the background
+      toast.loading('Storing high-quality images...', { id: 'storing-images' });
+      
+      // Store all images in parallel
+      const storePromises = generatedLogos.map((logo, index) => 
+        storeLogoImage(logo, index)
+      );
+      
+      try {
+        await Promise.all(storePromises);
+        toast.success('High-quality images stored successfully!', { id: 'storing-images' });
+      } catch (error) {
+        console.error('Some images failed to store:', error);
+        toast.success('Images generated! Some may use fallback download.', { id: 'storing-images' });
+      }
+      
+    } catch (error) {
+      toast.error('Failed to generate logos. Please try again.');
+      console.error('Generation error:', error);
+    } finally {
+      setIsGenerating(false);
+      setGenerationProgress({ current: 0, total: 0 });
+    }
+  };
 
   // Enhanced download function that uses stored images when available
   const downloadLogo = async (logo: GeneratedLogo, format: 'png' | 'svg') => {
