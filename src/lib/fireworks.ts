@@ -57,6 +57,7 @@ const stylePrompts = {
     styleElements: "Core Principles: Deliciousness, Freshness, Quality, and Trust. Design Elements: Typography should match the food's character (friendly and rounded for cafes, elegant serifs for fine dining). Use a color palette that stimulates the appetite (warm reds, fresh greens, rich browns, golden yellows). Imagery should be clean, stylized icons of food, utensils, or shapes that evoke steam or sizzle.",
     suffix: "The logo must look delicious, clean, and inviting. It should make the viewer feel hungry or thirsty and convey quality and freshness. Generate a welcoming, vector-style design that looks great on menus, packaging, and signage."
   },
+
   {
   real_estate: {
     prefix: "You are an architect and brand strategist. Design a solid and trustworthy 'Real Estate & Architecture' theme logo for:",
@@ -75,7 +76,8 @@ const stylePrompts = {
     styleElements: "Core Principles: Innovation, Advancement, Sleekness, and Vision. Design Elements: Typography should be cutting-edge, utilizing geometric sans-serifs, extended character spacing, or even custom digital or glitch-style fonts. The color palette should be electric and dynamic—neon blues, vibrant greens, silver chrome, deep space blacks, and energetic light streaks. Imagery should draw from sci-fi motifs: planetary rings, circuit board patterns, sleek rocket silhouettes, abstract data flows, or atomic structures.",
     suffix: "The logo must look like it's from the future. It needs to be sharp, intelligent, and dynamic, conveying a sense of forward-thinking technology and limitless possibility. Generate a high-tech, polished design suitable for a groundbreaking brand."
   }
-}
+
+
 };
 
 // Function to refine user prompt using Llama model
