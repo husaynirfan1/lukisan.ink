@@ -63,6 +63,28 @@ const categories = [
     description: 'Appetizing designs for culinary brands',
     placeholder: 'A gourmet coffee roastery that sources premium beans from sustainable farms worldwide'
   },
+  { 
+    id: 'real_estate', 
+    name: 'Real Estate & Arch.', 
+    icon: '🏢', 
+    description: 'Solid designs for property and construction',
+    placeholder: 'A luxury real estate agency that sells premium properties and modern architectural homes'
+  },
+  { 
+    id: 'kids', 
+    name: 'Kids & Toys', 
+    icon: '🧸', 
+    description: 'Fun, playful logos for children\'s brands',
+    placeholder: 'A creative toy brand that makes educational and imaginative toys for young children'
+  },
+  // New "Futuristic" category below
+  { 
+    id: 'futuristic', 
+    name: 'Futuristic', 
+    icon: '🚀', 
+    description: 'Sleek, advanced concepts for sci-fi and innovation',
+    placeholder: 'A deep space exploration corporation that builds interstellar travel vehicles and warp drives'
+  },
 ];
 
 const aspectRatios = [
