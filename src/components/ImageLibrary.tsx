@@ -182,7 +182,49 @@ export const ImageLibrary: React.FC = () => {
       toast.error('Failed to download image');
     }
   };
+  // A new, centralized function for performing deletions efficiently.
+  const performDeletion = async (imagesToDelete: StoredImage[]) => {
+    if (imagesToDelete.length === 0) return;
 
+    const imageIds = imagesToDelete.map(i => i.id);
+    const storagePaths = imagesToDelete
+      .map(i => i.storage_path)
+      .filter((p): p is string => !!p);
+
+    // Step 1: Delete from storage in a single batch operation
+    if (storagePaths.length > 0) {
+      console.log(`Batch deleting ${storagePaths.length} items from storage...`);
+      const { error: storageError } = await supabase.storage
+        .from('generated-images')
+        .remove(storagePaths);
+
+      if (storageError) {
+        // Log a warning but don't fail the entire operation,
+        // as the database record is more important.
+        console.warn('Storage deletion failed for some items:', storageError);
+        toast.error('Could not delete some image files from storage.');
+      }
+    }
+
+    // Step 2: Delete from the database in a single batch operation
+    console.log(`Batch deleting ${imageIds.length} records from the database...`);
+    const { error: dbError, count } = await supabase
+      .from('logo_generations')
+      .delete({ count: 'exact' })
+      .in('id', imageIds) // Use .in() for efficient bulk deletion
+      .eq('user_id', user!.id); // Ensure user owns the records
+
+    if (dbError) {
+      throw new Error(`Database deletion failed: ${dbError.message}`);
+    }
+
+    console.log(`Database deletion successful. Rows affected: ${count}`);
+    if (count !== imageIds.length) {
+      console.warn(`Mismatch: Expected to delete ${imageIds.length} but deleted ${count}. Refreshing.`);
+      // Force a refresh if the count doesn't match, to be safe.
+      fetchImages(false);
+    }
+  };
 // Refactored handler for single image deletion
   const handleDelete = async (imageId: string) => {
     const imageToDelete = images.find(img => img.id === imageId);
