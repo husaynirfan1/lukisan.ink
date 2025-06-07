@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, User } from '../lib/supabase';
 import { getUserSubscription } from '../lib/stripe';
+import { transferTempImagesToUser, clearGuestSession } from '../lib/guestImageManager';
 import toast from 'react-hot-toast';
 
 interface AuthState {
@@ -375,6 +376,22 @@ export const useAuth = () => {
           authStep: 'profile_created'
         }));
         toast.success('Account created successfully!');
+
+        // Transfer any guest images after profile creation
+        try {
+          debugLog('Checking for guest images to transfer');
+          const transferResult = await transferTempImagesToUser(userId);
+          
+          if (transferResult.transferredCount > 0) {
+            toast.success(`Transferred ${transferResult.transferredCount} logo(s) to your library!`);
+          }
+          
+          // Clear guest session after successful transfer
+          clearGuestSession();
+        } catch (transferError) {
+          console.warn('Failed to transfer guest images:', transferError);
+          // Don't fail the auth flow for transfer errors
+        }
       } else {
         debugLog('Existing profile found', existingUser);
         setState(prev => ({ 
@@ -382,6 +399,22 @@ export const useAuth = () => {
           user: existingUser,
           authStep: 'profile_loaded'
         }));
+
+        // Transfer any guest images for existing users too
+        try {
+          debugLog('Checking for guest images to transfer for existing user');
+          const transferResult = await transferTempImagesToUser(userId);
+          
+          if (transferResult.transferredCount > 0) {
+            toast.success(`Transferred ${transferResult.transferredCount} logo(s) to your library!`);
+          }
+          
+          // Clear guest session after successful transfer
+          clearGuestSession();
+        } catch (transferError) {
+          console.warn('Failed to transfer guest images:', transferError);
+          // Don't fail the auth flow for transfer errors
+        }
       }
       
       // Fetch subscription data (non-blocking)
@@ -441,6 +474,9 @@ export const useAuth = () => {
     try {
       debugLog('Starting sign out');
       setState(prev => ({ ...prev, loading: true, authStep: 'signing_out' }));
+      
+      // Clear guest session data on sign out
+      clearGuestSession();
       
       // Set a timeout for sign out operation
       const signOutTimeout = setTimeout(() => {

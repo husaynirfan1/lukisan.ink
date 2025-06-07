@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Download, Loader2, User, Crown, Wand2, RefreshCw } from 'lucide-react';
+import { Sparkles, Download, Loader2, User, Crown, Wand2, RefreshCw, AlertTriangle, Lock } from 'lucide-react';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
-import { urlToBlob, handleSaveGeneratedLogo } from '../lib/logoSaver';
+import { 
+  storeTempImage, 
+  transferTempImagesToUser, 
+  checkUserCredits,
+  getTempImages,
+  getOrCreateGuestSession,
+  cleanupExpiredTempImages,
+  TempImage 
+} from '../lib/guestImageManager';
 import { useAuth } from '../hooks/useAuth';
 import { AuthModal } from './auth/AuthModal';
 import toast from 'react-hot-toast';
@@ -64,11 +72,12 @@ interface GeneratedLogo {
   category: string;
   prompt: string;
   timestamp: number;
-  saved?: boolean;
+  tempImageId?: string;
+  hasInsufficientCredits?: boolean;
 }
 
 export const GuestLogoGenerator: React.FC = () => {
-  const { user } = useAuth();
+  const { user, refetchUser } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -76,10 +85,30 @@ export const GuestLogoGenerator: React.FC = () => {
   const [generatedLogo, setGeneratedLogo] = useState<GeneratedLogo | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingDownload, setPendingDownload] = useState<GeneratedLogo | null>(null);
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [userCredits, setUserCredits] = useState<{
+    available: number;
+    isProUser: boolean;
+    canGenerate: boolean;
+  } | null>(null);
 
   // Get the selected category's placeholder
   const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
   const currentPlaceholder = selectedCategoryData?.placeholder || 'e.g., A modern tech company specializing in cloud computing solutions...';
+
+  // Check user credits when user changes
+  useEffect(() => {
+    if (user) {
+      checkUserCredits(user.id).then(setUserCredits);
+    } else {
+      setUserCredits(null);
+    }
+  }, [user]);
+
+  // Cleanup expired images on component mount
+  useEffect(() => {
+    cleanupExpiredTempImages();
+  }, []);
 
   // Prevent right-click context menu on logo images
   const handleImageRightClick = (e: React.MouseEvent) => {
@@ -151,6 +180,15 @@ export const GuestLogoGenerator: React.FC = () => {
       return;
     }
 
+    // Check user credits if authenticated
+    if (user && userCredits && !userCredits.canGenerate) {
+      toast.error('Not enough credits to generate logo', {
+        icon: '💳',
+        duration: 4000,
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratedLogo(null);
     
@@ -172,53 +210,31 @@ export const GuestLogoGenerator: React.FC = () => {
         category: selectedCategory,
         prompt: prompt,
         timestamp: Date.now(),
-        saved: false
       };
+
+      // Store as temporary image for guest users
+      if (!user) {
+        const storeResult = await storeTempImage({
+          imageUrl: logoUrl,
+          prompt: prompt,
+          category: selectedCategory,
+          aspectRatio: '1:1'
+        });
+
+        if (storeResult.success && storeResult.tempImage) {
+          newLogo.tempImageId = storeResult.tempImage.id;
+          console.log('Stored temporary image:', storeResult.tempImage.id);
+        }
+      }
 
       setGeneratedLogo(newLogo);
       toast.success('Logo generated successfully!');
-      
-      // If user is signed in, automatically save the logo
-      if (user) {
-        await saveLogoToLibrary(newLogo);
-      }
       
     } catch (error) {
       toast.error('Failed to generate logo. Please try again.');
       console.error('Generation error:', error);
     } finally {
       setIsGenerating(false);
-    }
-  };
-
-  const saveLogoToLibrary = async (logo: GeneratedLogo) => {
-    if (!user) return;
-
-    try {
-      console.log('Saving logo to user library');
-      
-      // Convert URL to blob
-      const imageBlob = await urlToBlob(logo.url);
-      
-      // Save using the logo saver function
-      const saveResult = await handleSaveGeneratedLogo({
-        imageBlob: imageBlob,
-        prompt: logo.prompt,
-        category: logo.category,
-        userId: user.id,
-        aspectRatio: '1:1'
-      });
-
-      if (saveResult.success) {
-        setGeneratedLogo(prev => prev ? { ...prev, saved: true } : null);
-        toast.success('Logo saved to your library!');
-      } else {
-        console.error('Failed to save logo:', saveResult.error);
-        toast.error('Failed to save logo to library');
-      }
-    } catch (error) {
-      console.error('Error saving logo:', error);
-      toast.error('Failed to save logo to library');
     }
   };
 
@@ -230,6 +246,15 @@ export const GuestLogoGenerator: React.FC = () => {
       toast('Please sign in to download your logo', {
         icon: '🔐',
         duration: 3000,
+      });
+      return;
+    }
+
+    // Check if user has insufficient credits for this logo
+    if (logo.hasInsufficientCredits) {
+      toast.error('Not enough credits to download this logo', {
+        icon: '💳',
+        duration: 4000,
       });
       return;
     }
@@ -278,25 +303,81 @@ export const GuestLogoGenerator: React.FC = () => {
 
   const handleAuthSuccess = async () => {
     setShowAuthModal(false);
+    setIsTransferring(true);
     
-    // If there's a pending download, save the logo and then download
-    if (pendingDownload) {
-      await saveLogoToLibrary(pendingDownload);
-      setTimeout(() => {
-        handleDownload(pendingDownload);
-        setPendingDownload(null);
+    try {
+      // Refetch user data to get the latest information
+      await refetchUser();
+      
+      // Small delay to ensure user data is updated
+      setTimeout(async () => {
+        try {
+          // Get updated user from auth hook
+          const { user: updatedUser } = useAuth();
+          if (!updatedUser) {
+            throw new Error('User not found after authentication');
+          }
+
+          console.log('Starting image transfer for authenticated user:', updatedUser.id);
+          
+          // Transfer temporary images to user's library
+          const transferResult = await transferTempImagesToUser(updatedUser.id);
+          
+          if (transferResult.insufficientCredits) {
+            toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
+              icon: '💳',
+              duration: 5000,
+            });
+            
+            // Mark current logo as having insufficient credits
+            if (generatedLogo) {
+              setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
+            }
+          } else if (transferResult.success) {
+            toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
+              icon: '✅',
+              duration: 4000,
+            });
+            
+            // If there's a pending download, proceed with it
+            if (pendingDownload && !transferResult.insufficientCredits) {
+              setTimeout(() => {
+                handleDownload(pendingDownload);
+                setPendingDownload(null);
+              }, 1000);
+            }
+            
+            // Redirect to dashboard after successful transfer
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 2000);
+          } else {
+            toast.error(`Transfer completed with errors. ${transferResult.transferredCount} succeeded, ${transferResult.failedCount} failed.`, {
+              icon: '⚠️',
+              duration: 5000,
+            });
+          }
+          
+          // Update user credits display
+          const updatedCredits = await checkUserCredits(updatedUser.id);
+          setUserCredits(updatedCredits);
+          
+        } catch (error: any) {
+          console.error('Error during image transfer:', error);
+          toast.error(`Failed to transfer images: ${error.message}`, {
+            icon: '❌',
+            duration: 5000,
+          });
+        } finally {
+          setIsTransferring(false);
+        }
       }, 1000);
+      
+    } catch (error: any) {
+      console.error('Error in auth success handler:', error);
+      toast.error('Authentication successful, but failed to process images');
+      setIsTransferring(false);
     }
-    
-    // If there's a current generated logo that hasn't been saved, save it
-    if (generatedLogo && !generatedLogo.saved) {
-      await saveLogoToLibrary(generatedLogo);
-    }
-    
-    // Redirect to dashboard after successful authentication and logo handling
-    setTimeout(() => {
-      window.location.href = '/dashboard';
-    }, 2000);
   };
 
   const handleCategorySelect = (categoryId: string) => {
@@ -312,6 +393,32 @@ export const GuestLogoGenerator: React.FC = () => {
       <div className="max-w-4xl mx-auto">
         <div className="bg-white/80 backdrop-blur-md rounded-3xl p-8 shadow-2xl border border-gray-200/50">
           <div className="space-y-8">
+            {/* User Credits Display */}
+            {user && userCredits && (
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-200/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Crown className={`h-5 w-5 ${userCredits.isProUser ? 'text-yellow-500' : 'text-gray-400'}`} />
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {userCredits.isProUser ? 'Pro Account' : 'Free Account'}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {userCredits.available} {userCredits.isProUser ? 'credits' : 'generations'} remaining
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {!userCredits.canGenerate && (
+                    <div className="flex items-center space-x-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>No credits</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Category Selection */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Choose a style</h3>
@@ -403,7 +510,12 @@ export const GuestLogoGenerator: React.FC = () => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={handleGenerate}
-                disabled={isGenerating || !prompt.trim() || !selectedCategory}
+                disabled={
+                  isGenerating || 
+                  !prompt.trim() || 
+                  !selectedCategory || 
+                  (user && userCredits && !userCredits.canGenerate)
+                }
                 className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
               >
                 {isGenerating ? (
@@ -411,14 +523,41 @@ export const GuestLogoGenerator: React.FC = () => {
                     <Loader2 className="h-5 w-5 animate-spin" />
                     <span>Generating your logo...</span>
                   </>
+                ) : user && userCredits && !userCredits.canGenerate ? (
+                  <>
+                    <Lock className="h-5 w-5" />
+                    <span>No Credits Available</span>
+                  </>
                 ) : (
                   <>
                     <Sparkles className="h-5 w-5" />
-                    <span>Generate Logo - Free Trial</span>
+                    <span>{user ? 'Generate Logo' : 'Generate Logo - Free Trial'}</span>
                   </>
                 )}
               </motion.button>
+              
+              {user && userCredits && !userCredits.canGenerate && (
+                <p className="text-red-600 text-sm mt-2">
+                  {userCredits.isProUser 
+                    ? 'No credits remaining. Please upgrade your plan.' 
+                    : 'Daily limit reached. Try again tomorrow or upgrade to Pro.'
+                  }
+                </p>
+              )}
             </div>
+
+            {/* Transfer Status */}
+            {isTransferring && (
+              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                <div className="flex items-center space-x-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                  <div>
+                    <p className="font-semibold text-blue-900">Transferring Images</p>
+                    <p className="text-sm text-blue-700">Moving your generated logos to your permanent library...</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Generated Logo */}
             <AnimatePresence>
@@ -431,10 +570,10 @@ export const GuestLogoGenerator: React.FC = () => {
                 >
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold text-gray-900">Your Generated Logo</h3>
-                    {user && generatedLogo.saved && (
-                      <div className="flex items-center space-x-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                        <Crown className="h-4 w-4" />
-                        <span>Saved to Library</span>
+                    {generatedLogo.hasInsufficientCredits && (
+                      <div className="flex items-center space-x-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>Insufficient Credits</span>
                       </div>
                     )}
                   </div>
@@ -447,7 +586,9 @@ export const GuestLogoGenerator: React.FC = () => {
                         <img
                           src={generatedLogo.url}
                           alt="Generated logo"
-                          className="max-w-full max-h-full object-contain rounded-lg select-none pointer-events-none"
+                          className={`max-w-full max-h-full object-contain rounded-lg select-none pointer-events-none ${
+                            generatedLogo.hasInsufficientCredits ? 'filter grayscale opacity-60' : ''
+                          }`}
                           onContextMenu={handleImageRightClick}
                           onDragStart={handleImageDragStart}
                           onSelectStart={handleImageSelect}
@@ -482,6 +623,15 @@ export const GuestLogoGenerator: React.FC = () => {
                             </div>
                           </div>
                         )}
+                        
+                        {/* Insufficient credits overlay */}
+                        {generatedLogo.hasInsufficientCredits && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="bg-red-500/20 text-red-700 px-3 py-1 rounded-lg text-xs font-medium backdrop-blur-sm border border-red-300">
+                              Not enough credits
+                            </div>
+                          </div>
+                        )}
                       </div>
                       
                       <div className="text-center">
@@ -510,8 +660,29 @@ export const GuestLogoGenerator: React.FC = () => {
                       </div>
 
                       {/* Download Section */}
-                      <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200/50">
-                        {!user ? (
+                      <div className={`rounded-lg p-4 border ${
+                        generatedLogo.hasInsufficientCredits 
+                          ? 'bg-red-50 border-red-200' 
+                          : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200/50'
+                      }`}>
+                        {generatedLogo.hasInsufficientCredits ? (
+                          <div className="text-center">
+                            <AlertTriangle className="h-8 w-8 text-red-600 mx-auto mb-2" />
+                            <h5 className="font-semibold text-gray-900 mb-2">Insufficient Credits</h5>
+                            <p className="text-sm text-gray-600 mb-4">
+                              You don't have enough credits to download this logo. Upgrade to Pro or wait for daily reset.
+                            </p>
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              disabled
+                              className="w-full py-3 bg-gray-300 text-gray-500 rounded-lg font-semibold cursor-not-allowed flex items-center justify-center space-x-2"
+                            >
+                              <Lock className="h-4 w-4" />
+                              <span>Download Locked</span>
+                            </motion.button>
+                          </div>
+                        ) : !user ? (
                           <div className="text-center">
                             <User className="h-8 w-8 text-indigo-600 mx-auto mb-2" />
                             <h5 className="font-semibold text-gray-900 mb-2">Sign in to Download</h5>
@@ -533,7 +704,7 @@ export const GuestLogoGenerator: React.FC = () => {
                             <Crown className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
                             <h5 className="font-semibold text-gray-900 mb-2">Ready to Download</h5>
                             <p className="text-sm text-gray-600 mb-4">
-                              Your logo has been saved to your library
+                              Your logo is ready for download
                             </p>
                             <motion.button
                               whileHover={{ scale: 1.05 }}

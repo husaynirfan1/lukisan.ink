@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Download, Loader2, Crown, Video, Wand2, RefreshCw, Lock, Settings, CheckSquare, Square, Cloud, Scissors } from 'lucide-react';
+import { Sparkles, Download, Loader2, Crown, Video, Wand2, RefreshCw, Lock, Settings, CheckSquare, Square, Cloud, Scissors, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
 import { supabase } from '../lib/supabase';
 import { storeImageInSupabase, downloadImageFromSupabase } from '../lib/imageStorage';
 import { urlToBlob, handleSaveGeneratedLogo } from '../lib/logoSaver';
+import { checkUserCredits } from '../lib/guestImageManager';
 import { isBackgroundRemovalAvailable } from '../lib/backgroundRemoval';
 import { SubscriptionCard } from './SubscriptionCard';
 import { VideoCreator } from './video/VideoCreator';
@@ -124,6 +125,11 @@ export const LogoGenerator: React.FC = () => {
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [debugAllowAllAspectRatios, setDebugAllowAllAspectRatios] = useState(false);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
+  const [userCredits, setUserCredits] = useState<{
+    available: number;
+    isProUser: boolean;
+    canGenerate: boolean;
+  } | null>(null);
   
   // Background removal modal state
   const [showBackgroundRemovalModal, setShowBackgroundRemovalModal] = useState(false);
@@ -132,6 +138,15 @@ export const LogoGenerator: React.FC = () => {
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
   const isBgRemovalAvailable = isBackgroundRemovalAvailable();
+
+  // Check user credits when user changes
+  useEffect(() => {
+    if (user) {
+      checkUserCredits(user.id).then(setUserCredits);
+    } else {
+      setUserCredits(null);
+    }
+  }, [user]);
 
   // Listen for debug events to allow all aspect ratios
   useEffect(() => {
@@ -271,6 +286,15 @@ export const LogoGenerator: React.FC = () => {
       return;
     }
 
+    // Check user credits before generation
+    if (userCredits && !userCredits.canGenerate) {
+      toast.error('Not enough credits to generate logos', {
+        icon: '💳',
+        duration: 4000,
+      });
+      return;
+    }
+
     if (!canGenerateAll) {
       toast.error(`Not enough credits. You need ${creditsNeeded} credits but only have ${remainingCredits}.`);
       return;
@@ -363,6 +387,15 @@ export const LogoGenerator: React.FC = () => {
 
       setGeneratedLogos(generatedLogos);
       refetchUser();
+      
+      // Update local credits state
+      if (userCredits) {
+        setUserCredits(prev => prev ? {
+          ...prev,
+          available: Math.max(0, prev.available - creditsNeeded),
+          canGenerate: (prev.available - creditsNeeded) > 0
+        } : null);
+      }
       
       const ratioNames = selectedAspectRatios.map(id => {
         const ratio = aspectRatios.find(r => r.id === id);
@@ -597,6 +630,14 @@ export const LogoGenerator: React.FC = () => {
                   <p className="text-xs">
                     {canGenerateAll ? '✓ Sufficient credits' : '✗ Insufficient credits'}
                   </p>
+                </div>
+              )}
+
+              {/* No credits warning */}
+              {userCredits && !userCredits.canGenerate && (
+                <div className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="text-sm font-medium">No credits available</span>
                 </div>
               )}
             </div>
@@ -945,7 +986,11 @@ export const LogoGenerator: React.FC = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleGenerate}
-              disabled={isGenerating || !canGenerateAll}
+              disabled={
+                isGenerating || 
+                !canGenerateAll || 
+                (userCredits && !userCredits.canGenerate)
+              }
               className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
             >
               {isGenerating ? (
@@ -954,6 +999,11 @@ export const LogoGenerator: React.FC = () => {
                   <span>
                     Generating {generationProgress.current}/{generationProgress.total} logos...
                   </span>
+                </>
+              ) : userCredits && !userCredits.canGenerate ? (
+                <>
+                  <Lock className="h-5 w-5" />
+                  <span>No Credits Available</span>
                 </>
               ) : (
                 <>
@@ -969,6 +1019,15 @@ export const LogoGenerator: React.FC = () => {
             {!canGenerateAll && (
               <p className="text-red-600 text-sm mt-2">
                 You need {creditsNeeded} credits but only have {remainingCredits}
+              </p>
+            )}
+
+            {userCredits && !userCredits.canGenerate && (
+              <p className="text-red-600 text-sm mt-2">
+                {userCredits.isProUser 
+                  ? 'No credits remaining. Please upgrade your plan.' 
+                  : 'Daily limit reached. Try again tomorrow or upgrade to Pro.'
+                }
               </p>
             )}
           </div>
