@@ -81,6 +81,36 @@ export const GuestLogoGenerator: React.FC = () => {
   const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
   const currentPlaceholder = selectedCategoryData?.placeholder || 'e.g., A modern tech company specializing in cloud computing solutions...';
 
+  // Prevent right-click context menu on logo images
+  const handleImageRightClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!user) {
+      toast.error('Please sign in to download this logo', {
+        icon: '🔒',
+        duration: 3000,
+      });
+    }
+    return false;
+  };
+
+  // Prevent drag and drop of logo images
+  const handleImageDragStart = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!user) {
+      toast.error('Please sign in to download this logo', {
+        icon: '🔒',
+        duration: 2000,
+      });
+    }
+    return false;
+  };
+
+  // Prevent image selection
+  const handleImageSelect = (e: React.MouseEvent) => {
+    e.preventDefault();
+    return false;
+  };
+
   const handleRefinePrompt = async () => {
     if (!prompt.trim()) {
       toast.error('Please enter a description first');
@@ -405,14 +435,48 @@ export const GuestLogoGenerator: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Logo Display */}
+                    {/* Logo Display with Protection */}
                     <div className="bg-white rounded-xl p-6 shadow-sm">
-                      <div className="aspect-square bg-gray-50 rounded-lg p-4 mb-4 flex items-center justify-center">
+                      <div className="aspect-square bg-gray-50 rounded-lg p-4 mb-4 flex items-center justify-center relative">
+                        {/* Protected Logo Image */}
                         <img
                           src={generatedLogo.url}
                           alt="Generated logo"
-                          className="max-w-full max-h-full object-contain rounded-lg"
+                          className="max-w-full max-h-full object-contain rounded-lg select-none pointer-events-none"
+                          onContextMenu={handleImageRightClick}
+                          onDragStart={handleImageDragStart}
+                          onSelectStart={handleImageSelect}
+                          draggable={false}
+                          style={{
+                            userSelect: 'none',
+                            WebkitUserSelect: 'none',
+                            MozUserSelect: 'none',
+                            msUserSelect: 'none',
+                            WebkitTouchCallout: 'none',
+                            WebkitUserDrag: 'none',
+                            KhtmlUserSelect: 'none'
+                          }}
                         />
+                        
+                        {/* Invisible overlay to prevent interactions for non-authenticated users */}
+                        {!user && (
+                          <div 
+                            className="absolute inset-0 bg-transparent cursor-not-allowed"
+                            onContextMenu={handleImageRightClick}
+                            onDragStart={handleImageDragStart}
+                            onSelectStart={handleImageSelect}
+                            style={{ userSelect: 'none' }}
+                          />
+                        )}
+                        
+                        {/* Watermark overlay for non-authenticated users */}
+                        {!user && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="bg-black/10 text-white/60 px-3 py-1 rounded-lg text-xs font-medium backdrop-blur-sm">
+                              Sign in to download
+                            </div>
+                          </div>
+                        )}
                       </div>
                       
                       <div className="text-center">
