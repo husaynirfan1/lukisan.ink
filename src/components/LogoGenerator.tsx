@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
 import { supabase } from '../lib/supabase';
 import { storeImageInSupabase, downloadImageFromSupabase } from '../lib/imageStorage';
+import { urlToBlob, handleSaveGeneratedLogo } from '../lib/logoSaver';
 import { isBackgroundRemovalAvailable } from '../lib/backgroundRemoval';
 import { SubscriptionCard } from './SubscriptionCard';
 import { VideoCreator } from './video/VideoCreator';
@@ -245,7 +246,7 @@ const handleGenerate = async () => {
       prompt: prompt,
       category: selectedCategory,
       userId: user.id,
-      aspectRatio: selectedAspectRatio
+      aspectRatio: selectedAspectRatios[0] // Note: This needs to be updated for multiple aspect ratios
     });
 
     if (saveResult.success) {
