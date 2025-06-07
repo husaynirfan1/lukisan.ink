@@ -145,9 +145,15 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToSignup, onSucces
         }));
         toast.success('Signed in successfully!');
         
-        // Close the auth modal and redirect to dashboard
+        // Close the auth modal first
         debugLog('Calling onSuccess callback');
         onSuccess?.();
+        
+        // Redirect to dashboard after a short delay
+        setTimeout(() => {
+          debugLog('Redirecting to dashboard');
+          window.location.href = '/dashboard';
+        }, 1000);
         
       } else {
         debugLog('Unexpected: no user data returned', data);

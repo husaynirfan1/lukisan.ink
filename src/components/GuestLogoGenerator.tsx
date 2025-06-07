@@ -292,6 +292,11 @@ export const GuestLogoGenerator: React.FC = () => {
     if (generatedLogo && !generatedLogo.saved) {
       await saveLogoToLibrary(generatedLogo);
     }
+    
+    // Redirect to dashboard after successful authentication and logo handling
+    setTimeout(() => {
+      window.location.href = '/dashboard';
+    }, 2000);
   };
 
   const handleCategorySelect = (categoryId: string) => {

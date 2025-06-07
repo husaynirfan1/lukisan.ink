@@ -76,7 +76,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
         toast.success('Redirecting to Google...');
         
         // For OAuth, we don't call onSuccess here since it redirects
-        // The callback will handle the success case
+        // The callback will handle the success case and redirect to dashboard
       }
     } catch (error) {
       clearTimeout(googleTimeout);
