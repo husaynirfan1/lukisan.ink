@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Zap, Download, Video, Users, Megaphone } from 'lucide-react';
 import { AnimatedTagline } from './AnimatedTagline';
+import { GuestLogoGenerator } from './GuestLogoGenerator';
 
 export const Hero: React.FC = () => {
   return (
@@ -93,7 +94,7 @@ export const Hero: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.4 }}
-            className="flex flex-wrap justify-center gap-8 text-sm text-gray-500"
+            className="flex flex-wrap justify-center gap-8 text-sm text-gray-500 mb-16"
           >
             <div className="flex items-center space-x-2">
               <Zap className="h-5 w-5 text-indigo-500" />
@@ -109,6 +110,26 @@ export const Hero: React.FC = () => {
             </div>
           </motion.div>
         </div>
+
+        {/* Try It Now Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="mt-16"
+        >
+          <div className="text-center mb-8">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Try It Now - No Sign Up Required
+            </h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              Experience the power of AI logo generation instantly. Create your first logo and see the magic happen!
+            </p>
+          </div>
+
+          {/* Guest Logo Generator */}
+          <GuestLogoGenerator />
+        </motion.div>
       </div>
     </div>
   );
