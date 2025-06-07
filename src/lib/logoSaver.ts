@@ -17,6 +17,33 @@ export interface SaveLogoResult {
 }
 
 /**
+ * Converts a data URL to a Blob
+ */
+export const dataUrlToBlob = (dataUrl: string): Blob => {
+  const arr = dataUrl.split(',');
+  const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+};
+
+/**
+ * Converts a Blob to a data URL
+ */
+export const blobToDataUrl = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+/**
  * Saves a generated logo to Supabase Storage and database
  * This function handles the complete workflow of uploading an image and saving its metadata
  */
@@ -122,9 +149,15 @@ export const handleSaveGeneratedLogo = async (params: SaveLogoParams): Promise<S
 /**
  * Helper function to convert a URL to a Blob
  * Use this if you have an image URL and need to convert it to a Blob for saving
+ * Now supports data URLs as well as regular URLs
  */
 export const urlToBlob = async (url: string): Promise<Blob> => {
   try {
+    // Check if it's a data URL
+    if (url.startsWith('data:')) {
+      return dataUrlToBlob(url);
+    }
+
     const response = await fetch(url, {
       mode: 'cors',
       headers: {
