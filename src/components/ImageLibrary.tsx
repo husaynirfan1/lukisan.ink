@@ -183,118 +183,33 @@ export const ImageLibrary: React.FC = () => {
     }
   };
 
+// Refactored handler for single image deletion
   const handleDelete = async (imageId: string) => {
-    const image = images.find(img => img.id === imageId);
-    if (!image) {
-      console.error('Image not found for deletion:', imageId);
-      toast.error('Image not found');
-      return;
-    }
+    const imageToDelete = images.find(img => img.id === imageId);
+    if (!imageToDelete) return;
 
-    console.log('=== STARTING DELETION ===');
-    console.log('Image ID:', imageId);
-    console.log('Image URL:', image.image_url);
-    console.log('Storage Path:', image.storage_path);
-    console.log('Image User ID:', image.user_id);
-    console.log('Current User ID:', user?.id);
-
-    setDeletingImages(prev => new Set([...prev, imageId]));
+    console.log('=== STARTING SINGLE DELETION ===');
+    setDeletingImages(prev => new Set(prev).add(imageId));
 
     try {
-      // Step 1: Delete from storage if it's a Supabase URL
-      if (image.storage_path) {
-        console.log('Step 1: Deleting from storage:', image.storage_path);
-        try {
-          await deleteImageFromSupabase(image.storage_path);
-          console.log('✓ Storage deletion successful');
-        } catch (storageError) {
-          console.warn('⚠ Storage deletion failed (continuing):', storageError);
-          // Don't fail the whole operation if storage deletion fails
-        }
-      } else {
-        console.log('Step 1: Skipping storage deletion (not a Supabase URL)');
-      }
+      await performDeletion([imageToDelete]);
 
-      // Step 2: Delete from database with proper error handling
-      console.log('Step 2: Deleting from database');
-      
-      // First, verify the record exists and belongs to the user
-      const { data: existingRecord, error: checkError } = await supabase
-        .from('logo_generations')
-        .select('id, user_id')
-        .eq('id', imageId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (checkError) {
-        console.error('✗ Error checking record existence:', checkError);
-        throw new Error(`Failed to verify record: ${checkError.message}`);
-      }
-
-      if (!existingRecord) {
-        console.warn('⚠ Record not found or already deleted - treating as successful');
-        // Record doesn't exist, which means it's already deleted (desired outcome)
-        // This can happen if cleanup processes already removed it
-      } else {
-        console.log('✓ Record exists, proceeding with deletion');
-        
-        // Delete the record
-        const { error: dbError, count } = await supabase
-          .from('logo_generations')
-          .delete({ count: 'exact' })
-          .eq('id', imageId)
-          .eq('user_id', user.id);
-
-        if (dbError) {
-          console.error('✗ Database deletion error:', dbError);
-          throw new Error(`Database deletion failed: ${dbError.message}`);
-        }
-
-        console.log('✓ Database deletion completed, rows affected:', count);
-
-        if (count === 0) {
-          console.warn('⚠ No records were deleted - record may have been deleted by another process');
-          // This is still considered successful since the record is gone
-        } else {
-          console.log('✓ Deletion verified - record successfully deleted');
-        }
-      }
-
-      // Step 3: Update local state immediately
-      console.log('Step 3: Updating local state');
-      setImages(prev => {
-        const newImages = prev.filter(img => img.id !== imageId);
-        console.log('Local state updated:', prev.length, '->', newImages.length);
-        return newImages;
-      });
-
-      // Step 4: Clear from selected images
+      // Optimistic UI update
+      setImages(prev => prev.filter(img => img.id !== imageId));
       setSelectedImages(prev => {
         const newSet = new Set(prev);
         newSet.delete(imageId);
         return newSet;
       });
 
-      console.log('=== DELETION COMPLETED SUCCESSFULLY ===');
       toast.success('Image deleted successfully');
-
-      // Step 5: Verify deletion by refreshing data from server
-      console.log('Step 5: Verifying deletion with server refresh');
-      setTimeout(() => {
-        fetchImages(false);
-      }, 1000);
+      console.log('=== SINGLE DELETION COMPLETED SUCCESSFULLY ===');
 
     } catch (error: any) {
-      console.error('=== DELETION FAILED ===');
-      console.error('Error details:', error);
-      
+      console.error('=== SINGLE DELETION FAILED ===', error);
       toast.error(`Failed to delete image: ${error.message}`);
-      
-      // Force refresh to ensure UI consistency
-      console.log('Forcing refresh due to deletion error');
-      setTimeout(() => {
-        fetchImages(false);
-      }, 1000);
+      // On failure, refresh the data to ensure UI is consistent with the server
+      fetchImages(false);
     } finally {
       setDeletingImages(prev => {
         const newSet = new Set(prev);
@@ -304,52 +219,41 @@ export const ImageLibrary: React.FC = () => {
     }
   };
 
+  // Refactored handler for bulk image deletion
   const handleBulkDelete = async () => {
     if (selectedImages.size === 0) return;
 
     const confirmed = window.confirm(`Are you sure you want to delete ${selectedImages.size} image(s)?`);
     if (!confirmed) return;
 
+    const imagesToDelete = images.filter(img => selectedImages.has(img.id));
+    const imageIdsToDelete = imagesToDelete.map(img => img.id);
+
     console.log('=== STARTING BULK DELETION ===');
-    console.log('Images to delete:', Array.from(selectedImages));
-    
-    const deletePromises = Array.from(selectedImages).map(async (imageId) => {
-      try {
-        await handleDelete(imageId);
-        return { imageId, success: true };
-      } catch (error) {
-        console.error(`Bulk delete failed for ${imageId}:`, error);
-        return { imageId, success: false, error };
-      }
-    });
-    
+    setDeletingImages(prev => new Set([...prev, ...imageIdsToDelete]));
+
     try {
-      const results = await Promise.allSettled(deletePromises);
-      const successful = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.length - successful;
-      
+      await performDeletion(imagesToDelete);
+
+      // Optimistic UI update
+      setImages(prev => prev.filter(img => !selectedImages.has(img.id)));
       setSelectedImages(new Set());
-      
-      if (failed === 0) {
-        toast.success(`Successfully deleted ${successful} image(s)`);
-      } else {
-        toast.error(`Deleted ${successful} image(s), ${failed} failed`);
-        // Force refresh to ensure consistency
-        setTimeout(() => {
-          fetchImages(false);
-        }, 1000);
-      }
-      
-      console.log('=== BULK DELETION COMPLETED ===');
-      console.log(`Successful: ${successful}, Failed: ${failed}`);
-    } catch (error) {
-      console.error('Bulk deletion error:', error);
-      toast.error('Bulk deletion failed');
-      // Force refresh to ensure consistency
-      fetchImages(false);
+
+      toast.success(`Successfully deleted ${imagesToDelete.length} image(s)`);
+      console.log('=== BULK DELETION COMPLETED SUCCESSFULLY ===');
+
+    } catch (error: any) {
+      console.error('=== BULK DELETION FAILED ===', error);
+      toast.error(`Bulk deletion failed: ${error.message}`);
+      fetchImages(false); // Force refresh on failure
+    } finally {
+      setDeletingImages(prev => {
+        const newSet = new Set(prev);
+        imageIdsToDelete.forEach(id => newSet.delete(id));
+        return newSet;
+      });
     }
   };
-
   const toggleImageSelection = (imageId: string) => {
     setSelectedImages(prev => {
       const newSet = new Set(prev);
