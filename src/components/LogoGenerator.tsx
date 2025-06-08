@@ -1137,7 +1137,7 @@ export const LogoGenerator: React.FC = () => {
                 </div>
 
                 {/* Video Creator Button for Pro Users */}
-                {isProUser && generatedLogos.length > 0 && (
+                {/* {isProUser && generatedLogos.length > 0 && (
                   <div className="mt-6 text-center">
                     <motion.button
                       whileHover={{ scale: 1.05 }}
@@ -1149,7 +1149,7 @@ export const LogoGenerator: React.FC = () => {
                       <span>Create Video with Logo</span>
                     </motion.button>
                   </div>
-                )}
+                )} */}
               </motion.div>
             )}
           </AnimatePresence>
