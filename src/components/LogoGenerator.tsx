@@ -1137,19 +1137,19 @@ export const LogoGenerator: React.FC = () => {
                 </div>
 
                 {/* Video Creator Button for Pro Users */}
-                {isProUser && generatedLogos.length > 0 && (
-                  // <div className="mt-6 text-center">
-                  //   <motion.button
-                  //     whileHover={{ scale: 1.05 }}
-                  //     whileTap={{ scale: 0.95 }}
-                  //     onClick={() => setShowVideoCreator(!showVideoCreator)}
-                  //     className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-colors mx-auto"
-                  //   >
-                  //     <Video className="h-5 w-5" />
-                  //     <span>Create Video with Logo</span>
-                  //   </motion.button>
-                  // </div>
-                )}
+                {/* {isProUser && generatedLogos.length > 0 && (
+                  <div className="mt-6 text-center">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setShowVideoCreator(!showVideoCreator)}
+                      className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-colors mx-auto"
+                    >
+                      <Video className="h-5 w-5" />
+                      <span>Create Video with Logo</span>
+                    </motion.button>
+                  </div>
+                )} */}
               </motion.div>
             )}
           </AnimatePresence>
