@@ -12,9 +12,29 @@ type DashboardTab = 'generate' | 'library' | 'video';
 export const Dashboard: React.FC = () => {
   const { user, getUserTier } = useAuth();
   const [activeTab, setActiveTab] = useState<DashboardTab>('generate');
+  const [debugAllowVideoTabForFree, setDebugAllowVideoTabForFree] = useState(false);
 
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
+
+  // Listen for debug events to allow video tab for free users
+  React.useEffect(() => {
+    const handleDebugEvent = (event: CustomEvent) => {
+      setDebugAllowVideoTabForFree(event.detail.allowed);
+    };
+
+    // Check localStorage on mount
+    const stored = localStorage.getItem('debug_allow_video_tab_for_free');
+    if (stored === 'true') {
+      setDebugAllowVideoTabForFree(true);
+    }
+
+    window.addEventListener('debugAllowVideoTabForFree', handleDebugEvent as EventListener);
+    
+    return () => {
+      window.removeEventListener('debugAllowVideoTabForFree', handleDebugEvent as EventListener);
+    };
+  }, []);
 
   const tabs = [
     {
@@ -110,7 +130,7 @@ export const Dashboard: React.FC = () => {
               {tabs.map((tab) => {
                 const IconComponent = tab.icon;
                 const isActive = activeTab === tab.id;
-                const isDisabled = tab.proOnly && !isProUser;
+                const isDisabled = tab.proOnly && !isProUser && !debugAllowVideoTabForFree;
                 
                 return (
                   <motion.button
@@ -129,8 +149,13 @@ export const Dashboard: React.FC = () => {
                   >
                     <IconComponent className="h-5 w-5" />
                     <span className="font-medium">{tab.name}</span>
-                    {tab.proOnly && !isProUser && (
+                    {tab.proOnly && !isProUser && !debugAllowVideoTabForFree && (
                       <Crown className="h-4 w-4 text-yellow-500" />
+                    )}
+                    {tab.proOnly && !isProUser && debugAllowVideoTabForFree && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center">
+                        <span className="text-xs text-white">🔓</span>
+                      </div>
                     )}
                   </motion.button>
                 );

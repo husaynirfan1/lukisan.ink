@@ -47,6 +47,7 @@ export const VideoGenerator: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedVideos, setGeneratedVideos] = useState<VideoGenerationJob[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [debugAllowVideoTabForFree, setDebugAllowVideoTabForFree] = useState(false);
   
   // Text-to-video state
   const [textPrompt, setTextPrompt] = useState('');
@@ -68,6 +69,25 @@ export const VideoGenerator: React.FC = () => {
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
   const isAvailable = isVideoGenerationAvailable();
+
+  // Listen for debug events to allow video generation for free users
+  React.useEffect(() => {
+    const handleDebugEvent = (event: CustomEvent) => {
+      setDebugAllowVideoTabForFree(event.detail.allowed);
+    };
+
+    // Check localStorage on mount
+    const stored = localStorage.getItem('debug_allow_video_tab_for_free');
+    if (stored === 'true') {
+      setDebugAllowVideoTabForFree(true);
+    }
+
+    window.addEventListener('debugAllowVideoTabForFree', handleDebugEvent as EventListener);
+    
+    return () => {
+      window.removeEventListener('debugAllowVideoTabForFree', handleDebugEvent as EventListener);
+    };
+  }, []);
 
   // Handle preset selection
   const handlePresetSelect = (presetKey: keyof typeof videoStylePresets) => {
@@ -129,12 +149,17 @@ export const VideoGenerator: React.FC = () => {
 
   // Generate video
   const handleGenerate = async () => {
-    if (!user || !isProUser) {
+    if (!user) {
+      toast.error('Please sign in to generate videos');
+      return;
+    }
+
+    if (!isProUser && !debugAllowVideoTabForFree) {
       toast.error('Video generation is available for Pro users only');
       return;
     }
 
-    if (!canGenerate()) {
+    if (!canGenerate() && !debugAllowVideoTabForFree) {
       toast.error('No credits remaining');
       return;
     }
@@ -218,20 +243,27 @@ export const VideoGenerator: React.FC = () => {
         console.error('Database error:', dbError);
       }
 
-      // Update user credits
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          credits_remaining: Math.max(0, user.credits_remaining - 1),
-        })
-        .eq('id', user.id);
+      // Update user credits only if not in debug mode
+      if (!debugAllowVideoTabForFree && isProUser) {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            credits_remaining: Math.max(0, user.credits_remaining - 1),
+          })
+          .eq('id', user.id);
 
-      if (updateError) {
-        console.error('Update error:', updateError);
+        if (updateError) {
+          console.error('Update error:', updateError);
+        }
+
+        refetchUser();
       }
 
-      refetchUser();
-      toast.success('Video generation started!');
+      if (debugAllowVideoTabForFree) {
+        toast.success('Video generation started! (Debug mode - no credits deducted)');
+      } else {
+        toast.success('Video generation started!');
+      }
 
       // Poll for completion if not already completed
       if (response.status === 'processing' || response.status === 'pending') {
@@ -322,7 +354,7 @@ export const VideoGenerator: React.FC = () => {
     );
   }
 
-  if (!isProUser) {
+  if (!isProUser && !debugAllowVideoTabForFree) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-8 border border-yellow-200/50 text-center">
@@ -382,12 +414,27 @@ export const VideoGenerator: React.FC = () => {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Your Account</h3>
               <p className="text-gray-600">
-                {getRemainingGenerations()} credits remaining this month
+                {debugAllowVideoTabForFree 
+                  ? 'Debug mode: Unlimited video generation'
+                  : isProUser 
+                    ? `${getRemainingGenerations()} credits remaining this month`
+                    : `${getRemainingGenerations()} generations remaining today`
+                }
               </p>
             </div>
-            <div className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 rounded-full border border-yellow-200">
-              <Crown className="h-5 w-5" />
-              <span className="font-medium">Pro User</span>
+            <div className="flex items-center space-x-2">
+              {debugAllowVideoTabForFree && (
+                <div className="flex items-center space-x-2 px-3 py-2 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
+                  <span className="text-sm">🔓</span>
+                  <span className="font-medium text-sm">Debug Mode</span>
+                </div>
+              )}
+              {isProUser && (
+                <div className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 rounded-full border border-yellow-200">
+                  <Crown className="h-5 w-5" />
+                  <span className="font-medium">Pro User</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -756,7 +803,7 @@ export const VideoGenerator: React.FC = () => {
             onClick={handleGenerate}
             disabled={
               isGenerating || 
-              !canGenerate() ||
+              (!canGenerate() && !debugAllowVideoTabForFree) ||
               (mode === 'text-to-video' && !textPrompt.trim()) ||
               (mode === 'image-to-video' && !selectedImage)
             }
@@ -770,7 +817,9 @@ export const VideoGenerator: React.FC = () => {
             ) : (
               <>
                 <Video className="h-5 w-5" />
-                <span>Generate Video (1 credit)</span>
+                <span>
+                  Generate Video {debugAllowVideoTabForFree ? '(Debug Mode)' : '(1 credit)'}
+                </span>
               </>
             )}
           </motion.button>

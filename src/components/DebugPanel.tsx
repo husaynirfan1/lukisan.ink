@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bug, ChevronDown, ChevronUp, RefreshCw, Plus, Coins, Unlock } from 'lucide-react';
+import { Bug, ChevronDown, ChevronUp, RefreshCw, Plus, Coins, Unlock, Video } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -10,6 +10,7 @@ export const DebugPanel: React.FC = () => {
   const [isAddingCredits, setIsAddingCredits] = useState(false);
   const [creditAmount, setCreditAmount] = useState(10);
   const [allowAllAspectRatios, setAllowAllAspectRatios] = useState(false);
+  const [allowVideoTabForFree, setAllowVideoTabForFree] = useState(false);
   const { user, loading, error, authStep, subscription, refetchUser } = useAuth();
 
   // Only show in development
@@ -161,13 +162,36 @@ export const DebugPanel: React.FC = () => {
     toast.success(`All aspect ratios ${!allowAllAspectRatios ? 'unlocked' : 'locked'} for debugging`);
   };
 
-  // Initialize the setting from localStorage on component mount
+  const toggleAllowVideoTabForFree = () => {
+    setAllowVideoTabForFree(!allowVideoTabForFree);
+    
+    // Store the setting in localStorage so it persists
+    localStorage.setItem('debug_allow_video_tab_for_free', (!allowVideoTabForFree).toString());
+    
+    // Dispatch a custom event to notify the Dashboard component
+    window.dispatchEvent(new CustomEvent('debugAllowVideoTabForFree', {
+      detail: { allowed: !allowVideoTabForFree }
+    }));
+    
+    toast.success(`Video tab ${!allowVideoTabForFree ? 'unlocked' : 'locked'} for free users`);
+  };
+
+  // Initialize the settings from localStorage on component mount
   React.useEffect(() => {
-    const stored = localStorage.getItem('debug_allow_all_aspect_ratios');
-    if (stored === 'true') {
+    const storedAspectRatios = localStorage.getItem('debug_allow_all_aspect_ratios');
+    if (storedAspectRatios === 'true') {
       setAllowAllAspectRatios(true);
       // Dispatch event on mount if setting is enabled
       window.dispatchEvent(new CustomEvent('debugAllowAllAspectRatios', {
+        detail: { allowed: true }
+      }));
+    }
+
+    const storedVideoTab = localStorage.getItem('debug_allow_video_tab_for_free');
+    if (storedVideoTab === 'true') {
+      setAllowVideoTabForFree(true);
+      // Dispatch event on mount if setting is enabled
+      window.dispatchEvent(new CustomEvent('debugAllowVideoTabForFree', {
         detail: { allowed: true }
       }));
     }
@@ -255,6 +279,28 @@ export const DebugPanel: React.FC = () => {
                 {allowAllAspectRatios && (
                   <div className="text-xs text-green-400 bg-green-900/20 p-2 rounded">
                     🔓 All aspect ratios are unlocked for free users
+                  </div>
+                )}
+
+                {/* Allow Video Tab for Free Users Toggle */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-300">Allow Video Tab (Free)</span>
+                  <button
+                    onClick={toggleAllowVideoTabForFree}
+                    className={`flex items-center space-x-1 text-xs px-2 py-1 rounded transition-colors ${
+                      allowVideoTabForFree 
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                    }`}
+                  >
+                    <Video className="h-3 w-3" />
+                    <span>{allowVideoTabForFree ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </div>
+                
+                {allowVideoTabForFree && (
+                  <div className="text-xs text-purple-400 bg-purple-900/20 p-2 rounded">
+                    🎬 Video tab is unlocked for free users
                   </div>
                 )}
               </div>
@@ -379,6 +425,7 @@ export const DebugPanel: React.FC = () => {
                   <div>Supabase URL: <span className="text-gray-400">{import.meta.env.VITE_SUPABASE_URL?.slice(0, 20)}...</span></div>
                   <div>Anon Key: <span className="text-gray-400">{import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Set' : 'Missing'}</span></div>
                   <div>Fireworks API: <span className="text-gray-400">{import.meta.env.VITE_FIREWORKS_API_KEY ? 'Set' : 'Missing'}</span></div>
+                  <div>PiAPI Key: <span className="text-gray-400">{import.meta.env.VITE_PIAPI_API_KEY ? 'Set' : 'Missing'}</span></div>
                 </div>
               </div>
             </motion.div>
