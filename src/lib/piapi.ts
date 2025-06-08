@@ -89,7 +89,6 @@ const postToApi = async (payload: ApidogRequestPayload): Promise<CreateTaskRespo
 
 // --- Simplified Public Functions ---
 
-// Simplified request type for Text-to-Video
 export interface TextToVideoRequest {
     prompt: string;
     aspectRatio?: AspectRatio;
@@ -112,7 +111,6 @@ export const generateTextToVideo = async (request: TextToVideoRequest): Promise<
     return postToApi(payload);
 };
 
-// Simplified request type for Image-to-Video
 export interface ImageToVideoRequest {
     imageUrl: string;
     prompt?: string;
@@ -144,19 +142,11 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
     if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
 
-    // THIS IS A GUESS - REPLACE WITH THE CORRECT ENDPOINT FROM THE DOCS
-    const endpoint = `${PIAPI_BASE_URL}/v2/query-task/${taskId}`;
+    const endpoint = `${PIAPI_BASE_URL}/v2/query-task/${taskId}`; // GUESS - REPLACE WITH CORRECT ENDPOINT
 
-    console.log(`Checking status for task: ${taskId}`);
-    const response = await fetch(endpoint, {
-        headers: { 'x-api-key': PIAPI_API_KEY },
-    });
-
-    if (!response.ok) {
-        throw new Error(`Status check failed: ${response.statusText}`);
-    }
+    const response = await fetch(endpoint, { headers: { 'x-api-key': PIAPI_API_KEY } });
+    if (!response.ok) throw new Error(`Status check failed: ${response.statusText}`);
     
-    // The response mapping might need adjustment based on the actual API response
     const data = await response.json();
     return {
         task_id: data.task_id,
@@ -166,4 +156,55 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         progress: data.progress || 0,
         error: data.error,
     };
+};
+
+// =======================================================================
+// UTILITY FUNCTIONS (Restored)
+// =======================================================================
+
+// Download video
+export const downloadVideo = async (videoUrl: string, filename: string): Promise<void> => {
+  try {
+    const response = await fetch(videoUrl, { mode: 'cors' });
+    if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Video download error:', error);
+    throw error;
+  }
+};
+
+// Utility functions
+export const formatDuration = (seconds: number): string => {
+  return `${seconds}s`;
+};
+
+export const formatFileSize = (bytes: number): string => {
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  if (bytes === 0) return '0 Bytes';
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+};
+
+export const validateImageFile = (file: File): { valid: boolean; error?: string } => {
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
+  if (file.size > maxSize) {
+    return { valid: false, error: 'Image must be smaller than 10MB' };
+  }
+
+  if (!allowedTypes.includes(file.type)) {
+    return { valid: false, error: 'Only JPEG, PNG, and WebP images are supported' };
+  }
+
+  return { valid: true };
 };
