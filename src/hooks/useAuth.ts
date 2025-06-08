@@ -1,8 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase, User } from '../lib/supabase';
 import { getUserSubscription } from '../lib/stripe';
 import { transferTempImagesToUser, clearGuestSession } from '../lib/guestImageManager';
 import toast from 'react-hot-toast';
+
+// Define a longer, more realistic timeout for the entire auth flow
+const AUTH_FLOW_TIMEOUT_MS = 30000; // 30 seconds
+const STALE_DATA_THRESHOLD_MS = 60000; // 1 minute
 
 interface AuthState {
   user: User | null;
@@ -21,715 +25,224 @@ export const useAuth = () => {
     authStep: 'initializing'
   });
 
-  // Use refs to prevent multiple concurrent operations and track state
-  const isInitializing = useRef(false);
   const isFetchingProfile = useRef(false);
-  const hasShownError = useRef(false);
-  const profileFetchTimeout = useRef<NodeJS.Timeout | null>(null);
-  const authTimeout = useRef<NodeJS.Timeout | null>(null);
-  const isTabVisible = useRef(true);
-  const hasInitialized = useRef(false);
-  const isSigningOut = useRef(false);
-  const hasAttemptedGuestImageTransferRef = useRef(false);
-  const lastFetchProfileAttemptTimestampRef = useRef<number>(0);
-  const lastProfileFetchSuccessTimestampRef = useRef<number>(0);
+  const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSuccessfulFetchTimestamp = useRef<number>(0);
+  const hasAttemptedGuestImageTransfer = useRef(false);
 
-  // Debug logging function
-  const debugLog = (step: string, data?: any, error?: any) => {
-    const timestamp = new Date().toISOString();
-    console.log(`[AUTH DEBUG ${timestamp}] ${step}:`, { data, error, tabVisible: isTabVisible.current });
+  // Simple debug logger
+  const debugLog = (step: string, data: any = {}) => {
+    console.log(`[AUTH] ${new Date().toISOString()} | ${step}`, data);
   };
 
-  // Show error toast only once per session
-  const showErrorToast = (message: string) => {
-    if (!hasShownError.current && isTabVisible.current) {
-      hasShownError.current = true;
-      toast.error(message);
-      // Reset after 5 seconds to allow new errors
-      setTimeout(() => {
-        hasShownError.current = false;
-      }, 5000);
-    }
-  };
-
-  // Clear all timeouts
-  const clearTimeouts = () => {
-    if (profileFetchTimeout.current) {
-      clearTimeout(profileFetchTimeout.current);
-      profileFetchTimeout.current = null;
-    }
-    if (authTimeout.current) {
-      clearTimeout(authTimeout.current);
-      authTimeout.current = null;
-    }
-  };
-
-  // Handle tab visibility changes
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      const wasVisible = isTabVisible.current;
-      isTabVisible.current = !document.hidden;
-      
-      debugLog(`Tab visibility changed: ${isTabVisible.current ? 'visible' : 'hidden'}`);
-      
-      // If tab becomes visible again
-      if (!wasVisible && isTabVisible.current) {
-        if (state.loading) { // Condition 1: Tab became visible AND app was in a loading state
-          debugLog('Tab became visible while loading - checking auth state');
-
-          setTimeout(() => {
-            // Check conditions AGAIN after 1 second
-            if (state.loading && (state.authStep.includes('fetching') || state.authStep.includes('checking'))) {
-              debugLog('Recovering from tab switch (previously loading)');
-              setState(prev => ({
-                ...prev,
-                loading: false, // Set loading false before attempting recovery fetch
-                error: null,    // Clear previous error
-                authStep: 'tab_recovery_attempt'
-              }));
-
-              supabase.auth.getSession().then(({ data: { session } }) => {
-                if (session?.user && !isFetchingProfile.current) {
-                  debugLog('Attempting profile fetch on recovery (previously loading)');
-                  fetchUserProfile(session.user.id); // This call is now subject to the cooldown
-                } else if (!session?.user) {
-                  debugLog('No session found during visibility recovery (previously loading).');
-                  setState(prev => ({...prev, user: null, subscription: null, loading: false, error: null, authStep: 'no_session_on_recovery'}));
-                }
-              });
-            } else if (!state.loading) {
-              // If state.loading became false during the 1s timeout (e.g. original fetch completed/timed out)
-              debugLog('Tab became visible, loading completed during 1s delay. No explicit recovery fetch needed from this path.');
-            }
-          }, 1000);
-        } else { // Path 2: Tab became visible AND app was NOT in a loading state (state.loading is false)
-          debugLog('Tab became visible, was not loading. Proactively checking session status.');
-          // NO setTimeout HERE
-
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (!isTabVisible.current) {
-              debugLog('Tab became hidden again during session check. Aborting visibility handler action.');
-              return;
-            }
-
-            if (session?.user && !state.user) {
-              debugLog('Session exists but no user in state on tab visible. Attempting profile fetch.');
-              fetchUserProfile(session.user.id); // Cooldown applies
-            } else if (session?.user && state.user && session.user.id !== state.user.id) {
-              debugLog('Session user mismatch on tab visible. Attempting profile fetch for session user (bypassing cooldown).');
-              lastFetchProfileAttemptTimestampRef.current = 0;
-              fetchUserProfile(session.user.id);
-            } else if (!session?.user && state.user) {
-              debugLog('No session but user in state on tab visible. Signing out.');
-              signOut();
-            } else if (session?.user && state.user && session.user.id === state.user.id) {
-              debugLog('Session consistent with user state on tab visible. No automatic refresh on refocus unless data critically missing/mismatched.');
-              // STALE CHECK REMOVED FROM HERE
-            } else {
-              debugLog('Session status check on tab visible: No specific action needed or state is indeterminate.');
-            }
-          });
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Set initial visibility state
-    isTabVisible.current = !document.hidden;
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [state.loading, state.authStep, state.user]);
-
-  useEffect(() => {
-    if (state.authStep === 'profile_fetch_timeout_lapsed') {
-      const reloadTriggeredTimestamp = sessionStorage.getItem('lukisan_reload_triggered_timestamp');
-      const now = Date.now();
-      const FIVE_MINUTES_MS = 5 * 60 * 1000; // 5 minutes cooldown for auto-reload
-
-      if (reloadTriggeredTimestamp) {
-        const timestamp = parseInt(reloadTriggeredTimestamp, 10);
-        if (now - timestamp < FIVE_MINUTES_MS) {
-          debugLog('Auth step is profile_fetch_timeout_lapsed, but an auto-reload was triggered recently. Aborting this auto-reload to prevent a loop.');
-          // The standard error message (set when profile_fetch_timeout_lapsed occurred) will be displayed.
-          return;
-        }
-      }
-
-      debugLog('Auth step is profile_fetch_timeout_lapsed. Triggering redirect to https://lukisan.space to reload the application.');
-      sessionStorage.setItem('lukisan_reload_triggered_timestamp', now.toString());
-
-      // Redirect to the specified home URL
-      window.location.href = 'https://lukisan.space';
-    }
-  }, [state.authStep]);
-
-  useEffect(() => {
-    // Prevent multiple initializations
-    if (isInitializing.current || hasInitialized.current) {
-      debugLog('Already initialized or initializing, skipping');
+  const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = false) => {
+    // 1. Primary Guard: Prevent concurrent fetches
+    if (isFetchingProfile.current) {
+      debugLog('fetchUserProfile_skipped', { reason: 'Already fetching' });
       return;
     }
 
-    isInitializing.current = true;
-    hasInitialized.current = true;
-    debugLog('Starting auth initialization');
-    
-    // Set up auth timeout with longer duration, but only if tab is visible
-    authTimeout.current = setTimeout(() => {
-      if (state.loading && isInitializing.current && isTabVisible.current) {
-        debugLog('Auth timeout reached', null, 'Authentication taking too long');
-        setState(prev => ({ 
-          ...prev, 
-          loading: false, 
-          error: 'Authentication timeout',
-          authStep: 'timeout'
-        }));
-        showErrorToast('Authentication is taking longer than expected. Please refresh the page.');
-        isInitializing.current = false;
-        clearTimeouts();
-      }
-    }, 25000); // 25 second timeout (longer to account for tab switching)
+    debugLog('fetchUserProfile_start', { userId });
+    isFetchingProfile.current = true;
+    setState(prev => ({ ...prev, loading: true, error: null, authStep: 'fetching_profile' }));
 
-    // Get initial session
-    const initializeAuth = async () => {
-      try {
-        debugLog('Getting initial session');
-        
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          debugLog('Initial session error', null, error);
-          setState(prev => ({ 
-            ...prev, 
-            loading: false, 
-            error: error.message,
-            authStep: 'session_error'
-          }));
-          isInitializing.current = false;
-          clearTimeouts();
-          return;
-        }
-
-        if (session?.user) {
-          debugLog('Initial session found', { userId: session.user.id });
-          await fetchUserProfile(session.user.id);
-        } else {
-          debugLog('No initial session found');
-          setState(prev => ({ 
-            ...prev, 
+    // This single timeout will govern the entire fetch process
+    const operationTimeout = setTimeout(() => {
+        debugLog('fetchUserProfile_timeout');
+        isFetchingProfile.current = false;
+        setState(prev => ({
+            ...prev,
             loading: false,
-            authStep: 'no_session'
-          }));
-        }
-      } catch (error: any) {
-        debugLog('Initialize auth error', null, error);
-        setState(prev => ({ 
-          ...prev, 
-          loading: false, 
-          error: 'Failed to initialize authentication',
-          authStep: 'init_error'
+            error: 'Profile loading took too long. Please refresh the page.',
+            authStep: 'profile_fetch_timeout'
         }));
-        showErrorToast('Failed to initialize authentication');
-      } finally {
-        isInitializing.current = false;
-        clearTimeouts();
+    }, AUTH_FLOW_TIMEOUT_MS);
+
+    try {
+      // 2. Fetch user profile from 'users' table
+      const { data: userProfile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found)
+        throw new Error(`Profile fetch error: ${profileError.message}`);
       }
-    };
 
-    initializeAuth();
+      let finalUserProfile = userProfile;
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        debugLog('Auth state change', { event, userId: session?.user?.id });
+      // 3. If profile doesn't exist, create it
+      if (!finalUserProfile) {
+        debugLog('fetchUserProfile_creating_profile');
+        setState(prev => ({ ...prev, authStep: 'creating_profile' }));
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser) throw new Error('Could not get authenticated user to create profile.');
+
+        const newUserData = {
+            id: userId,
+            email: authUser.email!,
+            name: authUser.user_metadata?.full_name || authUser.email!.split('@')[0],
+            avatar_url: authUser.user_metadata?.avatar_url,
+        };
+
+        const { data: createdUser, error: createError } = await supabase
+            .from('users')
+            .insert(newUserData)
+            .select()
+            .single();
+
+        if (createError) throw new Error(`Profile creation failed: ${createError.message}`);
         
-        // Skip if we're already initializing or tab is not visible
-        if (isInitializing.current || !isTabVisible.current) {
-          debugLog('Skipping auth state change - already initializing or tab not visible');
-          return;
-        }
-        
-        try {
-          if (session?.user) {
-            if (event === 'SIGNED_IN') {
-              debugLog('New SIGNED_IN event, resetting guest image transfer and allowing profile fetch.');
-              hasAttemptedGuestImageTransferRef.current = false;
-              lastFetchProfileAttemptTimestampRef.current = 0; // Reset timestamp to bypass cooldown
+        finalUserProfile = createdUser;
+        toast.success('Account created successfully!');
+      }
+
+      // 4. Handle Guest Image Transfer (only once per session)
+      if (!hasAttemptedGuestImageTransfer.current) {
+        debugLog('fetchUserProfile_transferring_images');
+        const transferResult = await transferTempImagesToUser(userId);
+        if (transferResult.success) {
+            hasAttemptedGuestImageTransfer.current = true;
+            if (transferResult.transferredCount > 0) {
+                toast.success(`Transferred ${transferResult.transferredCount} guest image(s) to your account.`);
             }
-            debugLog('User session detected, fetching profile via onAuthStateChange'); // This log might need adjustment if fetch is skipped
-            await fetchUserProfile(session.user.id); // This call will now honor the cooldown unless reset by SIGNED_IN
-          } else {
-            debugLog('No user session, clearing state and resetting transfer attempt flag.');
-            hasAttemptedGuestImageTransferRef.current = false;
-            setState(prev => ({
-              ...prev,
-              user: null,
-              subscription: null,
-              loading: false,
-              error: null,
-              authStep: 'signed_out'
-            }));
-          }
-        } catch (error: any) {
-          debugLog('Auth state change error', null, error);
-          setState(prev => ({ 
-            ...prev, 
-            loading: false, 
-            error: 'Failed to process authentication change',
-            authStep: 'state_change_error'
-          }));
-          // Don't show toast for state change errors as they're often transient
+            await clearGuestSession();
+        }
+      }
+
+      // 5. Fetch subscription status
+      debugLog('fetchUserProfile_fetching_subscription');
+      setState(prev => ({ ...prev, authStep: 'loading_subscription' }));
+      const subscription = await getUserSubscription();
+
+      // 6. Success: Update state
+      debugLog('fetchUserProfile_success');
+      lastSuccessfulFetchTimestamp.current = Date.now();
+      setState({
+          user: finalUserProfile,
+          subscription: subscription,
+          loading: false,
+          error: null,
+          authStep: 'complete'
+      });
+
+    } catch (error: any) {
+      debugLog('fetchUserProfile_error', { errorMessage: error.message });
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'An unknown error occurred while fetching your profile.',
+        authStep: 'profile_fetch_error'
+      }));
+    } finally {
+      // 7. Cleanup: always clear timeout and reset fetching flag
+      clearTimeout(operationTimeout);
+      isFetchingProfile.current = false;
+    }
+  }, []);
+
+
+  const signOut = async () => {
+    debugLog('signOut_start');
+    await supabase.auth.signOut();
+    // The onAuthStateChange listener will handle the state reset.
+    // We also clear refs and state here as a fallback.
+    hasAttemptedGuestImageTransfer.current = false;
+    lastSuccessfulFetchTimestamp.current = 0;
+    setState({ user: null, loading: false, subscription: null, error: null, authStep: 'signed_out' });
+    window.location.href = '/'; // Force a clean reload to the home page
+  };
+
+
+  // Main effect for handling initialization and auth state changes
+  useEffect(() => {
+    debugLog('Auth effect initializing...');
+    fetchUserProfile(supabase.auth.getSession().then(s => s.data.session?.user.id ?? ''), true);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        debugLog('onAuthStateChange', { event });
+        if (event === 'SIGNED_IN' && session?.user) {
+          fetchUserProfile(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
+          hasAttemptedGuestImageTransfer.current = false;
+          lastSuccessfulFetchTimestamp.current = 0;
+          setState({ user: null, loading: false, subscription: null, error: null, authStep: 'signed_out' });
         }
       }
     );
 
     return () => {
-      clearTimeouts();
+      debugLog('Auth effect cleanup');
       subscription.unsubscribe();
-      isInitializing.current = false;
+      if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
     };
-  }, []); // Empty dependency array to run only once
+  }, [fetchUserProfile]);
 
-  const fetchUserProfile = async (userId: string) => {
-    // Prevent concurrent profile fetches
-    if (isFetchingProfile.current) {
-      debugLog('Profile fetch already in progress, skipping');
-      return;
-    }
 
-    // Don't fetch if tab is not visible
-    if (!isTabVisible.current) {
-      debugLog('Tab not visible, deferring profile fetch');
-      return;
-    }
-
-    // *** NEW: Check if a fetch was attempted very recently ***
-    const now = Date.now();
-    const timeSinceLastAttempt = now - lastFetchProfileAttemptTimestampRef.current;
-    // Cooldown period: 20 seconds (longer than the 15s fetch timeout).
-    const FETCH_PROFILE_COOLDOWN_MS = 20000;
-
-    if (timeSinceLastAttempt < FETCH_PROFILE_COOLDOWN_MS) {
-      debugLog(`Skipping profile fetch; attempted ${Math.round(timeSinceLastAttempt / 1000)}s ago. Cooldown: ${FETCH_PROFILE_COOLDOWN_MS / 1000}s.`);
-      // If loading is true, set it to false as we are aborting/skipping the fetch.
-      if (state.loading) {
-        setState(prev => ({...prev, loading: false, authStep: 'fetch_skipped_cooldown'}));
-      }
-      return; // Abort the fetch
-    }
-
-    // Update the timestamp for this attempt, before setting isFetchingProfile.current = true
-    lastFetchProfileAttemptTimestampRef.current = now;
-
-    isFetchingProfile.current = true;
-    clearTimeouts(); // Clear any existing timeouts
-
-    // Set up profile fetch timeout - longer for tab switching scenarios
-    profileFetchTimeout.current = setTimeout(() => {
-      if (isFetchingProfile.current) { // Check only if a fetch was in progress
-        debugLog(`Profile fetch timeout reached. Tab visible: ${isTabVisible.current}`);
-        setState(prev => ({ 
-          ...prev, 
-          // Always set loading to false on timeout, regardless of tab visibility.
-          // If the tab is hidden, this state change will be applied when it becomes visible.
-          loading: false, 
-          error: prev.error || 'Profile fetch timeout (possibly while tab hidden)', // Keep existing error if any, or set new one
-          authStep: 'profile_fetch_timeout_lapsed' // New distinct authStep
-        }));
-        // Show toast only if tab is visible to avoid background toast errors
-        if (isTabVisible.current) {
-            showErrorToast('Profile loading took too long. Please try refreshing.');
-        }
-        isFetchingProfile.current = false;
-      }
-    }, 15000); // 15 second timeout for profile fetch
-
-    try {
-      let transferAttemptedThisRun = false;
-      debugLog('Starting profile fetch', { userId });
-      setState(prev => ({ ...prev, loading: true, authStep: 'fetching_profile' }));
-      
-      debugLog('Checking for existing profile');
-      
-      // Create a promise that will timeout
-      const profilePromise = supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      // Race the profile fetch against a timeout - longer timeout for tab switching
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Database query timeout'));
-        }, 12000); // 12 second database timeout
-      });
-
-      const { data: existingUser, error: fetchError } = await Promise.race([
-        profilePromise,
-        timeoutPromise
-      ]) as any;
-
-      // Check if tab is still visible after async operation
-      if (!isTabVisible.current) {
-        debugLog('Tab became hidden during profile fetch, aborting');
-        isFetchingProfile.current = false;
-        clearTimeouts();
-        return;
-      }
-
-      if (fetchError) {
-        debugLog('Profile fetch error', null, fetchError);
-        setState(prev => ({ 
-          ...prev, 
-          loading: false, 
-          error: 'Failed to load user profile',
-          authStep: 'profile_fetch_error'
-        }));
-        showErrorToast('Failed to load user profile');
-        return;
-      }
-
-      // If user doesn't exist, create profile
-      if (!existingUser) {
-        debugLog('No existing profile found, creating new profile');
+  // Effect for handling tab visibility to prevent stale data
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        debugLog('Tab became visible');
+        const isDataStale = Date.now() - lastSuccessfulFetchTimestamp.current > STALE_DATA_THRESHOLD_MS;
         
-        // Get user metadata from auth
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-        
-        if (authError || !authUser) {
-          debugLog('Failed to get auth user', null, authError);
-          setState(prev => ({ 
-            ...prev, 
-            loading: false, 
-            error: 'Failed to get user information',
-            authStep: 'auth_user_error'
-          }));
-          showErrorToast('Failed to get user information');
-          return;
-        }
-
-        const newUserData = {
-          id: userId,
-          email: authUser.email!,
-          name: authUser.user_metadata?.full_name || 
-                authUser.user_metadata?.name || 
-                authUser.email!.split('@')[0],
-          avatar_url: authUser.user_metadata?.avatar_url || 
-                     authUser.user_metadata?.picture,
-          tier: 'free',
-          credits_remaining: 0,
-          daily_generations: 0,
-        };
-
-        debugLog('Creating new user profile', newUserData);
-
-        // Create profile with timeout
-        const createPromise = supabase
-          .from('users')
-          .insert(newUserData)
-          .select()
-          .single();
-
-        const createTimeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => {
-            reject(new Error('Profile creation timeout'));
-          }, 12000);
-        });
-
-        const { data: createdUser, error: createError } = await Promise.race([
-          createPromise,
-          createTimeoutPromise
-        ]) as any;
-
-        if (createError) {
-          debugLog('Profile creation error', null, createError);
-          setState(prev => ({ 
-            ...prev, 
-            loading: false, 
-            error: 'Failed to create user profile',
-            authStep: 'profile_creation_error'
-          }));
-          showErrorToast('Failed to create user profile');
-          return;
-        }
-
-        debugLog('Profile created successfully', createdUser);
-        setState(prev => ({ 
-          ...prev, 
-          user: createdUser,
-          authStep: 'profile_created'
-        }));
-        toast.success('Account created successfully!');
-
-        // Transfer any guest images after profile creation
-        if (!hasAttemptedGuestImageTransferRef.current) {
-          let successThisAttempt = false;
-          try {
-            debugLog('Attempting guest image transfer for new user.');
-            const transferResult = await transferTempImagesToUser(userId);
-            // Consider transfer successful if success flag is true or items were transferred
-            if (transferResult.success || transferResult.transferredCount > 0) {
-              successThisAttempt = true;
-              if (transferResult.transferredCount > 0) {
-                toast.success(`Transferred ${transferResult.transferredCount} logo(s) to your library!`);
-              }
-            } else if (transferResult.errors.length > 0) {
-              // Log errors but don't necessarily treat as a hard fail preventing future attempts
-              // unless transferResult.success is definitively false.
-              console.warn(`Guest image transfer for new user had issues: ${transferResult.errors.join('; ')}`);
-              if (!transferResult.success) { // If the result explicitly states failure
-                 // Potentially do not set successThisAttempt = true
-              }
-            }
-          } catch (transferError) {
-            console.warn('Failed to transfer guest images for new user:', transferError);
-            // Do not set successThisAttempt = true, allowing retry
-          }
-
-          if (successThisAttempt) {
-            hasAttemptedGuestImageTransferRef.current = true;
-            transferAttemptedThisRun = true;
-          }
-        } else {
-          debugLog('Guest image transfer already successfully attempted for this session (new user path).');
-        }
-      } else {
-        debugLog('Existing profile found', existingUser);
-        setState(prev => ({ 
-          ...prev, 
-          user: existingUser,
-          authStep: 'profile_loaded'
-        }));
-
-        // Transfer any guest images for existing users too
-        if (!hasAttemptedGuestImageTransferRef.current) {
-          let successThisAttempt = false;
-          try {
-            debugLog('Attempting guest image transfer for existing user.');
-            const transferResult = await transferTempImagesToUser(userId);
-            if (transferResult.success || transferResult.transferredCount > 0) {
-              successThisAttempt = true;
-              if (transferResult.transferredCount > 0) {
-                toast.success(`Transferred ${transferResult.transferredCount} logo(s) to your library!`);
-              }
-            } else if (transferResult.errors.length > 0) {
-              console.warn(`Guest image transfer for existing user had issues: ${transferResult.errors.join('; ')}`);
-              if (!transferResult.success) {
-                // Potentially do not set successThisAttempt = true
-              }
-            }
-          } catch (transferError) {
-            console.warn('Failed to transfer guest images for existing user:', transferError);
-            // Do not set successThisAttempt = true, allowing retry
-          }
-
-          if (successThisAttempt) {
-            hasAttemptedGuestImageTransferRef.current = true;
-            transferAttemptedThisRun = true;
-          }
-        } else {
-          debugLog('Guest image transfer already successfully attempted for this session (existing user path).');
+        // If we have a user but data is potentially stale, refetch.
+        if (state.user && isDataStale) {
+            debugLog('Data is stale, refetching user profile.');
+            fetchUserProfile(state.user.id);
+        } else if (!state.user && !state.loading) {
+            // If we don't have a user and aren't loading, check the session.
+            debugLog('No user in state, re-checking session on visibility change.');
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                if(session?.user) {
+                    fetchUserProfile(session.user.id);
+                }
+            });
         }
       }
+    };
 
-      // Placed after both the new user and existing user blocks' transfer logic
-      if (transferAttemptedThisRun) { // Only clear if a successful transfer was made in THIS run
-          try {
-              debugLog('Clearing guest session after successful transfer attempt in this run.');
-              await clearGuestSession();
-          } catch (clearError) {
-              console.warn('Failed to clear guest session:', clearError);
-          }
-      }
-      
-      // Fetch subscription data (non-blocking)
-      try {
-        debugLog('Fetching subscription data');
-        const sub = await getUserSubscription();
-        debugLog('Subscription data fetched', sub);
-        setState(prev => ({ 
-          ...prev, 
-          subscription: sub,
-          loading: false,
-          error: null,
-          authStep: 'complete'
-        }));
-        lastProfileFetchSuccessTimestampRef.current = Date.now(); // Add this line
-      } catch (subError: any) {
-        debugLog('Subscription fetch error', null, subError);
-        // Don't fail the whole auth flow for subscription errors
-        setState(prev => ({ 
-          ...prev, 
-          loading: false,
-          error: null,
-          authStep: 'complete_no_subscription'
-        }));
-        lastProfileFetchSuccessTimestampRef.current = Date.now(); // Add this line
-      }
-    } catch (error: any) {
-      debugLog('Unexpected error in fetchUserProfile', null, error);
-      
-      let errorMessage = 'An unexpected error occurred';
-      if (error.message.includes('timeout')) {
-        errorMessage = 'Profile loading timed out. Please try refreshing the page.';
-      } else if (error.message.includes('network')) {
-        errorMessage = 'Network error. Please check your connection.';
-      }
-      
-      setState(prev => ({ 
-        ...prev, 
-        loading: false, 
-        error: errorMessage,
-        authStep: 'unexpected_error'
-      }));
-      showErrorToast(errorMessage);
-    } finally {
-      isFetchingProfile.current = false;
-      clearTimeouts();
-    }
-  };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [state.user, state.loading, fetchUserProfile]);
 
-  const signOut = async () => {
-    // Prevent multiple concurrent sign out attempts
-    if (isSigningOut.current) {
-      debugLog('Sign out already in progress, skipping');
-      return;
-    }
 
-    isSigningOut.current = true;
-    hasAttemptedGuestImageTransferRef.current = false;
-
-    try {
-      debugLog('Starting sign out');
-      setState(prev => ({ ...prev, loading: true, authStep: 'signing_out' }));
-      
-      // Clear guest session data on sign out
-      await clearGuestSession();
-      
-      // Set a timeout for sign out operation
-      const signOutTimeout = setTimeout(() => {
-        debugLog('Sign out timeout reached');
-        // Force reset state even if sign out times out
-        setState({
-          user: null,
-          subscription: null,
-          loading: false,
-          error: null,
-          authStep: 'signed_out_timeout'
-        });
-        toast.success('Signed out (timeout)');
-        isSigningOut.current = false;
-        
-        // Redirect after timeout
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 500);
-      }, 10000); // 10 second timeout for sign out
-
-      const { error } = await supabase.auth.signOut();
-      
-      clearTimeout(signOutTimeout);
-
-      if (error) {
-        debugLog('Sign out error', null, error);
-        
-        // Check if the error is about session not found - this means user is already signed out
-        if (error.message.includes('Session from session_id claim in JWT does not exist') || 
-            error.message.includes('session_not_found') ||
-            error.message.includes('Invalid JWT') ||
-            error.message.includes('JWT expired')) {
-          debugLog('Session already invalid on server, treating as successful signout');
-          toast.success('Signed out successfully');
-        } else {
-          debugLog('Actual sign out error occurred', null, error);
-          toast.error(`Sign out failed: ${error.message}`);
-        }
-      } else {
-        debugLog('Sign out successful');
-        toast.success('Signed out successfully');
-      }
-    } catch (error: any) {
-      debugLog('Unexpected sign out error', null, error);
-      toast.error('An unexpected error occurred during sign out');
-    } finally {
-      // Always reset client-side state regardless of server response
-      debugLog('Resetting client-side auth state');
-      setState({
-        user: null,
-        subscription: null,
-        loading: false,
-        error: null,
-        authStep: 'signed_out'
-      });
-      
-      // Reset refs
-      isInitializing.current = false;
-      isFetchingProfile.current = false;
-      hasShownError.current = false;
-      hasInitialized.current = false;
-      isSigningOut.current = false;
-      clearTimeouts();
-      
-      // Redirect to home page after sign out
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 500);
-    }
-  };
-
+  // Helper functions remain the same...
   const canGenerate = () => {
     if (!state.user) return false;
-    
-    // Check if user has active subscription
     if (state.subscription?.subscription_status === 'active') {
       return state.user.credits_remaining > 0;
     }
-    
-    // Free tier logic
     const today = new Date().toISOString().split('T')[0];
     const lastGenDate = state.user.last_generation_date?.split('T')[0];
-    
-    if (lastGenDate !== today) {
-      return true; // New day, reset count
-    }
+    if (lastGenDate !== today) return true;
     return state.user.daily_generations < 3;
   };
 
   const getRemainingGenerations = () => {
     if (!state.user) return 0;
-    
-    // Check if user has active subscription
     if (state.subscription?.subscription_status === 'active') {
-      return state.user.credits_remaining;
+        return state.user.credits_remaining;
     }
-    
-    // Free tier logic
     const today = new Date().toISOString().split('T')[0];
     const lastGenDate = state.user.last_generation_date?.split('T')[0];
-    
-    if (lastGenDate !== today) {
-      return 3; // New day
-    }
+    if (lastGenDate !== today) return 3;
     return Math.max(0, 3 - state.user.daily_generations);
   };
 
   const getUserTier = () => {
-    if (state.subscription?.subscription_status === 'active') {
-      return 'pro';
-    }
-    return 'free';
+    return state.subscription?.subscription_status === 'active' ? 'pro' : 'free';
   };
 
   const refetchUser = () => {
-    if (state.user && !isFetchingProfile.current && isTabVisible.current) {
-      debugLog('Refetching user data');
-      fetchUserProfile(state.user.id);
+    if (state.user) {
+        fetchUserProfile(state.user.id)
     }
-  };
+  }
 
   return {
     user: state.user,
