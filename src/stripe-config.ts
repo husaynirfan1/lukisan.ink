@@ -12,10 +12,10 @@ export const stripeProducts: StripeProduct[] = [
   {
     id: 'prod_SS8qfUAqwAY4PO',
     priceId: 'price_1RXNtTRpbZohf2L5guw1FjOX',
-    name: 'Pro',
-    description: '100 credits of AI logo and video generation token.',
+    name: 'Creator',
+    description: '30 credits of AI logo and video generation token.',
     mode: 'subscription',
-    price: 13.99,
+    price: 29.99,
     currency: 'MYR'
   }
 ];
