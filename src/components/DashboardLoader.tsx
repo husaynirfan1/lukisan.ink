@@ -40,7 +40,7 @@ const stageConfig = {
   complete: {
     icon: Sparkles,
     title: 'Ready',
-    description: 'Welcome to Lukisan.ink!',
+    description: 'Welcome to Lukisan!',
     color: 'text-green-600',
     bgColor: 'bg-green-100',
   },
