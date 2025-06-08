@@ -153,7 +153,8 @@ export const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin, onSucce
           step: 'success'
         }));
         toast.success('Account created successfully!');
-      
+
+        
         // Close the auth modal first
         debugLog('Calling onSuccess callback');
         onSuccess?.();
