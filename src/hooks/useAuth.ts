@@ -251,15 +251,20 @@ export const useAuth = () => {
 
     // Set up profile fetch timeout - longer for tab switching scenarios
     profileFetchTimeout.current = setTimeout(() => {
-      if (isFetchingProfile.current && isTabVisible.current) {
-        debugLog('Profile fetch timeout reached');
+      if (isFetchingProfile.current) { // Check only if a fetch was in progress
+        debugLog(`Profile fetch timeout reached. Tab visible: ${isTabVisible.current}`);
         setState(prev => ({ 
           ...prev, 
+          // Always set loading to false on timeout, regardless of tab visibility.
+          // If the tab is hidden, this state change will be applied when it becomes visible.
           loading: false, 
-          error: 'Profile fetch timeout',
-          authStep: 'profile_fetch_timeout'
+          error: prev.error || 'Profile fetch timeout (possibly while tab hidden)', // Keep existing error if any, or set new one
+          authStep: 'profile_fetch_timeout_lapsed' // New distinct authStep
         }));
-        showErrorToast('Profile loading is taking too long. Please try refreshing the page.');
+        // Show toast only if tab is visible to avoid background toast errors
+        if (isTabVisible.current) {
+            showErrorToast('Profile loading took too long. Please try refreshing.');
+        }
         isFetchingProfile.current = false;
       }
     }, 15000); // 15 second timeout for profile fetch
