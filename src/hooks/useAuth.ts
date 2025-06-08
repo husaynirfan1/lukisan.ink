@@ -14,6 +14,7 @@ interface AuthState {
   subscription: any;
   error: string | null;
   authStep: string;
+  authInitialized: boolean; // <-- ADD THIS LINE
 }
 
 export const useAuth = () => {
@@ -22,7 +23,8 @@ export const useAuth = () => {
     loading: true,
     subscription: null,
     error: null,
-    authStep: 'initializing'
+    authStep: 'initializing',
+    authInitialized: false, // <-- ADD THIS LINE
   });
 
   const isFetchingProfile = useRef(false);
@@ -155,51 +157,44 @@ export const useAuth = () => {
   };
 
 
- // Main effect for handling initialization and auth state changes
-  useEffect(() => {
+// Main effect for handling initialization and auth state changes
+useEffect(() => {
     debugLog('Auth effect initializing...');
     let isMounted = true;
 
-    // Safety net: If no definitive auth event arrives in 3.5 seconds, stop loading.
     const safetyTimeout = setTimeout(() => {
-      if (isMounted && state.loading) {
-        debugLog('Auth check timed out. Assuming no session.');
-        setState(prev => ({ ...prev, loading: false, authStep: 'no_session_found_timeout' }));
-      }
+        if (isMounted && !state.authInitialized) { // Check if not already initialized
+            debugLog('Auth check timed out. Assuming no session.');
+            setState(prev => ({ ...prev, loading: false, authInitialized: true, authStep: 'no_session_found_timeout' }));
+        }
     }, 3500);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        // An auth event has arrived, so the safety net is no longer needed.
-        clearTimeout(safetyTimeout);
+        (event, session) => {
+            clearTimeout(safetyTimeout);
+            if (!isMounted) return;
 
-        if (!isMounted) {
-          return;
+            if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+                debugLog('User session detected.', { event });
+                setState(prev => ({...prev, authInitialized: true})); // <-- SET INITIALIZED, THEN FETCH
+                fetchUserProfile(session.user.id);
+            } else if (event === 'SIGNED_OUT') {
+                debugLog('User signed out.');
+                setState({ ...state, user: null, loading: false, subscription: null, error: null, authStep: 'signed_out', authInitialized: true }); // <-- SET INITIALIZED
+            } else if (!session?.user) {
+                debugLog('No user session detected.');
+                setState(prev => ({ ...prev, loading: false, authInitialized: true, authStep: 'no_session' })); // <-- SET INITIALIZED
+            }
         }
-
-        // KEY CHANGE: Treat INITIAL_SESSION (with a user) and SIGNED_IN the same.
-        if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-          debugLog('User session detected.', { event });
-          // Call fetchUserProfile. The internal guards will prevent multiple simultaneous runs.
-          fetchUserProfile(session.user.id);
-        } else if (event === 'SIGNED_OUT') {
-          debugLog('User signed out.');
-          setState({ user: null, loading: false, subscription: null, error: null, authStep: 'signed_out' });
-        } else if (!session?.user) {
-          // This handles the case where the initial session has no user.
-          debugLog('No user session detected.');
-          setState(prev => ({ ...prev, loading: false, authStep: 'no_session' }));
-        }
-      }
     );
 
     return () => {
-      isMounted = false;
-      debugLog('Auth effect cleanup');
-      subscription.unsubscribe();
-      clearTimeout(safetyTimeout);
+        isMounted = false;
+        debugLog('Auth effect cleanup');
+        subscription.unsubscribe();
+        clearTimeout(safetyTimeout);
     };
-  }, [fetchUserProfile]); // fetchUserProfile is wrapped in useCallback, so this is safe.
+}, [fetchUserProfile, state.authInitialized]); // Added state.authInitialized to dependencies
 
 
   // Effect for handling tab visibility to prevent stale data
@@ -265,12 +260,13 @@ export const useAuth = () => {
     }
   }
 
-  return {
+return {
     user: state.user,
     loading: state.loading,
     subscription: state.subscription,
     error: state.error,
     authStep: state.authStep,
+    authInitialized: state.authInitialized, // <-- ADD THIS LINE
     signOut,
     canGenerate,
     getRemainingGenerations,
