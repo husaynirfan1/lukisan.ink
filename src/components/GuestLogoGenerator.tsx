@@ -301,46 +301,20 @@ export const GuestLogoGenerator: React.FC = () => {
       toast.error('Failed to download logo. Please try right-clicking and saving the image.');
     }
   };
-
-  const handleAuthSuccess = async () => {
-    setShowAuthModal(false);
-    setIsTransferring(true);
-    
-    try {
-      // Refetch user data to get the latest information
-      await refetchUser();
-
-      const { data: { user: currentUserAfterRefetch }, error: getUserError } = await supabase.auth.getUser();
-
-      if (getUserError || !currentUserAfterRefetch) {
-          toast.error('Failed to get user session after login. Please try again.');
-          setIsTransferring(false); // Ensure loading state is reset
-          console.error('Error fetching user after refetchUser:', getUserError);
-          return;
-      }
-      const currentUserId = currentUserAfterRefetch.id;
-      
-      // Small delay to ensure user data is updated
-      setTimeout(async () => {
+  
+useEffect(() => {
+    // This effect runs when the `user` object becomes available AND we have flagged that a transfer should happen.
+    if (user && isTransferring) {
+      const transferImages = async () => {
         try {
-          // Get updated user from auth hook
-          // const { user: updatedUser } = useAuth(); // Removed
-          // if (!updatedUser) { // Redundant due to outer check
-          //   throw new Error('User not found after authentication');
-          // }
+          console.log('User detected after auth, starting image transfer for ID:', user.id);
+          const transferResult = await transferTempImagesToUser(user.id);
 
-          console.log('Starting image transfer for authenticated user ID:', currentUserId);
-          
-          // Transfer temporary images to user's library
-          const transferResult = await transferTempImagesToUser(currentUserId);
-          
           if (transferResult.insufficientCredits) {
             toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
               icon: '💳',
               duration: 5000,
             });
-            
-            // Mark current logo as having insufficient credits
             if (generatedLogo) {
               setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
             }
@@ -349,30 +323,29 @@ export const GuestLogoGenerator: React.FC = () => {
               icon: '✅',
               duration: 4000,
             });
-            
-            // If there's a pending download, proceed with it
+
+            // If a download was pending, trigger it now.
             if (pendingDownload && !transferResult.insufficientCredits) {
-              setTimeout(() => {
-                handleDownload(pendingDownload);
-                setPendingDownload(null);
-              }, 1000);
+              handleDownload(pendingDownload);
+              setPendingDownload(null);
             }
             
-            // Redirect to dashboard after successful transfer
+            // Redirect to dashboard after a short delay to allow the user to see the success message.
             setTimeout(() => {
               window.location.href = '/dashboard';
-            }, 2000);
-          } else {
+            }, 1500);
+
+          } else if (transferResult.failedCount > 0) {
             toast.error(`Transfer completed with errors. ${transferResult.transferredCount} succeeded, ${transferResult.failedCount} failed.`, {
               icon: '⚠️',
               duration: 5000,
             });
           }
           
-          // Update user credits display
-          const updatedCredits = await checkUserCredits(currentUserId);
+          // Refresh the credits display with the latest data
+          const updatedCredits = await checkUserCredits(user.id);
           setUserCredits(updatedCredits);
-          
+
         } catch (error: any) {
           console.error('Error during image transfer:', error);
           toast.error(`Failed to transfer images: ${error.message}`, {
@@ -380,16 +353,26 @@ export const GuestLogoGenerator: React.FC = () => {
             duration: 5000,
           });
         } finally {
+          // Reset the transfer flag regardless of outcome.
           setIsTransferring(false);
         }
-      }, 1000);
-      
-    } catch (error: any) {
-      console.error('Error in auth success handler:', error);
-      toast.error('Authentication successful, but failed to process images');
-      setIsTransferring(false);
+      };
+
+      transferImages();
     }
+  }, [user, isTransferring]); // This effect depends on `user` and `isTransferring`
+  
+const handleAuthSuccess = () => {
+    // This function is now much simpler.
+    // 1. Close the modal.
+    setShowAuthModal(false);
+    
+    // 2. Set a flag indicating a transfer should begin.
+    // The useEffect above will be triggered once the `user` object is updated by the useAuth hook.
+    setIsTransferring(true);
+    toast.loading('Authentication successful! Transferring your logos...');
   };
+  
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
@@ -767,6 +750,7 @@ export const GuestLogoGenerator: React.FC = () => {
         </div>
       </div>
 
+      {/* Make sure the AuthModal uses the new handleAuthSuccess function */}
       <AuthModal 
         isOpen={showAuthModal} 
         onClose={() => setShowAuthModal(false)}
