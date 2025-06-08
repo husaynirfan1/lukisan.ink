@@ -45,11 +45,11 @@ export const Header: React.FC = () => {
               className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
               whileHover={{ scale: 1.05 }}
             >
-             <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
+             <div className="h-8 w-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl overflow-hidden">
   <img 
     src="/favicon.png" 
     alt="Lukisan Logo" 
-    className="h-6 w-6" 
+    className="w-full h-full object-cover" 
   />
 </div>
               <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
