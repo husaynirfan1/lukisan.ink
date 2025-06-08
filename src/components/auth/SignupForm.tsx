@@ -159,10 +159,7 @@ export const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin, onSucce
         onSuccess?.();
         
         // Redirect to dashboard after a short delay
-        setTimeout(() => {
-          debugLog('Redirecting to dashboard');
-          window.location.href = '/dashboard';
-        }, 1000);
+        
         
       } else {
         debugLog('Unexpected: no user data returned');
