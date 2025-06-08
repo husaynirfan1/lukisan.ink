@@ -158,43 +158,47 @@ export const useAuth = () => {
 
 
 // Main effect for handling initialization and auth state changes
-useEffect(() => {
+  useEffect(() => {
     debugLog('Auth effect initializing...');
     let isMounted = true;
 
+    // Safety net: If no definitive auth event arrives in 3.5 seconds, stop loading.
     const safetyTimeout = setTimeout(() => {
-        if (isMounted && !state.authInitialized) { // Check if not already initialized
-            debugLog('Auth check timed out. Assuming no session.');
-            setState(prev => ({ ...prev, loading: false, authInitialized: true, authStep: 'no_session_found_timeout' }));
-        }
+      if (isMounted && !state.authInitialized) {
+        debugLog('Auth check timed out. Assuming no session.');
+        setState(prev => ({ ...prev, loading: false, authInitialized: true, authStep: 'no_session_found_timeout' }));
+      }
     }, 3500);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        (event, session) => {
-            clearTimeout(safetyTimeout);
-            if (!isMounted) return;
+      (event, session) => {
+        clearTimeout(safetyTimeout);
 
-            if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-                debugLog('User session detected.', { event });
-                setState(prev => ({...prev, authInitialized: true})); // <-- SET INITIALIZED, THEN FETCH
-                fetchUserProfile(session.user.id);
-            } else if (event === 'SIGNED_OUT') {
-                debugLog('User signed out.');
-                setState({ ...state, user: null, loading: false, subscription: null, error: null, authStep: 'signed_out', authInitialized: true }); // <-- SET INITIALIZED
-            } else if (!session?.user) {
-                debugLog('No user session detected.');
-                setState(prev => ({ ...prev, loading: false, authInitialized: true, authStep: 'no_session' })); // <-- SET INITIALIZED
-            }
+        if (!isMounted) {
+          return;
         }
+
+        if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+          debugLog('User session detected.', { event });
+          setState(prev => ({...prev, authInitialized: true}));
+          fetchUserProfile(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
+          debugLog('User signed out.');
+          setState({ ...state, user: null, loading: false, subscription: null, error: null, authStep: 'signed_out', authInitialized: true });
+        } else if (!session?.user) {
+          debugLog('No user session detected.');
+          setState(prev => ({ ...prev, loading: false, authInitialized: true, authStep: 'no_session' }));
+        }
+      }
     );
 
     return () => {
-        isMounted = false;
-        debugLog('Auth effect cleanup');
-        subscription.unsubscribe();
-        clearTimeout(safetyTimeout);
+      isMounted = false;
+      debugLog('Auth effect cleanup');
+      subscription.unsubscribe();
+      clearTimeout(safetyTimeout);
     };
-}, [fetchUserProfile, state.authInitialized]); // Added state.authInitialized to dependencies
+  }, []); // <-- CHANGED: The dependency array MUST be empty to ensure this runs only once.
 
 
   // Effect for handling tab visibility to prevent stale data
