@@ -351,7 +351,7 @@ const handleGenerateSubmit = async () => {
           <Crown className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Pro Feature</h2>
           <p className="text-gray-600 mb-6">
-            AI video generation is available for Pro users. Upgrade to create stunning videos from text prompts and images.
+            AI video generation is available for Creator users. Upgrade to create stunning videos from text prompts and images.
           </p>
           <motion.button
             whileHover={{ scale: 1.05 }}
