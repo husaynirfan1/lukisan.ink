@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Video, 
@@ -25,15 +25,17 @@ import {
   generateTextToVideo, 
   generateImageToVideo, 
   checkVideoStatus,
-  downloadVideo,
+  // downloadVideo, // This might be handled locally or differently
   isVideoGenerationAvailable,
   videoStylePresets,
   validateImageFile,
   formatDuration,
-  type TextToVideoRequest,
-  type ImageToVideoRequest,
-  type VideoGenerationResponse,
-  type VideoGenerationJob
+  type TextToVideoRequest, // Updated import
+  type ImageToVideoRequest, // Updated import
+  // type VideoGenerationResponse, // Replaced by TaskStatusResponse
+  // type VideoGenerationJob // Will be simplified or removed for active task
+  type CreateTaskResponse, // New from piapi.ts
+  type TaskStatusResponse // New from piapi.ts
 } from '../../lib/piapi';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
@@ -44,10 +46,18 @@ type GenerationMode = 'text-to-video' | 'image-to-video';
 export const VideoGenerator: React.FC = () => {
   const { user, canGenerate, getRemainingGenerations, refetchUser, getUserTier } = useAuth();
   const [mode, setMode] = useState<GenerationMode>('text-to-video');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedVideos, setGeneratedVideos] = useState<VideoGenerationJob[]>([]);
+  // const [isGenerating, setIsGenerating] = useState(false); // Replaced by status
+  // const [generatedVideos, setGeneratedVideos] = useState<VideoGenerationJob[]>([]); // To be refactored for single active task or new history
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [debugAllowVideoTabForFree, setDebugAllowVideoTabForFree] = useState(false);
+
+  // New state variables for polling UI
+  const [status, setStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Text-to-video state
   const [textPrompt, setTextPrompt] = useState('');
@@ -69,6 +79,15 @@ export const VideoGenerator: React.FC = () => {
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
   const isAvailable = isVideoGenerationAvailable();
+
+  // useEffect for polling cleanup
+  useEffect(() => {
+      return () => {
+          if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+          }
+      };
+  }, []);
 
   // Listen for debug events to allow video generation for free users
   React.useEffect(() => {
@@ -147,200 +166,193 @@ export const VideoGenerator: React.FC = () => {
     return URL.createObjectURL(file);
   };
 
-  // Generate video
-  const handleGenerate = async () => {
-    if (!user) {
-      toast.error('Please sign in to generate videos');
-      return;
-    }
-
-    if (!isProUser && !debugAllowVideoTabForFree) {
-      toast.error('Video generation is available for Pro users only');
-      return;
-    }
-
-    if (!canGenerate() && !debugAllowVideoTabForFree) {
-      toast.error('No credits remaining');
-      return;
-    }
-
-    if (mode === 'text-to-video' && !textPrompt.trim()) {
-      toast.error('Please enter a text prompt');
-      return;
-    }
-
-    if (mode === 'image-to-video' && !selectedImage) {
-      toast.error('Please select an image');
-      return;
-    }
-
-    setIsGenerating(true);
-
-    try {
-      let response: VideoGenerationResponse;
-      let jobData: Partial<VideoGenerationJob>;
-
-      if (mode === 'text-to-video') {
-        const request: TextToVideoRequest = {
-          prompt: textPrompt,
-          duration,
-          resolution,
-          style,
-          aspectRatio,
-        };
-
-        response = await generateTextToVideo(request);
-        jobData = {
-          type: 'text-to-video',
-          request,
-        };
-      } else {
-        // Upload image first
-        const imageUrl = await uploadImageForVideo(selectedImage!);
-        
-        const request: ImageToVideoRequest = {
-          imageUrl,
-          prompt: imagePrompt,
-          duration,
-          resolution,
-          motionStrength,
-          aspectRatio,
-        };
-
-        response = await generateImageToVideo(request);
-        jobData = {
-          type: 'image-to-video',
-          request,
-        };
+  const startPolling = (currentTaskId: string) => {
+      if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
       }
 
-      // Create job record
-      const job: VideoGenerationJob = {
-        id: response.id,
-        ...jobData,
-        status: response.status,
-        createdAt: Date.now(),
-        videoUrl: response.videoUrl,
-        thumbnailUrl: response.thumbnailUrl,
-        progress: response.progress || 0,
-        error: response.error,
-      } as VideoGenerationJob;
+      pollingIntervalRef.current = setInterval(async () => {
+          try {
+              const statusResponse = await checkVideoStatus(currentTaskId); // from piapi.ts
+              setProgress(statusResponse.progress || 0);
 
-      setGeneratedVideos(prev => [job, ...prev]);
-
-      // Save to database
-      const { error: dbError } = await supabase
-        .from('video_generations')
-        .insert({
-          user_id: user.id,
-          video_type: mode,
-          message: mode === 'text-to-video' ? textPrompt : imagePrompt,
-          video_id: response.id,
-          video_url: response.videoUrl || '',
-        });
-
-      if (dbError) {
-        console.error('Database error:', dbError);
-      }
-
-      // Update user credits only if not in debug mode
-      if (!debugAllowVideoTabForFree && isProUser) {
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({
-            credits_remaining: Math.max(0, user.credits_remaining - 1),
-          })
-          .eq('id', user.id);
-
-        if (updateError) {
-          console.error('Update error:', updateError);
-        }
-
-        refetchUser();
-      }
-
-      if (debugAllowVideoTabForFree) {
-        toast.success('Video generation started! (Debug mode - no credits deducted)');
-      } else {
-        toast.success('Video generation started!');
-      }
-
-      // Poll for completion if not already completed
-      if (response.status === 'processing' || response.status === 'pending') {
-        pollVideoStatus(response.id);
-      }
-
-    } catch (error: any) {
-      console.error('Video generation error:', error);
-      toast.error(error.message || 'Failed to generate video');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // Poll video status
-  const pollVideoStatus = async (videoId: string) => {
-    const maxAttempts = 60; // 5 minutes max
-    let attempts = 0;
-
-    const poll = async () => {
-      try {
-        const status = await checkVideoStatus(videoId);
-        
-        setGeneratedVideos(prev => prev.map(job => 
-          job.id === videoId 
-            ? { 
-                ...job, 
-                status: status.status,
-                progress: status.progress || job.progress,
-                videoUrl: status.videoUrl || job.videoUrl,
-                thumbnailUrl: status.thumbnailUrl || job.thumbnailUrl,
-                error: status.error,
-                completedAt: status.status === 'completed' ? Date.now() : job.completedAt,
+              if (statusResponse.status === 'completed') {
+                  if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                  setStatus('completed');
+                  setFinalVideoUrl(statusResponse.video_url || null); // Ensure it handles undefined video_url
+                  toast.success('Video generation completed!');
+              } else if (statusResponse.status === 'failed') {
+                  if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                  setStatus('failed');
+                  setErrorMessage(statusResponse.error || 'Video generation failed.');
+                  toast.error(statusResponse.error || 'Video generation failed.');
+              } else if (statusResponse.status === 'processing' || statusResponse.status === 'pending') {
+                  setStatus(statusResponse.status); // Update status if it changes e.g. from pending to processing
               }
-            : job
-        ));
+              // If status is still 'pending' or 'processing', do nothing more, interval continues.
 
-        if (status.status === 'completed') {
-          toast.success('Video generation completed!');
-          return;
-        }
-
-        if (status.status === 'failed') {
-          toast.error('Video generation failed');
-          return;
-        }
-
-        attempts++;
-        if (attempts < maxAttempts) {
-          setTimeout(poll, 5000); // Poll every 5 seconds
-        } else {
-          toast.error('Video generation timed out');
-        }
-      } catch (error) {
-        console.error('Status polling error:', error);
-      }
-    };
-
-    poll();
+          } catch (error: any) {
+              if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+              setStatus('failed');
+              setErrorMessage(error.message || 'Error while checking video status.');
+              toast.error(error.message || 'Error while checking video status.');
+          }
+      }, 5000); // Poll every 5 seconds
   };
 
-  // Download video
-  const handleDownload = async (job: VideoGenerationJob) => {
-    if (!job.videoUrl) {
+  const handleGenerateSubmit = async () => {
+      if (status === 'pending' || status === 'processing') {
+          toast.warn('A video generation is already in progress.');
+          return;
+      }
+
+      // Pre-generation checks (user, credits)
+      if (!user) {
+          toast.error('Please sign in to generate videos');
+          return;
+      }
+      if (!isProUser && !debugAllowVideoTabForFree) {
+          toast.error('Video generation is available for Pro users only');
+          return;
+      }
+      if (!debugAllowVideoTabForFree && !canGenerate()) {
+          toast.error('No credits remaining');
+          return;
+      }
+
+      if (mode === 'text-to-video' && !textPrompt.trim()) {
+          toast.error('Please enter a text prompt');
+          return;
+      }
+      if (mode === 'image-to-video' && !selectedImage) {
+          toast.error('Please select an image');
+          return;
+      }
+
+      // Reset state for a new job
+      setStatus('pending');
+      setTaskId(null);
+      setProgress(0);
+      setFinalVideoUrl(null);
+      setErrorMessage('');
+      if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+      }
+
+      try {
+          let createTaskResponse: CreateTaskResponse;
+          let videoTypeForDB = mode;
+          let messageForDB = mode === 'text-to-video' ? textPrompt : imagePrompt;
+
+          if (mode === 'text-to-video') {
+              const request: TextToVideoRequest = {
+                  prompt: textPrompt,
+                  aspectRatio: aspectRatio as any, // Cast if AspectRatio enum from piapi.ts is different
+                  // negativePrompt: Add if there's a state for it
+              };
+              createTaskResponse = await generateTextToVideo(request);
+          } else { // image-to-video
+              if (!selectedImage) throw new Error("Image not selected for image-to-video");
+              const imageUrl = await uploadImageForVideo(selectedImage);
+
+              const request: ImageToVideoRequest = {
+                  imageUrl: imageUrl,
+                  prompt: imagePrompt || undefined, // Ensure prompt is optional or provide default
+                  aspectRatio: aspectRatio as any,
+                  // negativePrompt: Add if there's a state for it
+              };
+              createTaskResponse = await generateImageToVideo(request);
+          }
+
+          setTaskId(createTaskResponse.task_id);
+          setStatus('processing'); // Task submitted, now processing
+
+          // Save initial task to database
+          const { error: dbError } = await supabase
+              .from('video_generations') // Ensure this table name is correct
+              .insert({
+                  user_id: user.id,
+                  video_type: videoTypeForDB,
+                  message: messageForDB,
+                  video_id: createTaskResponse.task_id, // Store task_id as video_id
+                  status: 'processing', // Initial status
+                  // video_url: null, // video_url will be updated later by polling
+                  // logo_url: null, // Add if applicable
+                  // prompt: textPrompt or imagePrompt, // Redundant if messageForDB captures it
+                  // settings: { duration, resolution, style, aspectRatio, motionStrength } // Store generation settings
+              });
+
+          if (dbError) {
+              console.error('Database error after task creation:', dbError);
+              toast.error('Failed to save task to database. Video will generate but may not appear in history.');
+              // Don't stop the polling, but log the error.
+          }
+
+          // Deduct credits
+          if (!debugAllowVideoTabForFree && isProUser) { // Check isProUser from useAuth
+              const { error: updateError } = await supabase
+                  .from('users')
+                  .update({ credits_remaining: Math.max(0, user.credits_remaining - 1) })
+                  .eq('id', user.id);
+              if (updateError) console.error('Credit update error:', updateError);
+              refetchUser(); // Refresh user data (credits)
+          }
+
+          if (debugAllowVideoTabForFree) {
+              toast.success('Video generation task submitted! (Debug mode)');
+          } else {
+              toast.success('Video generation task submitted!');
+          }
+
+          startPolling(createTaskResponse.task_id);
+
+      } catch (error: any) {
+          setStatus('failed');
+          setErrorMessage(error.message || 'Failed to submit video generation task.');
+          toast.error(error.message || 'Failed to submit video generation task.');
+      }
+  };
+
+  // Download video (This function might need to be adapted or removed if piapi.ts changes)
+  // For now, assume it's a local helper if needed for the final video URL.
+  const handleDownloadLocal = async (videoUrl: string | null, filenamePrefix: string = 'video') => {
+    if (!videoUrl) {
       toast.error('Video not available for download');
       return;
     }
-
     try {
-      const filename = `video-${job.type}-${Date.now()}.mp4`;
-      await downloadVideo(job.videoUrl, filename);
+      // Use a generic download approach if piapi.ts downloadVideo is removed/changed
+      const response = await fetch(videoUrl);
+      if (!response.ok) throw new Error('Network response was not ok.');
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${filenamePrefix}-${Date.now()}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href); // Clean up
       toast.success('Video downloaded successfully!');
     } catch (error) {
       console.error('Download error:', error);
-      toast.error('Failed to download video');
+      toast.error('Failed to download video.');
     }
   };
+
+  // const handleDownload = async (job: VideoGenerationJob) => { // Old handleDownload
+  //    if (!job.videoUrl) {
+  //      toast.error('Video not available for download');
+  //      return;
+  //   }
+  //   try {
+  //     const filename = `video-${job.type}-${Date.now()}.mp4`;
+  //     await downloadVideo(job.videoUrl, filename); // This downloadVideo was from old piapi
+  //     toast.success('Video downloaded successfully!');
+  //   } catch (error) {
+  //     console.error('Download error:', error);
+  //     toast.error('Failed to download video');
+  //   }
+  // };
 
   if (!user) {
     return (
@@ -795,127 +807,102 @@ export const VideoGenerator: React.FC = () => {
           </AnimatePresence>
         </div>
 
-        {/* Generate Button */}
-        <div className="text-center">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleGenerate}
-            disabled={
-              isGenerating || 
-              (!canGenerate() && !debugAllowVideoTabForFree) ||
-              (mode === 'text-to-video' && !textPrompt.trim()) ||
-              (mode === 'image-to-video' && !selectedImage)
-            }
-            className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span>Generating Video...</span>
-              </>
-            ) : (
-              <>
-                <Video className="h-5 w-5" />
-                <span>
-                  Generate Video {debugAllowVideoTabForFree ? '(Debug Mode)' : '(1 credit)'}
-                </span>
-              </>
-            )}
-          </motion.button>
-        </div>
-
-        {/* Generated Videos */}
-        {generatedVideos.length > 0 && (
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Generated Videos</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {generatedVideos.map((job) => (
-                <motion.div
-                  key={job.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-white rounded-xl p-4 shadow-md border border-gray-200"
+        {/* Generate Button and Status Display */}
+        {status === 'idle' || status === 'failed' ? (
+          <div className="text-center">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleGenerateSubmit}
+              disabled={
+                (status === 'pending' || status === 'processing') ||
+                (!debugAllowVideoTabForFree && !canGenerate()) ||
+                (mode === 'text-to-video' && !textPrompt.trim()) ||
+                (mode === 'image-to-video' && !selectedImage)
+              }
+              className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
+            >
+              <Video className="h-5 w-5" />
+              <span>Generate Video {debugAllowVideoTabForFree ? '(Debug Mode)' : '(1 credit)'}</span>
+            </motion.button>
+            {status === 'failed' && errorMessage && (
+              <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="h-5 w-5" />
+                  <p>Error: {errorMessage}</p>
+                </div>
+                <button
+                  onClick={() => setStatus('idle')}
+                  className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
                 >
-                  <div className="aspect-video bg-gray-100 rounded-lg mb-4 relative overflow-hidden">
-                    {job.status === 'completed' && job.videoUrl ? (
-                      <video
-                        src={job.videoUrl}
-                        poster={job.thumbnailUrl}
-                        controls
-                        className="w-full h-full object-cover"
-                      />
-                    ) : job.thumbnailUrl ? (
-                      <img
-                        src={job.thumbnailUrl}
-                        alt="Video thumbnail"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <FileVideo className="h-12 w-12 text-gray-400" />
-                      </div>
-                    )}
-                    
-                    {/* Status Overlay */}
-                    {job.status !== 'completed' && (
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        {job.status === 'processing' ? (
-                          <div className="text-center text-white">
-                            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                            <p className="text-sm">Processing...</p>
-                            {job.progress && (
-                              <p className="text-xs">{job.progress}%</p>
-                            )}
-                          </div>
-                        ) : job.status === 'failed' ? (
-                          <div className="text-center text-white">
-                            <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                            <p className="text-sm">Failed</p>
-                          </div>
-                        ) : (
-                          <div className="text-center text-white">
-                            <Clock className="h-8 w-8 mx-auto mb-2" />
-                            <p className="text-sm">Pending</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-900 capitalize">
-                          {job.type.replace('-', ' ')}
-                        </span>
-                        <div className="flex items-center space-x-1">
-                          {job.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                          {job.status === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
-                          {job.status === 'failed' && <AlertCircle className="h-4 w-4 text-red-500" />}
-                          <span className="text-xs text-gray-500 capitalize">{job.status}</span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-600">
-                        {new Date(job.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-
-                    {job.status === 'completed' && job.videoUrl && (
-                      <button
-                        onClick={() => handleDownload(job)}
-                        className="w-full flex items-center justify-center space-x-2 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span>Download</span>
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
+                  Try again
+                </button>
+              </div>
+            )}
+          </div>
+        ) : status === 'pending' || status === 'processing' ? (
+          <div className="text-center p-6 bg-blue-50 rounded-xl border border-blue-200">
+            <Loader2 className="h-10 w-10 text-blue-600 mx-auto mb-3 animate-spin" />
+            <h3 className="text-lg font-semibold text-blue-900 mb-2">
+              {status === 'pending' ? 'Initializing Video Generation...' : 'Your video is being created...'}
+            </h3>
+            <p className="text-sm text-blue-700 mb-1">Status: <span className="font-medium">{status}</span></p>
+            {taskId && <p className="text-xs text-blue-600 mb-3">Task ID: {taskId}</p>}
+            <div className="w-full bg-blue-200 rounded-full h-2.5">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <p className="text-sm text-blue-700 mt-2">{progress}% complete</p>
+          </div>
+        ) : status === 'completed' && finalVideoUrl ? (
+          <div className="text-center p-6 bg-green-50 rounded-xl border border-green-200">
+            <CheckCircle className="h-10 w-10 text-green-600 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-green-900 mb-4">Generation Complete!</h3>
+            <div className="aspect-video bg-gray-800 rounded-lg mb-4 overflow-hidden shadow-lg">
+              <video src={finalVideoUrl} controls className="w-full h-full object-contain" />
+            </div>
+            <div className="flex space-x-3 justify-center">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => handleDownloadLocal(finalVideoUrl, mode === 'text-to-video' ? textPrompt.substring(0,20) : 'image-video')}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
+              >
+                <Download className="h-5 w-5" />
+                <span>Download Video</span>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  setStatus('idle');
+                  setFinalVideoUrl(null);
+                  setTaskId(null);
+                  setProgress(0);
+                  // Optionally reset prompts
+                  // setTextPrompt('');
+                  // setImagePrompt('');
+                  // setSelectedImage(null);
+                  // setImagePreview(null);
+                }}
+                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
+              >
+                <RefreshCw className="h-5 w-5" />
+                <span>Start New Video</span>
+              </motion.button>
             </div>
           </div>
-        )}
+        ) : null}
+
+        {/* Generated Videos History (Commented out for now to focus on active task) */}
+        {/* {generatedVideos.length > 0 && (
+          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
+            <h3 className="text-lg font-semibold text-gray-900 mb-6">Generated Videos</h3>
+            { ... existing map logic ... }
+          </div>
+        )} */}
       </div>
     </div>
   );
