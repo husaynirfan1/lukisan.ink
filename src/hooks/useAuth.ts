@@ -32,6 +32,7 @@ export const useAuth = () => {
   const isSigningOut = useRef(false);
   const hasAttemptedGuestImageTransferRef = useRef(false);
   const lastFetchProfileAttemptTimestampRef = useRef<number>(0);
+  const lastProfileFetchSuccessTimestampRef = useRef<number>(0);
 
   // Debug logging function
   const debugLog = (step: string, data?: any, error?: any) => {
@@ -101,36 +102,42 @@ export const useAuth = () => {
               debugLog('Tab became visible, loading completed during 1s delay. No explicit recovery fetch needed from this path.');
             }
           }, 1000);
-        } else { // Condition 2: Tab became visible AND app was NOT in a loading state (state.loading is false)
-          debugLog('Tab became visible, was not loading. Proactively checking session status.');
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session?.user && !state.user) {
-              // We have a session, but no user in state. This is a recovery scenario.
-              debugLog('Session exists but no user in state on tab visible. Attempting profile fetch.');
-              fetchUserProfile(session.user.id); // Subject to cooldown
-            } else if (session?.user && state.user && session.user.id !== state.user.id) {
-              // Session user different from state user. Critical recovery.
-              debugLog('Session user mismatch on tab visible. Attempting profile fetch for session user.');
-              lastFetchProfileAttemptTimestampRef.current = 0; // Allow this fetch, it's important
-              fetchUserProfile(session.user.id);
-            } else if (!session?.user && state.user) {
-              // No session, but user in state. Sign out.
-              debugLog('No session but user in state on tab visible. Signing out.');
-              signOut();
-            } else if (session?.user && state.user) {
-              // Session and state user match, potentially refresh data if stale (optional advanced)
-              // For now, just log consistency.
-              debugLog('Session status consistent with user state on tab visible.');
-              // Consider a gentle refresh if data is old:
-              // const now = Date.now();
-              // if (lastProfileFetchSuccessTimestampRef && now - lastProfileFetchSuccessTimestampRef.current > SOME_STALE_THRESHOLD) {
-              //   debugLog('Data might be stale, considering a gentle refresh.');
-              //   fetchUserProfile(state.user.id); // Cooldown applies
-              // }
-            } else {
-              debugLog('Session status check on tab visible: No specific action needed.');
-            }
-          });
+        } else { // Path 2: Tab became visible AND app was NOT in a loading state (state.loading is false)
+          debugLog('Tab became visible, was not loading. Proactively checking session status after small delay.');
+          setTimeout(() => { // Add a small delay
+            supabase.auth.getSession().then(({ data: { session } }) => {
+              if (!isTabVisible.current) { // Re-check tab visibility after delay + async getSession
+                debugLog('Tab became hidden again during session check delay. Aborting visibility handler action.');
+                return;
+              }
+
+              if (session?.user && !state.user) {
+                debugLog('Session exists but no user in state on tab visible. Attempting profile fetch.');
+                fetchUserProfile(session.user.id); // Subject to cooldown
+              } else if (session?.user && state.user && session.user.id !== state.user.id) {
+                debugLog('Session user mismatch on tab visible. Attempting profile fetch for session user (bypassing cooldown).');
+                lastFetchProfileAttemptTimestampRef.current = 0;
+                fetchUserProfile(session.user.id);
+              } else if (!session?.user && state.user) {
+                debugLog('No session but user in state on tab visible. Signing out.');
+                signOut();
+              } else if (session?.user && state.user && session.user.id === state.user.id) {
+                debugLog('Session consistent with user state on tab visible.');
+                const now = Date.now();
+                const STALE_PROFILE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+                // Fetch if no success timestamp, or if it's stale
+                if (lastProfileFetchSuccessTimestampRef.current === 0 ||
+                    (now - lastProfileFetchSuccessTimestampRef.current > STALE_PROFILE_THRESHOLD_MS)) {
+                  debugLog(`Profile data may be stale or never fetched successfully. Last success: ${lastProfileFetchSuccessTimestampRef.current === 0 ? 'never' : new Date(lastProfileFetchSuccessTimestampRef.current).toISOString()}. Attempting refresh.`);
+                  fetchUserProfile(state.user.id); // Cooldown applies
+                } else {
+                  debugLog(`Profile data is recent (last success: ${new Date(lastProfileFetchSuccessTimestampRef.current).toISOString()}). No automatic refresh needed on tab visible.`);
+                }
+              } else {
+                debugLog('Session status check on tab visible: No specific action needed or state is indeterminate.');
+              }
+            });
+          }, 500); // 0.5 second delay
         }
       }
     };
@@ -537,6 +544,7 @@ export const useAuth = () => {
           error: null,
           authStep: 'complete'
         }));
+        lastProfileFetchSuccessTimestampRef.current = Date.now(); // Add this line
       } catch (subError: any) {
         debugLog('Subscription fetch error', null, subError);
         // Don't fail the whole auth flow for subscription errors
@@ -546,6 +554,7 @@ export const useAuth = () => {
           error: null,
           authStep: 'complete_no_subscription'
         }));
+        lastProfileFetchSuccessTimestampRef.current = Date.now(); // Add this line
       }
     } catch (error: any) {
       debugLog('Unexpected error in fetchUserProfile', null, error);
