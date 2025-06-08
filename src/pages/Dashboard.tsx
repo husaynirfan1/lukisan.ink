@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Images, Crown } from 'lucide-react';
+import { Sparkles, Images, Crown, Video } from 'lucide-react';
 import { LogoGenerator } from '../components/LogoGenerator';
 import { ImageLibrary } from '../components/ImageLibrary';
+import { VideoGenerator } from '../components/video/VideoGenerator';
 import { SubscriptionCard } from '../components/SubscriptionCard';
 import { useAuth } from '../hooks/useAuth';
 
-type DashboardTab = 'generate' | 'library';
+type DashboardTab = 'generate' | 'library' | 'video';
 
 export const Dashboard: React.FC = () => {
   const { user, getUserTier } = useAuth();
@@ -23,10 +24,17 @@ export const Dashboard: React.FC = () => {
       description: 'Create new AI-powered logos',
     },
     {
+      id: 'video' as DashboardTab,
+      name: 'Video',
+      icon: Video,
+      description: 'Generate AI-powered marketing videos',
+      proOnly: true,
+    },
+    {
       id: 'library' as DashboardTab,
       name: 'Library',
       icon: Images,
-      description: 'View and manage your generated images',
+      description: 'View and manage your generated content',
     },
   ];
 
@@ -102,21 +110,28 @@ export const Dashboard: React.FC = () => {
               {tabs.map((tab) => {
                 const IconComponent = tab.icon;
                 const isActive = activeTab === tab.id;
+                const isDisabled = tab.proOnly && !isProUser;
                 
                 return (
                   <motion.button
                     key={tab.id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleTabChange(tab.id)}
+                    whileHover={{ scale: isDisabled ? 1 : 1.02 }}
+                    whileTap={{ scale: isDisabled ? 1 : 0.98 }}
+                    onClick={() => !isDisabled && handleTabChange(tab.id)}
+                    disabled={isDisabled}
                     className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-all duration-200 relative ${
                       isActive
                         ? 'bg-white text-indigo-600 shadow-sm'
+                        : isDisabled
+                        ? 'text-gray-400 cursor-not-allowed'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
                     }`}
                   >
                     <IconComponent className="h-5 w-5" />
                     <span className="font-medium">{tab.name}</span>
+                    {tab.proOnly && !isProUser && (
+                      <Crown className="h-4 w-4 text-yellow-500" />
+                    )}
                   </motion.button>
                 );
               })}
@@ -139,6 +154,8 @@ export const Dashboard: React.FC = () => {
               <LogoGenerator />
             </div>
           )}
+          
+          {activeTab === 'video' && <VideoGenerator />}
           
           {activeTab === 'library' && <ImageLibrary />}
         </motion.div>
