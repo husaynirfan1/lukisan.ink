@@ -154,52 +154,52 @@ export const useAuth = () => {
     window.location.href = '/'; // Force a clean reload to the home page
   };
 
-
-  // Main effect for handling initialization and auth state changes
 // Main effect for handling initialization and auth state changes
   useEffect(() => {
     debugLog('Auth effect initializing...');
+    let isMounted = true;
 
-    // Define an async function to handle the initial session check
-    const initialize = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-
-      if (error) {
-        debugLog('Error getting initial session', { error });
-        setState(prev => ({ ...prev, loading: false, error: 'Could not check session.', authStep: 'session_error' }));
-        return;
+    // Supabase's onAuthStateChange fires immediately with an INITIAL_SESSION event.
+    // We'll set a safety timeout in case that event doesn't resolve.
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) {
+        debugLog('Initial auth check timed out. Assuming no session.');
+        // If still loading after 3 seconds, stop.
+        setState(prev => (prev.loading ? { ...prev, loading: false, authStep: 'no_session_found' } : prev));
       }
-
-      if (session?.user) {
-        // Now we have the user ID string, so we can call fetchUserProfile
-        await fetchUserProfile(session.user.id, true);
-      } else {
-        // No user session, so we can stop the loading indicator
-        setState(prev => ({ ...prev, loading: false, authStep: 'no_initial_session' }));
-      }
-    };
-
-    // Call the initialization function
-    initialize();
+    }, 3000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        debugLog('onAuthStateChange', { event });
+        // Any event from the listener means the initial check is working.
+        clearTimeout(safetyTimeout);
+
+        if (!isMounted) {
+          return; // Don't perform state updates if the component has unmounted
+        }
+
         if (event === 'SIGNED_IN' && session?.user) {
+          debugLog('onAuthStateChange: SIGNED_IN', { userId: session.user.id });
           fetchUserProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
-          hasAttemptedGuestImageTransfer.current = false;
-          lastSuccessfulFetchTimestamp.current = 0;
+          debugLog('onAuthStateChange: SIGNED_OUT');
+          // Reset the entire state for a clean sign-out
           setState({ user: null, loading: false, subscription: null, error: null, authStep: 'signed_out' });
+        } else if (event === 'INITIAL_SESSION' && !session?.user) {
+          // This event fires on page load if no user is found. It's safe to stop loading.
+          debugLog('onAuthStateChange: INITIAL_SESSION with no user.');
+          setState(prev => ({ ...prev, loading: false, authStep: 'no_initial_session' }));
         }
       }
     );
 
     return () => {
+      isMounted = false;
       debugLog('Auth effect cleanup');
       subscription.unsubscribe();
+      clearTimeout(safetyTimeout);
     };
-  }, [fetchUserProfile]); // fetchUserProfile is wrapped in useCallback, so this is safe
+  }, [fetchUserProfile]); // fetchUserProfile is wrapped in useCallback, so this dependency is stable.
 
 
   // Effect for handling tab visibility to prevent stale data
