@@ -109,7 +109,7 @@ export const Dashboard: React.FC = () => {
                   Welcome back, {user.name}!
                 </h1>
                 <p className="text-gray-600 mt-1">
-                  {isProUser ? 'Pro Account' : 'Free Account'} • 
+                  {isProUser ? 'Creator Account' : 'Free Account'} • 
                   {isProUser 
                     ? ` ${user.credits_remaining} credits remaining`
                     : ` ${Math.max(0, 3 - user.daily_generations)} generations left today`
