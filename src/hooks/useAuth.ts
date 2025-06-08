@@ -156,9 +156,31 @@ export const useAuth = () => {
 
 
   // Main effect for handling initialization and auth state changes
+// Main effect for handling initialization and auth state changes
   useEffect(() => {
     debugLog('Auth effect initializing...');
-    fetchUserProfile(supabase.auth.getSession().then(s => s.data.session?.user.id ?? ''), true);
+
+    // Define an async function to handle the initial session check
+    const initialize = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error) {
+        debugLog('Error getting initial session', { error });
+        setState(prev => ({ ...prev, loading: false, error: 'Could not check session.', authStep: 'session_error' }));
+        return;
+      }
+
+      if (session?.user) {
+        // Now we have the user ID string, so we can call fetchUserProfile
+        await fetchUserProfile(session.user.id, true);
+      } else {
+        // No user session, so we can stop the loading indicator
+        setState(prev => ({ ...prev, loading: false, authStep: 'no_initial_session' }));
+      }
+    };
+
+    // Call the initialization function
+    initialize();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -176,9 +198,8 @@ export const useAuth = () => {
     return () => {
       debugLog('Auth effect cleanup');
       subscription.unsubscribe();
-      if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
     };
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile]); // fetchUserProfile is wrapped in useCallback, so this is safe
 
 
   // Effect for handling tab visibility to prevent stale data
