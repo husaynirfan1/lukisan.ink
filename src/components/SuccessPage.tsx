@@ -50,7 +50,7 @@ export const SuccessPage: React.FC = () => {
             transition={{ delay: 0.4 }}
             className="text-gray-600 mb-8 text-lg"
           >
-            Thank you for subscribing to {product.name}! Your account has been upgraded and you now have access to 100 AI logo and video generation credits per month.
+            Thank you for subscribing to {product.name}! Your account has been upgraded and you now have access to 30 AI logo and video generation credits per month.
           </motion.p>
 
           <motion.div
@@ -61,12 +61,12 @@ export const SuccessPage: React.FC = () => {
           >
             <div className="flex items-center justify-center space-x-2 mb-4">
               <Crown className="h-6 w-6 text-yellow-500" />
-              <span className="font-bold text-xl text-gray-900">Pro Features Unlocked</span>
+              <span className="font-bold text-xl text-gray-900">Creator Features Unlocked</span>
             </div>
             <ul className="text-gray-700 space-y-2">
               <li className="flex items-center space-x-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />
-                <span>100 monthly logo generation credits</span>
+                <span>30 monthly generation credits</span>
               </li>
               <li className="flex items-center space-x-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />
@@ -74,7 +74,7 @@ export const SuccessPage: React.FC = () => {
               </li>
               <li className="flex items-center space-x-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />
-                <span>High-quality PNG & SVG downloads</span>
+                <span>High-quality PNG downloads</span>
               </li>
               <li className="flex items-center space-x-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />
@@ -83,10 +83,6 @@ export const SuccessPage: React.FC = () => {
               <li className="flex items-center space-x-2">
                 <Sparkles className="h-4 w-4 text-yellow-500" />
                 <span>Priority support</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <Sparkles className="h-4 w-4 text-yellow-500" />
-                <span>Commercial usage rights</span>
               </li>
             </ul>
           </motion.div>
