@@ -122,7 +122,7 @@ export const VideoCreator: React.FC<VideoCreatorProps> = ({ logoUrl, onVideoGene
           <Crown className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-gray-900 mb-2">Pro Feature</h3>
           <p className="text-gray-600 mb-4">
-            Video creation is available for Pro users. Upgrade to create personalized welcome videos and marketing snippets.
+            Video creation is available for Creator users. Upgrade to create personalized welcome videos and marketing snippets.
           </p>
         </div>
       </div>
