@@ -307,7 +307,7 @@ export const LogoGenerator: React.FC = () => {
     });
 
     if (hasProRatios && !isProUser && !debugAllowAllAspectRatios) {
-      toast.error('Premium aspect ratios are available for Pro users only');
+      toast.error('Premium aspect ratios are available for Creator users only');
       return;
     }
 
