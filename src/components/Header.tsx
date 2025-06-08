@@ -55,7 +55,7 @@ export const Header: React.FC = () => {
 
             {/* Navigation for authenticated users */}
             {user && (
-              <div className="hidden md:flex items-center space-x-6">
+              <div className="hidden md:flex items-center space-x-6 hidden">
                 <button
                   onClick={() => window.location.href = '/dashboard'}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
