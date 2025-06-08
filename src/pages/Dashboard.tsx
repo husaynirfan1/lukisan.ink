@@ -120,7 +120,7 @@ export const Dashboard: React.FC = () => {
               {isProUser && (
                 <div className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 rounded-full border border-yellow-200">
                   <Crown className="h-5 w-5" />
-                  <span className="font-medium">Pro User</span>
+                  <span className="font-medium">Creator User</span>
                 </div>
               )}
             </div>
