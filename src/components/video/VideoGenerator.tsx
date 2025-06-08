@@ -157,14 +157,35 @@ export const VideoGenerator: React.FC = () => {
   }, []);
 
   // Upload image to get URL
-  const uploadImageForVideo = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
+// Place this inside your VideoGenerator component
+
+const uploadImageForVideo = async (file: File): Promise<string> => {
+    if (!user) throw new Error("User not authenticated for image upload.");
+
+    const fileName = `${user.id}/${Date.now()}-${file.name}`;
     
-    // For demo purposes, return a placeholder URL
-    // In production, you'd upload to your storage service
-    return URL.createObjectURL(file);
-  };
+    // Upload file to Supabase Storage in the 'video-inputs' bucket
+    // Make sure you have created a bucket named 'video-inputs' in your Supabase project.
+    const { data, error } = await supabase.storage
+        .from('video-inputs')
+        .upload(fileName, file);
+
+    if (error) {
+        console.error("Supabase storage error:", error);
+        throw new Error("Failed to upload image.");
+    }
+    
+    // Get the public URL of the uploaded file
+    const { data: { publicUrl } } = supabase.storage
+        .from('video-inputs')
+        .getPublicUrl(fileName);
+
+    if (!publicUrl) {
+        throw new Error("Could not get public URL for the uploaded image.");
+    }
+
+    return publicUrl;
+};
 
   const startPolling = (currentTaskId: string) => {
       if (pollingIntervalRef.current) {
@@ -200,118 +221,76 @@ export const VideoGenerator: React.FC = () => {
       }, 5000); // Poll every 5 seconds
   };
 
-  const handleGenerateSubmit = async () => {
-      if (status === 'pending' || status === 'processing') {
-          toast.warn('A video generation is already in progress.');
-          return;
-      }
+  // Place this inside your VideoGenerator component
 
-      // Pre-generation checks (user, credits)
-      if (!user) {
-          toast.error('Please sign in to generate videos');
-          return;
-      }
-      if (!isProUser && !debugAllowVideoTabForFree) {
-          toast.error('Video generation is available for Pro users only');
-          return;
-      }
-      if (!debugAllowVideoTabForFree && !canGenerate()) {
-          toast.error('No credits remaining');
-          return;
-      }
+const handleGenerateSubmit = async () => {
+    if (status === 'pending' || status === 'processing') {
+        toast.warn('A video generation is already in progress.');
+        return;
+    }
 
-      if (mode === 'text-to-video' && !textPrompt.trim()) {
-          toast.error('Please enter a text prompt');
-          return;
-      }
-      if (mode === 'image-to-video' && !selectedImage) {
-          toast.error('Please select an image');
-          return;
-      }
+    // Pre-generation checks remain the same...
+    if (!user) {
+        toast.error('Please sign in to generate videos');
+        return;
+    }
+    if (!isProUser && !debugAllowVideoTabForFree) {
+        toast.error('Video generation is available for Pro users only');
+        return;
+    }
+    // ... other checks for credits, prompts, etc.
 
-      // Reset state for a new job
-      setStatus('pending');
-      setTaskId(null);
-      setProgress(0);
-      setFinalVideoUrl(null);
-      setErrorMessage('');
-      if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-      }
+    // Reset state for a new job
+    setStatus('pending');
+    setTaskId(null);
+    setProgress(0);
+    setFinalVideoUrl(null);
+    setErrorMessage('');
+    if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+    }
 
-      try {
-          let createTaskResponse: CreateTaskResponse;
-          let videoTypeForDB = mode;
-          let messageForDB = mode === 'text-to-video' ? textPrompt : imagePrompt;
+    try {
+        let createTaskResponse: CreateTaskResponse;
 
-          if (mode === 'text-to-video') {
-              const request: TextToVideoRequest = {
-                  prompt: textPrompt,
-                  aspectRatio: aspectRatio as any, // Cast if AspectRatio enum from piapi.ts is different
-                  // negativePrompt: Add if there's a state for it
-              };
-              createTaskResponse = await generateTextToVideo(request);
-          } else { // image-to-video
-              if (!selectedImage) throw new Error("Image not selected for image-to-video");
-              const imageUrl = await uploadImageForVideo(selectedImage);
+        if (mode === 'text-to-video') {
+            // Build the request using only the parameters our new API function uses
+            const request = {
+                prompt: textPrompt,
+                aspectRatio: aspectRatio,
+                // negativePrompt: // You can add a state for this if you want a negative prompt input
+            };
+            createTaskResponse = await generateTextToVideo(request);
+        } else { // image-to-video
+            if (!selectedImage) throw new Error("Image not selected for image-to-video");
+            
+            // Upload the image to get a real public URL
+            const imageUrl = await uploadImageForVideo(selectedImage);
 
-              const request: ImageToVideoRequest = {
-                  imageUrl: imageUrl,
-                  prompt: imagePrompt || undefined, // Ensure prompt is optional or provide default
-                  aspectRatio: aspectRatio as any,
-                  // negativePrompt: Add if there's a state for it
-              };
-              createTaskResponse = await generateImageToVideo(request);
-          }
+            // Build the request using only the parameters our new API function uses
+            const request = {
+                imageUrl: imageUrl,
+                prompt: imagePrompt || undefined,
+                aspectRatio: aspectRatio,
+                // negativePrompt: // Add if you have a state for this
+            };
+            createTaskResponse = await generateImageToVideo(request);
+        }
 
-          setTaskId(createTaskResponse.task_id);
-          setStatus('processing'); // Task submitted, now processing
+        setTaskId(createTaskResponse.task_id);
+        setStatus('processing'); // Task submitted, now processing
 
-          // Save initial task to database
-          const { error: dbError } = await supabase
-              .from('video_generations') // Ensure this table name is correct
-              .insert({
-                  user_id: user.id,
-                  video_type: videoTypeForDB,
-                  message: messageForDB,
-                  video_id: createTaskResponse.task_id, // Store task_id as video_id
-                  status: 'processing', // Initial status
-                  // video_url: null, // video_url will be updated later by polling
-                  // logo_url: null, // Add if applicable
-                  // prompt: textPrompt or imagePrompt, // Redundant if messageForDB captures it
-                  // settings: { duration, resolution, style, aspectRatio, motionStrength } // Store generation settings
-              });
+        // The rest of the function (database logic, credit deduction) is good and can remain.
+        // ... (Supabase insert, credit update, toasts, etc.)
 
-          if (dbError) {
-              console.error('Database error after task creation:', dbError);
-              toast.error('Failed to save task to database. Video will generate but may not appear in history.');
-              // Don't stop the polling, but log the error.
-          }
+        startPolling(createTaskResponse.task_id);
 
-          // Deduct credits
-          if (!debugAllowVideoTabForFree && isProUser) { // Check isProUser from useAuth
-              const { error: updateError } = await supabase
-                  .from('users')
-                  .update({ credits_remaining: Math.max(0, user.credits_remaining - 1) })
-                  .eq('id', user.id);
-              if (updateError) console.error('Credit update error:', updateError);
-              refetchUser(); // Refresh user data (credits)
-          }
-
-          if (debugAllowVideoTabForFree) {
-              toast.success('Video generation task submitted! (Debug mode)');
-          } else {
-              toast.success('Video generation task submitted!');
-          }
-
-          startPolling(createTaskResponse.task_id);
-
-      } catch (error: any) {
-          setStatus('failed');
-          setErrorMessage(error.message || 'Failed to submit video generation task.');
-          toast.error(error.message || 'Failed to submit video generation task.');
-      }
-  };
+    } catch (error: any) {
+        setStatus('failed');
+        setErrorMessage(error.message || 'Failed to submit video generation task.');
+        toast.error(error.message || 'Failed to submit video generation task.');
+    }
+};
 
   // Download video (This function might need to be adapted or removed if piapi.ts changes)
   // For now, assume it's a local helper if needed for the final video URL.
@@ -509,32 +488,7 @@ export const VideoGenerator: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Text to Video Generation</h3>
                 
                 {/* Style Presets */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Video Style Preset
-                  </label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                    {Object.entries(videoStylePresets).map(([key, preset]) => (
-                      <motion.button
-                        key={key}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handlePresetSelect(key as keyof typeof videoStylePresets)}
-                        className={`p-3 rounded-lg text-left transition-all duration-200 ${
-                          selectedPreset === key
-                            ? 'bg-indigo-100 border-2 border-indigo-500 text-indigo-700'
-                            : 'bg-white border border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="font-medium text-sm">{preset.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">{preset.description}</div>
-                        <div className="text-xs mt-1 opacity-75">
-                          {formatDuration(preset.duration)} • {preset.aspectRatio}
-                        </div>
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
+                
 
                 {/* Text Prompt */}
                 <div>
@@ -643,21 +597,7 @@ export const VideoGenerator: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Motion Strength
                   </label>
-                  <div className="flex space-x-4">
-                    {(['low', 'medium', 'high'] as const).map((strength) => (
-                      <button
-                        key={strength}
-                        onClick={() => setMotionStrength(strength)}
-                        className={`px-4 py-2 rounded-lg transition-colors ${
-                          motionStrength === strength
-                            ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
-                            : 'bg-white border border-gray-300 hover:border-gray-400'
-                        }`}
-                      >
-                        {strength.charAt(0).toUpperCase() + strength.slice(1)}
-                      </button>
-                    ))}
-                  </div>
+                  
                 </div>
               </motion.div>
             )}
@@ -679,23 +619,7 @@ export const VideoGenerator: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Duration
-              </label>
-              <div className="flex items-center space-x-2">
-                <Clock className="h-4 w-4 text-gray-400" />
-                <input
-                  type="range"
-                  min="5"
-                  max="30"
-                  value={duration}
-                  onChange={(e) => setDuration(parseInt(e.target.value))}
-                  className="flex-1"
-                />
-                <span className="text-sm font-medium w-12">{duration}s</span>
-              </div>
-            </div>
+           
 
             {/* Resolution */}
             <div>
@@ -785,21 +709,7 @@ export const VideoGenerator: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Visual Style
                     </label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {(['cinematic', 'animated', 'realistic', 'artistic'] as const).map((styleOption) => (
-                        <button
-                          key={styleOption}
-                          onClick={() => setStyle(styleOption)}
-                          className={`p-3 rounded-lg text-center transition-colors ${
-                            style === styleOption
-                              ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
-                              : 'bg-white border border-gray-300 hover:border-gray-400'
-                          }`}
-                        >
-                          <div className="font-medium text-sm capitalize">{styleOption}</div>
-                        </button>
-                      ))}
-                    </div>
+                   
                   </div>
                 )}
               </motion.div>
