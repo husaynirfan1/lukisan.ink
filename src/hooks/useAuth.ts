@@ -36,8 +36,6 @@ export const useAuth = () => {
   const debugLog = (step: string, data?: any, error?: any) => {
     const timestamp = new Date().toISOString();
     console.log(`[AUTH DEBUG ${timestamp}] ${step}:`, { data, error, tabVisible: isTabVisible.current });
-    
-    setState(prev => ({ ...prev, authStep: step }));
   };
 
   // Show error toast only once per session
