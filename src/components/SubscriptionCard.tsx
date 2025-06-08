@@ -149,7 +149,7 @@ export const SubscriptionCard: React.FC = () => {
           ) : (
             <>
               <Sparkles className="h-6 w-6" />
-              <span>Upgrade to Pro</span>
+              <span>Upgrade to Creator</span>
             </>
           )}
         </motion.button>

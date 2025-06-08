@@ -551,7 +551,7 @@ export const GuestLogoGenerator: React.FC = () => {
                 <p className="text-red-600 text-sm mt-2">
                   {userCredits.isProUser 
                     ? 'No credits remaining. Please upgrade your plan.' 
-                    : 'Daily limit reached. Try again tomorrow or upgrade to Pro.'
+                    : 'Daily limit reached. Try again tomorrow or upgrade to Creator.'
                   }
                 </p>
               )}
@@ -681,7 +681,7 @@ export const GuestLogoGenerator: React.FC = () => {
                             <AlertTriangle className="h-8 w-8 text-red-600 mx-auto mb-2" />
                             <h5 className="font-semibold text-gray-900 mb-2">Insufficient Credits</h5>
                             <p className="text-sm text-gray-600 mb-4">
-                              You don't have enough credits to download this logo. Upgrade to Pro or wait for daily reset.
+                              You don't have enough credits to download this logo. Upgrade to Creator or wait for daily reset.
                             </p>
                             <motion.button
                               whileHover={{ scale: 1.05 }}

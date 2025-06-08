@@ -358,7 +358,7 @@ const handleGenerateSubmit = async () => {
             whileTap={{ scale: 0.95 }}
             className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg font-semibold hover:from-yellow-500 hover:to-orange-600 transition-all duration-200 shadow-lg hover:shadow-xl"
           >
-            Upgrade to Pro
+            Upgrade to Creator
           </motion.button>
         </div>
       </div>

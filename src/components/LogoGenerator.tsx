@@ -1026,7 +1026,7 @@ export const LogoGenerator: React.FC = () => {
               <p className="text-red-600 text-sm mt-2">
                 {userCredits.isProUser 
                   ? 'No credits remaining. Please upgrade your plan.' 
-                  : 'Daily limit reached. Try again tomorrow or upgrade to Pro.'
+                  : 'Daily limit reached. Try again tomorrow or upgrade to Creator.'
                 }
               </p>
             )}
