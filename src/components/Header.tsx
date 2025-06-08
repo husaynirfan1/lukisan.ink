@@ -64,8 +64,7 @@ export const Header: React.FC = () => {
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                   }`}
                 >
-                  <Sparkles className="h-4 w-4" />
-                  <span>Dashboard</span>
+         
                 </button>
               </div>
             )}
