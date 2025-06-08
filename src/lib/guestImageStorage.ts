@@ -119,6 +119,7 @@ export const transferGuestImagesToUserAccount = async (
           continue;
         }
 
+        console.log(`[Logo Migration] Attempting to migrate logo ${imageData.id} for user ${user.id}. Prompt: "${imageData.prompt}". Timestamp: ${new Date().toISOString()}`);
         // Upload and save the logo using the existing function
         const uploadResult = await uploadAndSaveLogo(
           imageData.blob,

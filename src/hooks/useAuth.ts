@@ -30,6 +30,7 @@ export const useAuth = () => {
   const isTabVisible = useRef(true);
   const hasInitialized = useRef(false);
   const isSigningOut = useRef(false);
+  const hasAttemptedGuestImageTransferRef = useRef(false);
 
   // Debug logging function
   const debugLog = (step: string, data?: any, error?: any) => {
@@ -196,10 +197,15 @@ export const useAuth = () => {
         
         try {
           if (session?.user) {
+            if (event === 'SIGNED_IN') {
+              debugLog('New SIGNED_IN event, resetting guest image transfer attempt flag.');
+              hasAttemptedGuestImageTransferRef.current = false;
+            }
             debugLog('User session detected, fetching profile');
             await fetchUserProfile(session.user.id);
           } else {
-            debugLog('No user session, clearing state');
+            debugLog('No user session, clearing state and resetting transfer attempt flag.');
+            hasAttemptedGuestImageTransferRef.current = false;
             setState(prev => ({
               ...prev,
               user: null,
@@ -261,6 +267,7 @@ export const useAuth = () => {
     }, 15000); // 15 second timeout for profile fetch
 
     try {
+      let transferAttemptedThisRun = false;
       debugLog('Starting profile fetch', { userId });
       setState(prev => ({ ...prev, loading: true, authStep: 'fetching_profile' }));
       
@@ -378,19 +385,36 @@ export const useAuth = () => {
         toast.success('Account created successfully!');
 
         // Transfer any guest images after profile creation
-        try {
-          debugLog('Checking for guest images to transfer');
-          const transferResult = await transferTempImagesToUser(userId);
-          
-          if (transferResult.transferredCount > 0) {
-            toast.success(`Transferred ${transferResult.transferredCount} logo(s) to your library!`);
+        if (!hasAttemptedGuestImageTransferRef.current) {
+          let successThisAttempt = false;
+          try {
+            debugLog('Attempting guest image transfer for new user.');
+            const transferResult = await transferTempImagesToUser(userId);
+            // Consider transfer successful if success flag is true or items were transferred
+            if (transferResult.success || transferResult.transferredCount > 0) {
+              successThisAttempt = true;
+              if (transferResult.transferredCount > 0) {
+                toast.success(`Transferred ${transferResult.transferredCount} logo(s) to your library!`);
+              }
+            } else if (transferResult.errors.length > 0) {
+              // Log errors but don't necessarily treat as a hard fail preventing future attempts
+              // unless transferResult.success is definitively false.
+              console.warn(`Guest image transfer for new user had issues: ${transferResult.errors.join('; ')}`);
+              if (!transferResult.success) { // If the result explicitly states failure
+                 // Potentially do not set successThisAttempt = true
+              }
+            }
+          } catch (transferError) {
+            console.warn('Failed to transfer guest images for new user:', transferError);
+            // Do not set successThisAttempt = true, allowing retry
           }
-          
-          // Clear guest session after successful transfer
-          await clearGuestSession();
-        } catch (transferError) {
-          console.warn('Failed to transfer guest images:', transferError);
-          // Don't fail the auth flow for transfer errors
+
+          if (successThisAttempt) {
+            hasAttemptedGuestImageTransferRef.current = true;
+            transferAttemptedThisRun = true;
+          }
+        } else {
+          debugLog('Guest image transfer already successfully attempted for this session (new user path).');
         }
       } else {
         debugLog('Existing profile found', existingUser);
@@ -401,20 +425,44 @@ export const useAuth = () => {
         }));
 
         // Transfer any guest images for existing users too
-        try {
-          debugLog('Checking for guest images to transfer for existing user');
-          const transferResult = await transferTempImagesToUser(userId);
-          
-          if (transferResult.transferredCount > 0) {
-            toast.success(`Transferred ${transferResult.transferredCount} logo(s) to your library!`);
+        if (!hasAttemptedGuestImageTransferRef.current) {
+          let successThisAttempt = false;
+          try {
+            debugLog('Attempting guest image transfer for existing user.');
+            const transferResult = await transferTempImagesToUser(userId);
+            if (transferResult.success || transferResult.transferredCount > 0) {
+              successThisAttempt = true;
+              if (transferResult.transferredCount > 0) {
+                toast.success(`Transferred ${transferResult.transferredCount} logo(s) to your library!`);
+              }
+            } else if (transferResult.errors.length > 0) {
+              console.warn(`Guest image transfer for existing user had issues: ${transferResult.errors.join('; ')}`);
+              if (!transferResult.success) {
+                // Potentially do not set successThisAttempt = true
+              }
+            }
+          } catch (transferError) {
+            console.warn('Failed to transfer guest images for existing user:', transferError);
+            // Do not set successThisAttempt = true, allowing retry
           }
-          
-          // Clear guest session after successful transfer
-          await clearGuestSession();
-        } catch (transferError) {
-          console.warn('Failed to transfer guest images:', transferError);
-          // Don't fail the auth flow for transfer errors
+
+          if (successThisAttempt) {
+            hasAttemptedGuestImageTransferRef.current = true;
+            transferAttemptedThisRun = true;
+          }
+        } else {
+          debugLog('Guest image transfer already successfully attempted for this session (existing user path).');
         }
+      }
+
+      // Placed after both the new user and existing user blocks' transfer logic
+      if (transferAttemptedThisRun) { // Only clear if a successful transfer was made in THIS run
+          try {
+              debugLog('Clearing guest session after successful transfer attempt in this run.');
+              await clearGuestSession();
+          } catch (clearError) {
+              console.warn('Failed to clear guest session:', clearError);
+          }
       }
       
       // Fetch subscription data (non-blocking)
@@ -470,6 +518,7 @@ export const useAuth = () => {
     }
 
     isSigningOut.current = true;
+    hasAttemptedGuestImageTransferRef.current = false;
 
     try {
       debugLog('Starting sign out');
