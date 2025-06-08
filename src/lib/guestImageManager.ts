@@ -212,6 +212,7 @@ export const checkUserCredits = async (userId: string): Promise<{
  * Transfers temporary images to user's permanent library using the new IndexedDB approach
  */
 export const transferTempImagesToUser = async (userId: string): Promise<TransferResult> => {
+  console.log(`[Logo Migration Process] Started for user ${userId}. Timestamp: ${new Date().toISOString()}`);
   const result: TransferResult = {
     success: false,
     transferredCount: 0,
