@@ -150,10 +150,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToSignup, onSucces
         onSuccess?.();
         
         // Redirect to dashboard after a short delay
-        setTimeout(() => {
-          debugLog('Redirecting to dashboard');
-          window.location.href = '/dashboard';
-        }, 1000);
+        debugLog('Redirecting to dashboard using pushState');
+        window.history.pushState(null, '', '/dashboard');
+        window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
         
       } else {
         debugLog('Unexpected: no user data returned', data);
