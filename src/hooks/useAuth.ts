@@ -103,41 +103,32 @@ export const useAuth = () => {
             }
           }, 1000);
         } else { // Path 2: Tab became visible AND app was NOT in a loading state (state.loading is false)
-          debugLog('Tab became visible, was not loading. Proactively checking session status after small delay.');
-          setTimeout(() => { // Add a small delay
-            supabase.auth.getSession().then(({ data: { session } }) => {
-              if (!isTabVisible.current) { // Re-check tab visibility after delay + async getSession
-                debugLog('Tab became hidden again during session check delay. Aborting visibility handler action.');
-                return;
-              }
+          debugLog('Tab became visible, was not loading. Proactively checking session status.');
+          // NO setTimeout HERE
 
-              if (session?.user && !state.user) {
-                debugLog('Session exists but no user in state on tab visible. Attempting profile fetch.');
-                fetchUserProfile(session.user.id); // Subject to cooldown
-              } else if (session?.user && state.user && session.user.id !== state.user.id) {
-                debugLog('Session user mismatch on tab visible. Attempting profile fetch for session user (bypassing cooldown).');
-                lastFetchProfileAttemptTimestampRef.current = 0;
-                fetchUserProfile(session.user.id);
-              } else if (!session?.user && state.user) {
-                debugLog('No session but user in state on tab visible. Signing out.');
-                signOut();
-              } else if (session?.user && state.user && session.user.id === state.user.id) {
-                debugLog('Session consistent with user state on tab visible.');
-                const now = Date.now();
-                const STALE_PROFILE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-                // Fetch if no success timestamp, or if it's stale
-                if (lastProfileFetchSuccessTimestampRef.current === 0 ||
-                    (now - lastProfileFetchSuccessTimestampRef.current > STALE_PROFILE_THRESHOLD_MS)) {
-                  debugLog(`Profile data may be stale or never fetched successfully. Last success: ${lastProfileFetchSuccessTimestampRef.current === 0 ? 'never' : new Date(lastProfileFetchSuccessTimestampRef.current).toISOString()}. Attempting refresh.`);
-                  fetchUserProfile(state.user.id); // Cooldown applies
-                } else {
-                  debugLog(`Profile data is recent (last success: ${new Date(lastProfileFetchSuccessTimestampRef.current).toISOString()}). No automatic refresh needed on tab visible.`);
-                }
-              } else {
-                debugLog('Session status check on tab visible: No specific action needed or state is indeterminate.');
-              }
-            });
-          }, 500); // 0.5 second delay
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!isTabVisible.current) {
+              debugLog('Tab became hidden again during session check. Aborting visibility handler action.');
+              return;
+            }
+
+            if (session?.user && !state.user) {
+              debugLog('Session exists but no user in state on tab visible. Attempting profile fetch.');
+              fetchUserProfile(session.user.id); // Cooldown applies
+            } else if (session?.user && state.user && session.user.id !== state.user.id) {
+              debugLog('Session user mismatch on tab visible. Attempting profile fetch for session user (bypassing cooldown).');
+              lastFetchProfileAttemptTimestampRef.current = 0;
+              fetchUserProfile(session.user.id);
+            } else if (!session?.user && state.user) {
+              debugLog('No session but user in state on tab visible. Signing out.');
+              signOut();
+            } else if (session?.user && state.user && session.user.id === state.user.id) {
+              debugLog('Session consistent with user state on tab visible. No automatic refresh on refocus unless data critically missing/mismatched.');
+              // STALE CHECK REMOVED FROM HERE
+            } else {
+              debugLog('Session status check on tab visible: No specific action needed or state is indeterminate.');
+            }
+          });
         }
       }
     };
@@ -151,6 +142,29 @@ export const useAuth = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [state.loading, state.authStep, state.user]);
+
+  useEffect(() => {
+    if (state.authStep === 'profile_fetch_timeout_lapsed') {
+      const reloadTriggeredTimestamp = sessionStorage.getItem('lukisan_reload_triggered_timestamp');
+      const now = Date.now();
+      const FIVE_MINUTES_MS = 5 * 60 * 1000; // 5 minutes cooldown for auto-reload
+
+      if (reloadTriggeredTimestamp) {
+        const timestamp = parseInt(reloadTriggeredTimestamp, 10);
+        if (now - timestamp < FIVE_MINUTES_MS) {
+          debugLog('Auth step is profile_fetch_timeout_lapsed, but an auto-reload was triggered recently. Aborting this auto-reload to prevent a loop.');
+          // The standard error message (set when profile_fetch_timeout_lapsed occurred) will be displayed.
+          return;
+        }
+      }
+
+      debugLog('Auth step is profile_fetch_timeout_lapsed. Triggering redirect to https://lukisan.space to reload the application.');
+      sessionStorage.setItem('lukisan_reload_triggered_timestamp', now.toString());
+
+      // Redirect to the specified home URL
+      window.location.href = 'https://lukisan.space';
+    }
+  }, [state.authStep]);
 
   useEffect(() => {
     // Prevent multiple initializations
