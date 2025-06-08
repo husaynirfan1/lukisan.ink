@@ -53,22 +53,7 @@ export const Header: React.FC = () => {
               </span>
             </motion.button>
 
-            {/* Navigation for authenticated users */}
-            {user && (
-              <div className="hidden md:flex items-center space-x-6 hidden">
-                <button
-                  onClick={() => window.location.href = '/dashboard'}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                    window.location.pathname.startsWith('/dashboard')
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  <span>Dashboard</span>
-                </button>
-              </div>
-            )}
+            {/* The redundant navigation button has been removed from here */}
 
             <div className="flex items-center space-x-4">
               {/* Loading State */}
