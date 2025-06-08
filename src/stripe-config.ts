@@ -10,10 +10,10 @@ export interface StripeProduct {
 
 export const stripeProducts: StripeProduct[] = [
   {
-    id: 'prod_SS8qfUAqwAY4PO',
+    id: 'prod_SShJ8k7fgKnUpV',
     priceId: 'price_1RXNtTRpbZohf2L5guw1FjOX',
     name: 'Creator',
-    description: '30 credits of AI logo and video generation token.',
+    description: '30 credits of content generation, no expiry and watermark.',
     mode: 'subscription',
     price: 29.99,
     currency: 'MYR'
