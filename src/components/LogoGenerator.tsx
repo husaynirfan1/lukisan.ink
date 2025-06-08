@@ -533,7 +533,7 @@ export const LogoGenerator: React.FC = () => {
     
     // Check if it's a premium ratio and user doesn't have access
     if (ratioData && !ratioData.free && !isProUser && !debugAllowAllAspectRatios) {
-      toast.error('Premium aspect ratios are available for Pro users only. Upgrade to unlock!');
+      toast.error('Premium aspect ratios are available for Creator users only. Upgrade to unlock!');
       return;
     }
     
