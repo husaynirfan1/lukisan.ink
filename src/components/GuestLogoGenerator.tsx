@@ -749,7 +749,7 @@ const handleAuthSuccess = () => {
           </div>
         </div>
       </div>
-
+      
       {/* Make sure the AuthModal uses the new handleAuthSuccess function */}
       <AuthModal 
         isOpen={showAuthModal} 
