@@ -55,31 +55,59 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
             loading: false,
             error: 'Profile loading took too long. Please refresh the page.',
             authStep: 'profile_fetch_timeout',
-            authInitialized: true, // ADDED: Mark auth as initialized on timeout
+            authInitialized: true,
         }));
     }, AUTH_FLOW_TIMEOUT_MS);
 
     try {
+      // 1. Use .maybeSingle() to prevent an error if the user profile doesn't exist yet.
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
+      // Throw if there's a real error, but ignore 'PGRST116' (no rows found), which we now expect for new users.
       if (profileError && profileError.code !== 'PGRST116') {
         throw new Error(`Profile fetch error: ${profileError.message}`);
       }
 
       let finalUserProfile = userProfile;
-      if (!finalUserProfile) {
-        // ... (profile creation logic is unchanged)
-      }
-      
-      // ... (image transfer logic is unchanged)
 
+      // 2. NEW: If the profile doesn't exist, create it on the fly.
+      if (!finalUserProfile) {
+        debugLog('fetchUserProfile_creating_profile');
+        setState(prev => ({ ...prev, authStep: 'creating_profile' }));
+        
+        // Get the master user object from auth to access metadata like name/email
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser) throw new Error('Could not get authenticated user to create a profile.');
+
+        const newUserData = {
+            id: userId,
+            email: authUser.email!,
+            name: authUser.user_metadata?.full_name || authUser.email!.split('@')[0],
+            avatar_url: authUser.user_metadata?.avatar_url,
+            // Add any other default fields for your 'users' table here
+            // e.g., credits_remaining: 10, tier: 'free'
+        };
+
+        const { data: createdUser, error: createError } = await supabase
+            .from('users')
+            .insert(newUserData)
+            .select()
+            .single(); // .single() is safe here because we are sure we just inserted one row.
+
+        if (createError) throw new Error(`Profile creation failed: ${createError.message}`);
+        
+        finalUserProfile = createdUser;
+        toast.success('Welcome! Your profile has been created.');
+      }
+
+      // 3. From here, the function continues as normal with a valid user profile.
+      debugLog('fetchUserProfile_fetching_subscription');
       const subscription = await getUserSubscription();
 
-      // Success: Update state and mark auth as initialized
       debugLog('fetchUserProfile_success');
       lastSuccessfulFetchTimestamp.current = Date.now();
       setState({
@@ -88,7 +116,7 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
           loading: false,
           error: null,
           authStep: 'complete',
-          authInitialized: true, // ADDED: Mark auth as initialized on success
+          authInitialized: true,
       });
 
     } catch (error: any) {
@@ -98,14 +126,13 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
         loading: false,
         error: error.message || 'An unknown error occurred while fetching your profile.',
         authStep: 'profile_fetch_error',
-        authInitialized: true, // ADDED: Mark auth as initialized on error
+        authInitialized: true,
       }));
     } finally {
       clearTimeout(operationTimeout);
       isFetchingProfile.current = false;
     }
   }, []);
-
   const signOut = async () => {
     debugLog('signOut_start');
     await supabase.auth.signOut();
