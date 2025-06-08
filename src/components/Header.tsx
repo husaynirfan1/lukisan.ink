@@ -45,9 +45,13 @@ export const Header: React.FC = () => {
               className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
               whileHover={{ scale: 1.05 }}
             >
-              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
-                <Sparkles className="h-6 w-6 text-white" />
-              </div>
+             <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
+  <img 
+    src="/favicon.png" 
+    alt="Lukisan Logo" 
+    className="h-6 w-6" 
+  />
+</div>
               <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 Lukisan
               </span>
