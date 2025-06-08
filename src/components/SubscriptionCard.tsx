@@ -158,7 +158,7 @@ export const SubscriptionCard: React.FC = () => {
       {isActive && subscription && (
         <div className="text-center text-gray-600 bg-white/50 rounded-lg p-4">
           <p className="font-medium text-lg mb-1">
-            Your Pro subscription is active
+            Your Creator subscription is active
           </p>
           <p className="text-sm">
             Renews on {new Date(subscription.current_period_end * 1000).toLocaleDateString('en-MY', {
