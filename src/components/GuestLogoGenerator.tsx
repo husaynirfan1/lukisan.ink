@@ -412,7 +412,7 @@ export const GuestLogoGenerator: React.FC = () => {
                     <Crown className={`h-5 w-5 ${userCredits.isProUser ? 'text-yellow-500' : 'text-gray-400'}`} />
                     <div>
                       <p className="font-semibold text-gray-900">
-                        {userCredits.isProUser ? 'Pro Account' : 'Free Account'}
+                        {userCredits.isProUser ? 'Creator Account' : 'Free Account'}
                       </p>
                       <p className="text-sm text-gray-600">
                         {userCredits.available} {userCredits.isProUser ? 'credits' : 'generations'} remaining
