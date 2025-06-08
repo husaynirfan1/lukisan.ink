@@ -31,6 +31,7 @@ export const useAuth = () => {
   const hasInitialized = useRef(false);
   const isSigningOut = useRef(false);
   const hasAttemptedGuestImageTransferRef = useRef(false);
+  const lastFetchProfileAttemptTimestampRef = useRef<number>(0);
 
   // Debug logging function
   const debugLog = (step: string, data?: any, error?: any) => {
@@ -70,30 +71,67 @@ export const useAuth = () => {
       
       debugLog(`Tab visibility changed: ${isTabVisible.current ? 'visible' : 'hidden'}`);
       
-      // If tab becomes visible again and we were loading, check if we need to recover
-      if (!wasVisible && isTabVisible.current && state.loading) {
-        debugLog('Tab became visible while loading - checking auth state');
-        
-        // Give a moment for any pending operations to complete
-        setTimeout(() => {
-          if (state.loading && state.authStep.includes('fetching') || state.authStep.includes('checking')) {
-            debugLog('Recovering from tab switch timeout');
-            setState(prev => ({ 
-              ...prev, 
-              loading: false, 
-              error: 'Session restored after tab switch',
-              authStep: 'tab_recovery'
-            }));
-            
-            // Try to get current session
-            supabase.auth.getSession().then(({ data: { session } }) => {
-              if (session?.user && !isFetchingProfile.current) {
-                debugLog('Recovering user session after tab switch');
-                fetchUserProfile(session.user.id);
-              }
-            });
-          }
-        }, 1000);
+      // If tab becomes visible again
+      if (!wasVisible && isTabVisible.current) {
+        if (state.loading) { // Condition 1: Tab became visible AND app was in a loading state
+          debugLog('Tab became visible while loading - checking auth state');
+
+          setTimeout(() => {
+            // Check conditions AGAIN after 1 second
+            if (state.loading && (state.authStep.includes('fetching') || state.authStep.includes('checking'))) {
+              debugLog('Recovering from tab switch (previously loading)');
+              setState(prev => ({
+                ...prev,
+                loading: false, // Set loading false before attempting recovery fetch
+                error: null,    // Clear previous error
+                authStep: 'tab_recovery_attempt'
+              }));
+
+              supabase.auth.getSession().then(({ data: { session } }) => {
+                if (session?.user && !isFetchingProfile.current) {
+                  debugLog('Attempting profile fetch on recovery (previously loading)');
+                  fetchUserProfile(session.user.id); // This call is now subject to the cooldown
+                } else if (!session?.user) {
+                  debugLog('No session found during visibility recovery (previously loading).');
+                  setState(prev => ({...prev, user: null, subscription: null, loading: false, error: null, authStep: 'no_session_on_recovery'}));
+                }
+              });
+            } else if (!state.loading) {
+              // If state.loading became false during the 1s timeout (e.g. original fetch completed/timed out)
+              debugLog('Tab became visible, loading completed during 1s delay. No explicit recovery fetch needed from this path.');
+            }
+          }, 1000);
+        } else { // Condition 2: Tab became visible AND app was NOT in a loading state (state.loading is false)
+          debugLog('Tab became visible, was not loading. Proactively checking session status.');
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user && !state.user) {
+              // We have a session, but no user in state. This is a recovery scenario.
+              debugLog('Session exists but no user in state on tab visible. Attempting profile fetch.');
+              fetchUserProfile(session.user.id); // Subject to cooldown
+            } else if (session?.user && state.user && session.user.id !== state.user.id) {
+              // Session user different from state user. Critical recovery.
+              debugLog('Session user mismatch on tab visible. Attempting profile fetch for session user.');
+              lastFetchProfileAttemptTimestampRef.current = 0; // Allow this fetch, it's important
+              fetchUserProfile(session.user.id);
+            } else if (!session?.user && state.user) {
+              // No session, but user in state. Sign out.
+              debugLog('No session but user in state on tab visible. Signing out.');
+              signOut();
+            } else if (session?.user && state.user) {
+              // Session and state user match, potentially refresh data if stale (optional advanced)
+              // For now, just log consistency.
+              debugLog('Session status consistent with user state on tab visible.');
+              // Consider a gentle refresh if data is old:
+              // const now = Date.now();
+              // if (lastProfileFetchSuccessTimestampRef && now - lastProfileFetchSuccessTimestampRef.current > SOME_STALE_THRESHOLD) {
+              //   debugLog('Data might be stale, considering a gentle refresh.');
+              //   fetchUserProfile(state.user.id); // Cooldown applies
+              // }
+            } else {
+              debugLog('Session status check on tab visible: No specific action needed.');
+            }
+          });
+        }
       }
     };
 
@@ -105,7 +143,7 @@ export const useAuth = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [state.loading, state.authStep]);
+  }, [state.loading, state.authStep, state.user]);
 
   useEffect(() => {
     // Prevent multiple initializations
@@ -196,11 +234,12 @@ export const useAuth = () => {
         try {
           if (session?.user) {
             if (event === 'SIGNED_IN') {
-              debugLog('New SIGNED_IN event, resetting guest image transfer attempt flag.');
+              debugLog('New SIGNED_IN event, resetting guest image transfer and allowing profile fetch.');
               hasAttemptedGuestImageTransferRef.current = false;
+              lastFetchProfileAttemptTimestampRef.current = 0; // Reset timestamp to bypass cooldown
             }
-            debugLog('User session detected, fetching profile');
-            await fetchUserProfile(session.user.id);
+            debugLog('User session detected, fetching profile via onAuthStateChange'); // This log might need adjustment if fetch is skipped
+            await fetchUserProfile(session.user.id); // This call will now honor the cooldown unless reset by SIGNED_IN
           } else {
             debugLog('No user session, clearing state and resetting transfer attempt flag.');
             hasAttemptedGuestImageTransferRef.current = false;
@@ -245,6 +284,24 @@ export const useAuth = () => {
       debugLog('Tab not visible, deferring profile fetch');
       return;
     }
+
+    // *** NEW: Check if a fetch was attempted very recently ***
+    const now = Date.now();
+    const timeSinceLastAttempt = now - lastFetchProfileAttemptTimestampRef.current;
+    // Cooldown period: 20 seconds (longer than the 15s fetch timeout).
+    const FETCH_PROFILE_COOLDOWN_MS = 20000;
+
+    if (timeSinceLastAttempt < FETCH_PROFILE_COOLDOWN_MS) {
+      debugLog(`Skipping profile fetch; attempted ${Math.round(timeSinceLastAttempt / 1000)}s ago. Cooldown: ${FETCH_PROFILE_COOLDOWN_MS / 1000}s.`);
+      // If loading is true, set it to false as we are aborting/skipping the fetch.
+      if (state.loading) {
+        setState(prev => ({...prev, loading: false, authStep: 'fetch_skipped_cooldown'}));
+      }
+      return; // Abort the fetch
+    }
+
+    // Update the timestamp for this attempt, before setting isFetchingProfile.current = true
+    lastFetchProfileAttemptTimestampRef.current = now;
 
     isFetchingProfile.current = true;
     clearTimeouts(); // Clear any existing timeouts
