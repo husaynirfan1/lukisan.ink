@@ -51,7 +51,7 @@ export const CancelPage: React.FC = () => {
               className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center space-x-2"
             >
               <ArrowLeft className="h-5 w-5" />
-              <span>Back to Lukisan.ink</span>
+              <span>Back to Lukisan</span>
             </motion.button>
 
             <p className="text-sm text-gray-500">
