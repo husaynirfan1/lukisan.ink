@@ -28,7 +28,7 @@ export const VideoCreator: React.FC<VideoCreatorProps> = ({ logoUrl, onVideoGene
 
   const handleGenerate = async () => {
     if (!user || !isProUser) {
-      toast.error('Video creation is available for Pro users only');
+      toast.error('Video creation is available for Creator users only');
       return;
     }
 
