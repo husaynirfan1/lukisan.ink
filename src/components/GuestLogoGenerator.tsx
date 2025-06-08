@@ -11,6 +11,7 @@ import {
   cleanupExpiredTempImages,
   TempImage 
 } from '../lib/guestImageManager';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { AuthModal } from './auth/AuthModal';
 import toast from 'react-hot-toast';
@@ -308,20 +309,30 @@ export const GuestLogoGenerator: React.FC = () => {
     try {
       // Refetch user data to get the latest information
       await refetchUser();
+
+      const { data: { user: currentUserAfterRefetch }, error: getUserError } = await supabase.auth.getUser();
+
+      if (getUserError || !currentUserAfterRefetch) {
+          toast.error('Failed to get user session after login. Please try again.');
+          setIsTransferring(false); // Ensure loading state is reset
+          console.error('Error fetching user after refetchUser:', getUserError);
+          return;
+      }
+      const currentUserId = currentUserAfterRefetch.id;
       
       // Small delay to ensure user data is updated
       setTimeout(async () => {
         try {
           // Get updated user from auth hook
-          const { user: updatedUser } = useAuth();
-          if (!updatedUser) {
-            throw new Error('User not found after authentication');
-          }
+          // const { user: updatedUser } = useAuth(); // Removed
+          // if (!updatedUser) { // Redundant due to outer check
+          //   throw new Error('User not found after authentication');
+          // }
 
-          console.log('Starting image transfer for authenticated user:', updatedUser.id);
+          console.log('Starting image transfer for authenticated user ID:', currentUserId);
           
           // Transfer temporary images to user's library
-          const transferResult = await transferTempImagesToUser(updatedUser.id);
+          const transferResult = await transferTempImagesToUser(currentUserId);
           
           if (transferResult.insufficientCredits) {
             toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
@@ -359,7 +370,7 @@ export const GuestLogoGenerator: React.FC = () => {
           }
           
           // Update user credits display
-          const updatedCredits = await checkUserCredits(updatedUser.id);
+          const updatedCredits = await checkUserCredits(currentUserId);
           setUserCredits(updatedCredits);
           
         } catch (error: any) {
