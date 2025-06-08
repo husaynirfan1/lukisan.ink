@@ -173,14 +173,13 @@ export const useAuth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         clearTimeout(safetyTimeout);
+        if (!isMounted) return;
 
-        if (!isMounted) {
-          return;
-        }
-
+        // KEY CHANGE: Treat INITIAL_SESSION (with a user) and SIGNED_IN the same.
         if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-          debugLog('User session detected.', { event });
-          setState(prev => ({...prev, authInitialized: true}));
+          debugLog('User session detected. Fetching profile...', { event });
+          // REMOVED the intermediate setState call that caused the bug.
+          // Go directly to fetching the profile.
           fetchUserProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           debugLog('User signed out.');
@@ -198,7 +197,7 @@ export const useAuth = () => {
       subscription.unsubscribe();
       clearTimeout(safetyTimeout);
     };
-  }, []); // <-- CHANGED: The dependency array MUST be empty to ensure this runs only once.
+  }, []); // Correctly empty dependency array
 
 
   // Effect for handling tab visibility to prevent stale data
