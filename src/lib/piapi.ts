@@ -69,7 +69,7 @@ const postToApi = async (payload: ApidogRequestPayload): Promise<CreateTaskRespo
         throw new Error('PiAPI key not configured');
     }
     // IMPORTANT: Confirm this endpoint from the API documentation.
-    const endpoint = `${PIAPI_BASE_URL}/v2/create-task`;
+    const endpoint = `${}/api/v1/task`;
 
     const response = await fetch(endpoint, {
         method: 'POST',
