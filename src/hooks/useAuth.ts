@@ -155,51 +155,51 @@ export const useAuth = () => {
   };
 
 
-  // Main effect for handling initialization and auth state changes
  // Main effect for handling initialization and auth state changes
   useEffect(() => {
     debugLog('Auth effect initializing...');
+    let isMounted = true;
 
-    // Define an async function to handle the initial session check
-    const initialize = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-
-      if (error) {
-        debugLog('Error getting initial session', { error });
-        setState(prev => ({ ...prev, loading: false, error: 'Could not check session.', authStep: 'session_error' }));
-        return;
+    // Safety net: If no definitive auth event arrives in 3.5 seconds, stop loading.
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted && state.loading) {
+        debugLog('Auth check timed out. Assuming no session.');
+        setState(prev => ({ ...prev, loading: false, authStep: 'no_session_found_timeout' }));
       }
-
-      if (session?.user) {
-        // Now we have the user ID string, so we can call fetchUserProfile
-        await fetchUserProfile(session.user.id, true);
-      } else {
-        // No user session, so we can stop the loading indicator
-        setState(prev => ({ ...prev, loading: false, authStep: 'no_initial_session' }));
-      }
-    };
-
-    // Call the initialization function
-    initialize();
+    }, 3500);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        debugLog('onAuthStateChange', { event });
-        if (event === 'SIGNED_IN' && session?.user) {
+        // An auth event has arrived, so the safety net is no longer needed.
+        clearTimeout(safetyTimeout);
+
+        if (!isMounted) {
+          return;
+        }
+
+        // KEY CHANGE: Treat INITIAL_SESSION (with a user) and SIGNED_IN the same.
+        if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+          debugLog('User session detected.', { event });
+          // Call fetchUserProfile. The internal guards will prevent multiple simultaneous runs.
           fetchUserProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
-          hasAttemptedGuestImageTransfer.current = false;
-          lastSuccessfulFetchTimestamp.current = 0;
+          debugLog('User signed out.');
           setState({ user: null, loading: false, subscription: null, error: null, authStep: 'signed_out' });
+        } else if (!session?.user) {
+          // This handles the case where the initial session has no user.
+          debugLog('No user session detected.');
+          setState(prev => ({ ...prev, loading: false, authStep: 'no_session' }));
         }
       }
     );
 
     return () => {
+      isMounted = false;
       debugLog('Auth effect cleanup');
       subscription.unsubscribe();
+      clearTimeout(safetyTimeout);
     };
-  }, [fetchUserProfile]); // fetchUserProfile is wrapped in useCallback, so this is safe
+  }, [fetchUserProfile]); // fetchUserProfile is wrapped in useCallback, so this is safe.
 
 
   // Effect for handling tab visibility to prevent stale data
