@@ -234,7 +234,7 @@ const handleGenerateSubmit = async () => {
         return;
     }
     if (!isProUser && !debugAllowVideoTabForFree) {
-        toast.error('Video generation is available for Pro users only');
+        toast.error('Video generation is available for Creator users only');
         return;
     }
     // ... other checks for credits, prompts, etc.
