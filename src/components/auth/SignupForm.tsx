@@ -205,7 +205,7 @@ export const SignupForm: React.FC<SignupFormProps> = ({ onSwitchToLogin, onSucce
       <div className="bg-white/80 backdrop-blur-md rounded-2xl p-8 shadow-xl border border-gray-200/50">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
-          <p className="text-gray-600">Join Lukisan.ink and start creating</p>
+          <p className="text-gray-600">Join Lukisan and start creating</p>
           
           {/* Debug info in development */}
           {process.env.NODE_ENV === 'development' && (
