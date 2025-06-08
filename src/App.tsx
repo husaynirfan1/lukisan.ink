@@ -8,9 +8,10 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth } from './hooks/useAuth';
 
 function App() {
-  const { user, loading, error, authStep } = useAuth();
+  // 1. Ensure authInitialized is destructured from the hook
+  const { user, loading, error, authStep, authInitialized } = useAuth();
 
-  // Handle authentication-based redirects
+  // Handle authentication-based redirects (no changes needed here)
   useEffect(() => {
     if (user && !loading) {
       const path = window.location.pathname;
@@ -23,11 +24,13 @@ function App() {
     }
   }, [user, loading]);
 
-  // Show loading screen during authentication
-  if (loading) {
+  // 2. CHANGED: Show the loading screen if auth is not yet initialized OR if it's actively loading data.
+  // This is the gatekeeper that prevents the "glimpse".
+  if (!authInitialized || loading) {
     let stage: 'initializing' | 'authenticating' | 'loading_profile' | 'loading_data' | 'complete' = 'initializing';
     let message = '';
 
+    // This switch statement is still useful for showing detailed loading steps.
     switch (authStep) {
       case 'initializing':
       case 'checking_session':
@@ -50,9 +53,12 @@ function App() {
         }
     }
 
+    // When !authInitialized, the message will be the default for the 'initializing' stage.
     return <DashboardLoader stage={stage} message={message} />;
   }
 
+  // 3. The rest of the component remains the same.
+  // By the time the code reaches here, we are certain about the user's auth state.
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
