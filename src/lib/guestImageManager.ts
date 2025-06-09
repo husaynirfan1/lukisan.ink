@@ -279,7 +279,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
         
         // Upload to storage
         const { error: uploadError } = await supabase.storage
-          .from('logos')
+          .from('generated-images')
           .upload(filePath, blob, {
             cacheControl: '3600',
             upsert: true,
