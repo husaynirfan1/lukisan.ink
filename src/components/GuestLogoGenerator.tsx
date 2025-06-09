@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Download, Loader2, User, Crown, Wand2, RefreshCw, AlertTriangle, Lock } from 'lucide-react';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
@@ -86,7 +86,7 @@ export const GuestLogoGenerator: React.FC = () => {
   const [generatedLogo, setGeneratedLogo] = useState<GeneratedLogo | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingDownload, setPendingDownload] = useState<GeneratedLogo | null>(null);
-  // const [isTransferring, setIsTransferring] = useState(false); // Removed
+  const [isTransferring, setIsTransferring] = useState(false);
   const [userCredits, setUserCredits] = useState<{
     available: number;
     isProUser: boolean;
@@ -96,8 +96,6 @@ export const GuestLogoGenerator: React.FC = () => {
   // Get the selected category's placeholder
   const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
   const currentPlaceholder = selectedCategoryData?.placeholder || 'e.g., A modern tech company specializing in cloud computing solutions...';
-
-  const prevUserRef = useRef(user); // Added for new useEffect
 
   // Check user credits when user changes
   useEffect(() => {
@@ -304,8 +302,6 @@ export const GuestLogoGenerator: React.FC = () => {
     }
   };
   
-// Removed useEffect hook that depended on [user, isTransferring]
-
 // New useEffect for transfer logic
 useEffect(() => {
   const prevUser = prevUserRef.current;
@@ -372,13 +368,18 @@ useEffect(() => {
   prevUserRef.current = user;
 }, [user, generatedLogo, pendingDownload, setGeneratedLogo, setPendingDownload, setUserCredits, handleDownload]); // Added dependencies
 
+  
 const handleAuthSuccess = () => {
-    console.log('handleAuthSuccess triggered');
     // This function is now much simpler.
     // 1. Close the modal.
     setShowAuthModal(false);
-    // The toast message "Authentication successful! Transferring your logos..." was moved to the new useEffect.
+    
+    // 2. Set a flag indicating a transfer should begin.
+    // The useEffect above will be triggered once the `user` object is updated by the useAuth hook.
+    setIsTransferring(true);
+    toast.loading('Authentication successful! Transferring your logos...');
   };
+  
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
@@ -546,7 +547,18 @@ const handleAuthSuccess = () => {
               )}
             </div>
 
-            {/* Transfer Status UI element removed */}
+            {/* Transfer Status */}
+            {isTransferring && (
+              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                <div className="flex items-center space-x-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                  <div>
+                    <p className="font-semibold text-blue-900">Transferring Images</p>
+                    <p className="text-sm text-blue-700">Moving your generated logos to your permanent library...</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Generated Logo */}
             <AnimatePresence>
