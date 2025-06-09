@@ -503,7 +503,7 @@ export const MediaShowcase: React.FC = () => {
               </motion.button>
             </div>
   
-        </div>
+      
       </section>
 
       {/* Auth Modal */}
