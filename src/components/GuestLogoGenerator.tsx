@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Download, Loader2, User, Crown, Wand2, RefreshCw, AlertTriangle, Lock } from 'lucide-react';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
