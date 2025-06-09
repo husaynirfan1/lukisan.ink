@@ -11,7 +11,7 @@ export interface StripeProduct {
 export const stripeProducts: StripeProduct[] = [
   {
     id: 'prod_SSwR3x2OKd1ISe',
-    priceId: 'price_1RY0YNRpbZohf2L5VJJykiJC',
+    priceId: 'price_1RY1ClRpbZohf2L5sr9q1E4P',
     name: 'Creator',
     description: '30 credits of content generation, no expiry and watermark.',
     mode: 'subscription',
