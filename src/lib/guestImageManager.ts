@@ -320,11 +320,11 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
     };
 
     // Transfer the images
-    const transferResult = await transferGuestImagesToUserAccount(
-      { id: userId },
-      uploadAndSaveLogo
-    );
-
+   const transferResult = await transferGuestImagesToUserAccount(
+  { id: userId },
+  sessionImages, // <-- Pass the filtered list here
+  uploadAndSaveLogo
+);
     // Update result with transfer results
     result.success = transferResult.success;
     result.transferredCount = transferResult.transferredCount;
