@@ -307,70 +307,94 @@ export const GuestLogoGenerator: React.FC = () => {
   
 // New useEffect for transfer logic
  // Update the useEffect hook to use isTransferring
-  useEffect(() => {
-    const prevUser = prevUserRef.current;
+useEffect(() => {
+  const prevUser = prevUserRef.current;
 
-    // Detect login: guest (no prevUser) to logged-in user (current user exists)
-    if (!prevUser && user) {
-      console.log('Login detected! Initiating transfer of guest images for user ID:', user.id);
-      setIsTransferring(true);
-      const loadingToast = toast.loading('Authentication successful! Transferring your logos...');
+  // Detect login: guest (no prevUser) to logged-in user (current user exists)
+  if (!prevUser && user) {
+    console.log('Login detected! Initiating transfer of guest images for user ID:', user.id);
+    setIsTransferring(true);
+    const loadingToast = toast.loading('Authentication successful! Transferring your logos...');
 
-      transferTempImagesToUser(user.id)
-        .then(transferResult => {
-          console.log('Transfer result:', transferResult);
-          toast.dismiss(loadingToast);
-          setIsTransferring(false);
+    // Add a small delay to ensure auth state is fully updated
+    const transferTimer = setTimeout(async () => {
+      try {
+        const transferResult = await transferTempImagesToUser(user.id);
+        console.log('Transfer result:', transferResult);
+        
+        toast.dismiss(loadingToast);
+        setIsTransferring(false);
 
-          if (transferResult.insufficientCredits) {
-            toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
-              icon: '💳',
+        if (transferResult.insufficientCredits) {
+          toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
+            icon: '💳',
+            duration: 5000,
+          });
+          if (generatedLogo) {
+            setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
+          }
+        } else if (transferResult.success) {
+          if (transferResult.transferredCount > 0) {
+            toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
+              icon: '✅',
+              duration: 4000,
+            });
+          }
+
+          // Handle pending download if any
+          if (pendingDownload && !transferResult.insufficientCredits) {
+            handleDownload(pendingDownload);
+            setPendingDownload(null);
+          }
+        }
+
+        // Log any errors
+        if (transferResult.errors.length > 0) {
+          console.error('Transfer errors:', transferResult.errors);
+          if (!transferResult.success) {
+            toast.error(`Transfer completed with errors: ${transferResult.errors.join(', ')}`, {
+              icon: '⚠️',
               duration: 5000,
             });
-            if (generatedLogo) {
-              setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
-            }
-          } else if (transferResult.success) {
-            if (transferResult.transferredCount > 0) {
-              toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
-                icon: '✅',
-                duration: 4000,
-              });
-            }
-
-            // Handle pending download if any
-            if (pendingDownload && !transferResult.insufficientCredits) {
-              handleDownload(pendingDownload);
-              setPendingDownload(null);
-            }
           }
-
-          // Log any errors
-          if (transferResult.errors.length > 0) {
-            console.error('Transfer errors:', transferResult.errors);
-            if (!transferResult.success) {
-              toast.error(`Transfer completed with errors: ${transferResult.errors.join(', ')}`, {
-                icon: '⚠️',
-                duration: 5000,
-              });
-            }
+        }
+      } catch (error: any) {
+        console.error('Error during image transfer:', error);
+        setIsTransferring(false);
+        toast.dismiss(loadingToast);
+        
+        // Handle auth errors specifically
+        if (error.status === 400 && error.message.includes('Refresh Token')) {
+          console.log('Auth token expired, refreshing session...');
+          // Try to refresh the session
+          const { data, error: refreshError } = await supabase.auth.refreshSession();
+          if (refreshError) {
+            console.error('Error refreshing session:', refreshError);
+            toast.error('Session expired. Please sign in again.', {
+              icon: '🔑',
+              duration: 5000,
+            });
+          } else {
+            // Retry the transfer after refresh
+            console.log('Session refreshed, retrying transfer...');
+            const retryResult = await transferTempImagesToUser(user.id);
+            // Handle retry result...
           }
-        })
-        .catch(error => {
-          console.error('Error during image transfer:', error);
-          setIsTransferring(false);
-          toast.dismiss(loadingToast);
+        } else {
           toast.error(`Failed to transfer images: ${error.message || 'Unknown error'}`, {
             icon: '❌',
             duration: 5000,
           });
-        });
-    }
+        }
+      }
+    }, 1000); // 1 second delay to ensure auth state is updated
 
-    // Update the ref with current user at the end of the effect
-    prevUserRef.current = user;
-  }, [user, generatedLogo, pendingDownload, handleDownload]);
+    return () => clearTimeout(transferTimer);
+  }
 
+  // Update the ref with current user at the end of the effect
+  prevUserRef.current = user;
+}, [user, generatedLogo, pendingDownload]);
   
 const handleAuthSuccess = () => {
     // This function is now much simpler.
