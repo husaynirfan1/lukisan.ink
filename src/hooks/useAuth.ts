@@ -31,6 +31,7 @@ export const useAuth = () => {
   const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSuccessfulFetchTimestamp = useRef<number>(0);
   const hasAttemptedGuestImageTransfer = useRef(false);
+  const isTransferringImages = useRef(false); // NEW: Prevent concurrent transfers
 
   // Simple debug logger
   const debugLog = (step: string, data: any = {}) => {
@@ -120,10 +121,11 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
           authInitialized: true,
       });
 
-      // ENHANCED: Handle guest image transfer after successful profile fetch
-      if (finalUserProfile && !hasAttemptedGuestImageTransfer.current) {
+      // ENHANCED: Handle guest image transfer ONLY ONCE per session
+      if (finalUserProfile && !hasAttemptedGuestImageTransfer.current && !isTransferringImages.current) {
         debugLog('fetchUserProfile_checking_guest_images');
         hasAttemptedGuestImageTransfer.current = true;
+        isTransferringImages.current = true;
         
         // Small delay to ensure UI is ready
         setTimeout(async () => {
@@ -156,6 +158,8 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
               icon: '⚠️',
               duration: 4000,
             });
+          } finally {
+            isTransferringImages.current = false;
           }
         }, 1000);
       }
@@ -178,8 +182,9 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
   const signOut = async () => {
     debugLog('signOut_start');
     
-    // Clear guest image transfer flag
+    // Clear guest image transfer flags
     hasAttemptedGuestImageTransfer.current = false;
+    isTransferringImages.current = false;
     
     await supabase.auth.signOut();
     // The onAuthStateChange listener will handle the state reset.
@@ -219,14 +224,16 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
         // KEY CHANGE: Treat INITIAL_SESSION (with a user) and SIGNED_IN the same.
         if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
           debugLog('User session detected. Fetching profile...', { event });
-          // Reset transfer flag for new sessions
+          // Reset transfer flags for new sign-ins only (not for token refresh)
           if (event === 'SIGNED_IN') {
             hasAttemptedGuestImageTransfer.current = false;
+            isTransferringImages.current = false;
           }
           fetchUserProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           debugLog('User signed out.');
           hasAttemptedGuestImageTransfer.current = false;
+          isTransferringImages.current = false;
           setState({ 
             user: null, 
             loading: false, 

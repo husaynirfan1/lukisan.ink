@@ -4,7 +4,6 @@ import { Sparkles, Download, Loader2, User, Crown, Wand2, RefreshCw, AlertTriang
 import { generateLogo, refinePrompt } from '../lib/fireworks';
 import { 
   storeTempImage, 
-  transferTempImagesToUser, 
   checkUserCredits,
   getTempImages,
   getOrCreateGuestSession,
@@ -83,7 +82,6 @@ export const GuestLogoGenerator: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
-  const [isTransferring, setIsTransferring] = useState(false);
   const [generatedLogo, setGeneratedLogo] = useState<GeneratedLogo | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingDownload, setPendingDownload] = useState<GeneratedLogo | null>(null);
@@ -93,8 +91,8 @@ export const GuestLogoGenerator: React.FC = () => {
     canGenerate: boolean;
   } | null>(null);
 
-  // Initialize the ref to track previous user state
-  const prevUserRef = useRef(user);
+  // Track if we've already generated a logo in this session to prevent duplicates
+  const hasGeneratedInSession = useRef(false);
 
   // Get the selected category's placeholder
   const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
@@ -193,6 +191,12 @@ export const GuestLogoGenerator: React.FC = () => {
       return;
     }
 
+    // Prevent duplicate generation in the same session
+    if (hasGeneratedInSession.current && generatedLogo) {
+      console.log('Logo already generated in this session, skipping duplicate generation');
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratedLogo(null);
     
@@ -238,6 +242,7 @@ export const GuestLogoGenerator: React.FC = () => {
       }
 
       setGeneratedLogo(newLogo);
+      hasGeneratedInSession.current = true; // Mark that we've generated in this session
       toast.success('Logo generated successfully!');
       console.log('=== GUEST LOGO GENERATION COMPLETED ===');
       
@@ -319,19 +324,14 @@ export const GuestLogoGenerator: React.FC = () => {
     setShowAuthModal(false);
     
     // The useAuth hook will automatically handle the transfer
-    // We just need to show a loading state
-    setIsTransferring(true);
-    
-    // Clear the transferring state after a delay
-    setTimeout(() => {
-      setIsTransferring(false);
-      
-      // Handle pending download if any
-      if (pendingDownload) {
+    // Handle pending download if any
+    if (pendingDownload) {
+      // Small delay to ensure auth state is updated
+      setTimeout(() => {
         handleDownload(pendingDownload);
         setPendingDownload(null);
-      }
-    }, 3000);
+      }, 2000);
+    }
   };
 
   const handleCategorySelect = (categoryId: string) => {
@@ -468,7 +468,8 @@ export const GuestLogoGenerator: React.FC = () => {
                   isGenerating || 
                   !prompt.trim() || 
                   !selectedCategory || 
-                  (user && userCredits && !userCredits.canGenerate)
+                  (user && userCredits && !userCredits.canGenerate) ||
+                  (hasGeneratedInSession.current && generatedLogo) // Prevent duplicate generation
                 }
                 className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
               >
@@ -481,6 +482,11 @@ export const GuestLogoGenerator: React.FC = () => {
                   <>
                     <Lock className="h-5 w-5" />
                     <span>No Credits Available</span>
+                  </>
+                ) : hasGeneratedInSession.current && generatedLogo ? (
+                  <>
+                    <Sparkles className="h-5 w-5" />
+                    <span>Logo Generated</span>
                   </>
                 ) : (
                   <>
@@ -499,19 +505,6 @@ export const GuestLogoGenerator: React.FC = () => {
                 </p>
               )}
             </div>
-
-            {/* Transfer Status */}
-            {isTransferring && (
-              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
-                <div className="flex items-center space-x-3">
-                  <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                  <div>
-                    <p className="font-semibold text-blue-900">Transferring Images</p>
-                    <p className="text-sm text-blue-700">Moving your generated logos to your permanent library...</p>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Generated Logo */}
             <AnimatePresence>
@@ -658,7 +651,7 @@ export const GuestLogoGenerator: React.FC = () => {
                             <Crown className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
                             <h5 className="font-semibold text-gray-900 mb-2">Ready to Download</h5>
                             <p className="text-sm text-gray-600 mb-4">
-                              Your logo is ready for download
+                              Your logo is ready for download and has been saved to your library
                             </p>
                             <motion.button
                               whileHover={{ scale: 1.05 }}
@@ -677,7 +670,10 @@ export const GuestLogoGenerator: React.FC = () => {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => setGeneratedLogo(null)}
+                        onClick={() => {
+                          setGeneratedLogo(null);
+                          hasGeneratedInSession.current = false; // Reset generation flag
+                        }}
                         className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center space-x-2"
                       >
                         <RefreshCw className="h-4 w-4" />

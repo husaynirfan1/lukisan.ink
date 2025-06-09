@@ -213,9 +213,12 @@ export const checkUserCredits = async (userId: string): Promise<{
 
 /**
  * Transfers temporary images to user's permanent library using the new IndexedDB approach
+ * ENHANCED: Prevents duplicate transfers and ensures only one transfer per session
  */
 export const transferTempImagesToUser = async (userId: string): Promise<TransferResult> => {
+  console.log('=== STARTING TRANSFER PROCESS ===');
   console.log('transferTempImagesToUser - userId:', userId);
+  
   const guestSession = getOrCreateGuestSession();
   console.log('transferTempImagesToUser - guest_session_id:', guestSession.sessionId);
   
@@ -234,12 +237,14 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
     
     // Get guest images from IndexedDB for the current session only
     const guestImages = await getGuestImages();
+    
+    // ENHANCED: Filter out already transferred images and only get untransferred ones
     const sessionImages = guestImages.filter(img => !img.transferred);
     
-    console.log(`Found ${sessionImages.length} guest images to transfer for session ${guestSession.sessionId}`);
+    console.log(`Found ${guestImages.length} total guest images, ${sessionImages.length} untransferred`);
     
     if (sessionImages.length === 0) {
-      console.log('No guest images to transfer for current session');
+      console.log('No untransferred guest images found for current session');
       result.success = true;
       return result;
     }
@@ -265,7 +270,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
       return result;
     }
 
-    // Enhanced upload and save function with better error handling
+    // Enhanced upload and save function with better error handling and duplicate prevention
     const uploadAndSaveLogo = async (
       blob: Blob, 
       prompt: string, 
@@ -280,15 +285,34 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
         try {
           console.log(`[Attempt ${attempt}/${maxRetries}] Uploading logo for user ${userId}`);
           
-          const fileName = `logo-${Date.now()}-${Math.random().toString(36).substring(2, 15)}.png`;
+          // Generate unique filename to prevent duplicates
+          const timestamp = Date.now();
+          const randomId = Math.random().toString(36).substring(2, 15);
+          const fileName = `logo-${timestamp}-${randomId}.png`;
           const filePath = `logos/${userId}/${fileName}`;
+          
+          // Check if a similar logo already exists (duplicate prevention)
+          const { data: existingLogos, error: checkError } = await supabase
+            .from('logo_generations')
+            .select('id, prompt')
+            .eq('user_id', userId)
+            .eq('prompt', prompt)
+            .eq('category', category)
+            .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()); // Within last 5 minutes
+          
+          if (checkError) {
+            console.warn('Could not check for duplicates:', checkError.message);
+          } else if (existingLogos && existingLogos.length > 0) {
+            console.log('Duplicate logo detected, skipping upload');
+            return { success: true, skipped: true };
+          }
           
           // Upload to storage with retry
           const { error: uploadError } = await supabase.storage
             .from('generated-images') 
             .upload(filePath, blob, {
               cacheControl: '3600',
-              upsert: true,
+              upsert: false, // Don't overwrite existing files
               contentType: 'image/png'
             });
 
@@ -356,7 +380,8 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
       await deductUserCredits(userId, result.transferredCount, creditInfo.isProUser);
     }
 
-    console.log(`Transfer completed: ${result.transferredCount} transferred, ${result.failedCount} failed`);
+    console.log(`=== TRANSFER COMPLETED ===`);
+    console.log(`Transferred: ${result.transferredCount}, Failed: ${result.failedCount}`);
     return result;
 
   } catch (error: any) {
