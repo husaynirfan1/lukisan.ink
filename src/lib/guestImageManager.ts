@@ -215,8 +215,9 @@ export const checkUserCredits = async (userId: string): Promise<{
  * Transfers temporary images to user's permanent library using the new IndexedDB approach
  */
 export const transferTempImagesToUser = async (userId: string): Promise<TransferResult> => {
-  console.log('=== STARTING GUEST IMAGE TRANSFER ===');
   console.log('transferTempImagesToUser - userId:', userId);
+  const guestSession = getOrCreateGuestSession();
+  console.log('transferTempImagesToUser - guest_session_id:', guestSession.sessionId);
   
   const result: TransferResult = {
     success: false,
@@ -229,43 +230,40 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
   };
 
   try {
-    console.log('Getting guest images from IndexedDB...');
+    console.log('Starting image transfer for user:', userId);
     
-    // Get guest images from IndexedDB
+    // Get guest images from IndexedDB for the current session only
     const guestImages = await getGuestImages();
-    console.log(`Found ${guestImages.length} guest images in IndexedDB`);
+    const sessionImages = guestImages.filter(img => !img.transferred);
     
-    if (guestImages.length === 0) {
-      console.log('No guest images to transfer');
+    console.log(`Found ${sessionImages.length} guest images to transfer for session ${guestSession.sessionId}`);
+    
+    if (sessionImages.length === 0) {
+      console.log('No guest images to transfer for current session');
       result.success = true;
       return result;
     }
 
     // Check user credits
-    console.log('Checking user credits...');
     const creditInfo = await checkUserCredits(userId);
-    console.log('Credit info:', creditInfo);
-    
+    console.log('transferTempImagesToUser - creditInfo:', creditInfo);
     result.creditsAvailable = creditInfo.available;
-    result.creditsNeeded = guestImages.length;
+    result.creditsNeeded = sessionImages.length;
     
-    if (!creditInfo.canGenerate || creditInfo.available < guestImages.length) {
+    if (!creditInfo.canGenerate || creditInfo.available < sessionImages.length) {
       console.log('Insufficient credits for transfer');
       result.insufficientCredits = true;
-      result.errors.push(`Insufficient credits. Need ${guestImages.length}, have ${creditInfo.available}`);
+      result.errors.push(`Insufficient credits. Need ${sessionImages.length}, have ${creditInfo.available}`);
       return result;
     }
 
     // Get fresh session to ensure valid auth
-    console.log('Verifying authentication...');
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session) {
       console.error('Error getting user session:', sessionError);
       result.errors.push('Authentication error. Please sign in again.');
       return result;
     }
-
-    console.log('Authentication verified, starting transfer...');
 
     // Enhanced upload and save function with better error handling
     const uploadAndSaveLogo = async (
@@ -275,134 +273,98 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
       userId: string, 
       aspectRatio?: string
     ) => {
-      try {
-        console.log(`Uploading logo: ${prompt.substring(0, 50)}...`);
-        
-        const fileName = `logo-${Date.now()}-${Math.random().toString(36).substring(2, 15)}.png`;
-        const filePath = `logos/${userId}/${fileName}`;
-        
-        // Upload to storage with retry logic
-        let uploadError;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          console.log(`Upload attempt ${attempt}/3`);
+      const maxRetries = 3;
+      let lastError: Error | null = null;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`[Attempt ${attempt}/${maxRetries}] Uploading logo for user ${userId}`);
           
-          const { error } = await supabase.storage
+          const fileName = `logo-${Date.now()}-${Math.random().toString(36).substring(2, 15)}.png`;
+          const filePath = `logos/${userId}/${fileName}`;
+          
+          // Upload to storage with retry
+          const { error: uploadError } = await supabase.storage
             .from('generated-images') 
             .upload(filePath, blob, {
               cacheControl: '3600',
-              upsert: false,
+              upsert: true,
               contentType: 'image/png'
             });
 
-          if (!error) {
-            uploadError = null;
-            break;
+          if (uploadError) {
+            throw new Error(`Storage upload failed: ${uploadError.message}`);
           }
-          
-          uploadError = error;
-          console.warn(`Upload attempt ${attempt} failed:`, error);
-          
-          if (attempt < 3) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-          }
-        }
 
-        if (uploadError) {
-          console.error('All upload attempts failed:', uploadError);
-          return { success: false, error: uploadError.message };
-        }
+          // Get public URL
+          const { data: { publicUrl } } = supabase.storage
+            .from('generated-images')
+            .getPublicUrl(filePath);
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('generated-images')
-          .getPublicUrl(filePath);
-
-        if (!publicUrl) {
-          return { success: false, error: 'Failed to get public URL' };
-        }
-
-        console.log('Upload successful, saving to database...');
-
-        // Save to database with retry logic
-        let dbError;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          console.log(`Database save attempt ${attempt}/3`);
-          
-          const { error } = await supabase
+          // Save to database with retry
+          const { error: dbError } = await supabase
             .from('logo_generations') 
             .insert([{
               user_id: userId,
               prompt,
               category,
               image_url: publicUrl,
-              aspect_ratio: aspectRatio || '1:1'
+              aspect_ratio: aspectRatio || '1:1' // Ensure we always have a value
             }]);
 
-          if (!error) {
-            dbError = null;
-            break;
+          if (dbError) {
+            throw new Error(`Database save failed: ${dbError.message}`);
           }
+
+          console.log(`Successfully uploaded and saved logo on attempt ${attempt}`);
+          return { success: true };
+
+        } catch (error: any) {
+          lastError = error;
+          console.error(`Attempt ${attempt} failed:`, error.message);
           
-          dbError = error;
-          console.warn(`Database save attempt ${attempt} failed:`, error);
-          
-          if (attempt < 3) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          if (attempt < maxRetries) {
+            // Wait before retrying (exponential backoff)
+            const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+            console.log(`Waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
-
-        if (dbError) {
-          console.error('All database save attempts failed:', dbError);
-          // Clean up uploaded file
-          await supabase.storage.from('generated-images').remove([filePath]);
-          return { success: false, error: dbError.message };
-        }
-
-        console.log('Logo successfully saved to database');
-        return { success: true };
-        
-      } catch (error: any) {
-        console.error('Error in uploadAndSaveLogo:', error);
-        return { success: false, error: error.message };
       }
+
+      console.error('All database save attempts failed:', lastError?.message);
+      return { 
+        success: false, 
+        error: `All database save attempts failed:\n\n${lastError?.message}` 
+      };
     };
 
-    // Transfer the images using the enhanced function
-    console.log('Starting image transfer process...');
-    const transferResult = await transferGuestImagesToUserAccount(
-      { id: userId },
-      guestImages,
-      uploadAndSaveLogo
-    );
-
+    // Transfer the images
+   const transferResult = await transferGuestImagesToUserAccount(
+  { id: userId },
+  sessionImages, // <-- Pass the filtered list here
+  uploadAndSaveLogo
+);
     // Update result with transfer results
     result.success = transferResult.success;
     result.transferredCount = transferResult.transferredCount;
     result.failedCount = transferResult.failedCount;
     result.errors = transferResult.errors;
 
-    console.log(`Transfer result: ${result.transferredCount} transferred, ${result.failedCount} failed`);
-
     // Update user credits if any images were transferred
     if (result.transferredCount > 0) {
-      console.log('Updating user credits...');
       await deductUserCredits(userId, result.transferredCount, creditInfo.isProUser);
-      console.log('User credits updated successfully');
     }
 
-    console.log('=== GUEST IMAGE TRANSFER COMPLETED ===');
-    console.log(`Final result: ${result.transferredCount} transferred, ${result.failedCount} failed`);
-    
+    console.log(`Transfer completed: ${result.transferredCount} transferred, ${result.failedCount} failed`);
     return result;
 
   } catch (error: any) {
-    console.error('=== GUEST IMAGE TRANSFER FAILED ===');
     console.error('Error in transferTempImagesToUser:', error);
     result.errors.push(`Transfer error: ${error.message}`);
     return result;
   }
 };
-
 /**
  * Deducts credits from user account
  */
