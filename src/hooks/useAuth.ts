@@ -31,14 +31,14 @@ export const useAuth = () => {
   const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSuccessfulFetchTimestamp = useRef<number>(0);
   const hasAttemptedGuestImageTransfer = useRef(false);
-  const isTransferringImages = useRef(false); // NEW: Prevent concurrent transfers
+  const isTransferringImages = useRef(false);
 
   // Simple debug logger
   const debugLog = (step: string, data: any = {}) => {
     console.log(`[AUTH] ${new Date().toISOString()} | ${step}`, data);
   };
 
-const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = false) => {
+  const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = false) => {
     if (isFetchingProfile.current) {
       debugLog('fetchUserProfile_skipped', { reason: 'Already fetching' });
       return;
@@ -121,7 +121,7 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
           authInitialized: true,
       });
 
-      // ENHANCED: Handle guest image transfer ONLY ONCE per session
+      // ENHANCED: Handle guest image transfer ONLY ONCE per session with better locking
       if (finalUserProfile && !hasAttemptedGuestImageTransfer.current && !isTransferringImages.current) {
         debugLog('fetchUserProfile_checking_guest_images');
         hasAttemptedGuestImageTransfer.current = true;
@@ -146,6 +146,8 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
               
               // Clear guest session after successful transfer
               await clearGuestSession();
+            } else if (transferResult.skippedCount > 0) {
+              console.log(`Skipped ${transferResult.skippedCount} duplicate images`);
             }
             
             if (transferResult.errors.length > 0) {
@@ -201,7 +203,7 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
     window.location.href = '/'; // Force a clean reload to the home page
   };
 
-// Main effect for handling initialization and auth state changes
+  // Main effect for handling initialization and auth state changes
   useEffect(() => {
     debugLog('Auth effect initializing...');
     let isMounted = true;
@@ -319,7 +321,7 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
     }
   }
 
-return {
+  return {
     user: state.user,
     loading: state.loading,
     subscription: state.subscription,
