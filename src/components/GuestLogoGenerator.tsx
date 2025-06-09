@@ -339,6 +339,7 @@ useEffect(() => {
               icon: '✅',
               duration: 4000,
             });
+            cleanupAllGuestImages(); 
           }
 
           // Handle pending download if any
