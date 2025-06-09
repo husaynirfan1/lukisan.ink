@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Sparkles, Zap, Download, Video, Users, Megaphone } from 'lucide-react';
 import { AnimatedTagline } from './AnimatedTagline';
 import { GuestLogoGenerator } from './GuestLogoGenerator';
-import { MediaGallery } from './MediaGallery';
+import { MediaShowcase } from './MediaShowcase';
 
 export const Hero: React.FC = () => {
   return (
@@ -26,8 +26,8 @@ export const Hero: React.FC = () => {
               <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6">
                 Create Stunning
                <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent pb-4">
-    AI-Powered Logos
-  </span>
+  AI-Powered Logos
+</span>
               </h1>
             </motion.div>
 
@@ -135,8 +135,8 @@ export const Hero: React.FC = () => {
         </div>
       </div>
 
-      {/* Media Gallery Section */}
-      <MediaGallery />
+      {/* Media Showcase Section */}
+      <MediaShowcase />
     </>
   );
 };
