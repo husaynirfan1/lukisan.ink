@@ -50,8 +50,8 @@ const showcaseItems: MediaItem[] = [
     id: 'brand-showcase-1',
     type: 'image',
     src: '/assets/images/gallery/sample-1.png',
-    title: 'Tech Startup Collection',
-    description: 'Modern, clean logos perfect for technology companies',
+    title: 'Fishermen Friend',
+    description: 'Modern, clean and simple.',
     aspectRatio: '1:1'
   },
   {
