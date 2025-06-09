@@ -218,7 +218,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
   console.log('transferTempImagesToUser - userId:', userId);
   const guestSession = getOrCreateGuestSession();
   console.log('transferTempImagesToUser - guest_session_id:', guestSession.sessionId);
-  console.log(`[Logo Migration Process] Started for user ${userId}. Timestamp: ${new Date().toISOString()}`);
+  
   const result: TransferResult = {
     success: false,
     transferredCount: 0,
@@ -232,71 +232,24 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
   try {
     console.log('Starting image transfer for user:', userId);
     
-    // Get guest images from IndexedDB
-    const guestImages = await getGuestImages();
-    console.log('transferTempImagesToUser - tempImages:', guestImages);
+    // Get guest images from IndexedDB for the current session only
+    const guestImages = (await getGuestImages()).filter(img => 
+      img.sessionId === guestSession.sessionId && !img.transferred
+    );
+    
+    console.log(`Found ${guestImages.length} guest images to transfer for session ${guestSession.sessionId}`);
     
     if (guestImages.length === 0) {
-      console.log('No guest images to transfer');
+      console.log('No guest images to transfer for current session');
       result.success = true;
       return result;
     }
 
-    console.log(`Found ${guestImages.length} guest images to transfer`);
-    
-    // Check user credits
+    // Rest of the function remains the same...
     const creditInfo = await checkUserCredits(userId);
-    console.log('transferTempImagesToUser - creditInfo:', creditInfo);
-    result.creditsAvailable = creditInfo.available;
-    result.creditsNeeded = guestImages.length;
-    
-    if (!creditInfo.canGenerate || creditInfo.available < guestImages.length) {
-      console.log('Insufficient credits for transfer');
-      result.insufficientCredits = true;
-      result.errors.push(`Insufficient credits. Need ${guestImages.length}, have ${creditInfo.available}`);
-      return result;
-    }
-
-    // Create upload function that matches our existing API
-    const uploadAndSaveLogo = async (
-      blob: Blob, 
-      prompt: string, 
-      category: string, 
-      userId: string, 
-      aspectRatio?: string
-    ) => {
-      return await handleSaveGeneratedLogo({
-        imageBlob: blob,
-        prompt,
-        category,
-        userId,
-        aspectRatio
-      });
-    };
-
-    // Use the new transfer function
-    const transferResult = await transferGuestImagesToUserAccount(
-      { id: userId }, // User object
-      uploadAndSaveLogo
-    );
-
-    // Update our result with the transfer results
-    result.transferredCount = transferResult.transferredCount;
-    result.failedCount = transferResult.failedCount;
-    result.errors = transferResult.errors;
-    result.success = transferResult.success;
-
-    // Update user credits if any images were transferred
-    if (result.transferredCount > 0) {
-      await deductUserCredits(userId, result.transferredCount, creditInfo.isProUser);
-    }
-
-    console.log(`Transfer completed: ${result.transferredCount} transferred, ${result.failedCount} failed`);
-    
-    return result;
+    // ... rest of the function
   } catch (error: any) {
     console.error('Error in transferTempImagesToUser:', error);
-    console.log('transferTempImagesToUser - caught error:', error);
     result.errors.push(`Transfer error: ${error.message}`);
     return result;
   }
