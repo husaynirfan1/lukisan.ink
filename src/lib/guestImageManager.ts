@@ -298,7 +298,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
 
         // Save to database
         const { error: dbError } = await supabase
-          .from('generated_logos')
+          .from('logo_generations')
           .insert([{
             user_id: userId,
             prompt,
