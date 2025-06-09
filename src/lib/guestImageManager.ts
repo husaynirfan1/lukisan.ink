@@ -275,7 +275,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
     ) => {
       try {
         const fileName = `logo-${Date.now()}.png`;
-        const filePath = `${userId}/${fileName}`;
+        const filePath = `logos/${userId}/${fileName}`;
         
         // Upload to storage
         const { error: uploadError } = await supabase.storage
