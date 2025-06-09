@@ -202,15 +202,6 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
     return 'md:col-span-1';
   };
 
-  const getAspectRatio = () => {
-    switch (item.aspectRatio) {
-      case '16:9': return 'aspect-video';
-      case '4:3': return 'aspect-[4/3]';
-      case '2:1': return 'aspect-[2/1]';
-      default: return 'aspect-square';
-    }
-  };
-
   const getCardHeight = () => {
     if (item.featured && item.type === 'logo') return 'h-64 md:h-80';
     if (item.featured && item.type === 'video') return 'h-64 md:h-80';
@@ -280,6 +271,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-6"
         >
+          {/* ... inner content of overlay ... */}
           <div className="text-white">
             <motion.h3 
               initial={{ y: 20, opacity: 0 }}
@@ -298,8 +290,6 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
               {item.description}
             </motion.p>
           </div>
-
-          {/* Action Button */}
           <motion.button
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: isHovered ? 0 : 20, opacity: isHovered ? 1 : 0 }}
@@ -309,13 +299,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
             className="self-start flex items-center space-x-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition-all duration-200 border border-white/20"
             aria-label={`View ${item.title}`}
           >
-            {item.type === 'video' ? (
-              <Play className="h-4 w-4" />
-            ) : item.type === 'logo' ? (
-              <Sparkles className="h-4 w-4" />
-            ) : (
-              <Maximize2 className="h-4 w-4" />
-            )}
+            {item.type === 'video' ? <Play className="h-4 w-4" /> : item.type === 'logo' ? <Sparkles className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             <span className="text-sm font-medium">
               {item.type === 'video' ? 'Watch Demo' : item.type === 'logo' ? 'Our Brand' : 'View Gallery'}
             </span>
@@ -365,7 +349,6 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
     </motion.div>
   );
 };
-
 export const MediaGallery: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
   const isInView = useInView(sectionRef, { once: true, margin: "-200px" });
