@@ -503,6 +503,7 @@ export const MediaShowcase: React.FC = () => {
               </motion.button>
             </div>
           </div>
+        </motion.div>
         </div>
       </section>
       
