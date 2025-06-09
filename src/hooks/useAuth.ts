@@ -30,12 +30,14 @@ export const useAuth = () => {
   const isFetchingProfile = useRef(false);
   const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSuccessfulFetchTimestamp = useRef<number>(0);
-  const hasAttemptedGuestImageTransfer = useRef(false);
-  const isTransferringImages = useRef(false);
   
-  // ENHANCED: Add notification tracking to prevent duplicate toasts
-  const hasShownTransferNotification = useRef(false);
-  const lastTransferSessionId = useRef<string | null>(null);
+  // ENHANCED: Global transfer management to prevent any duplicates
+  const transferState = useRef({
+    isTransferring: false,
+    hasTransferredForUser: new Set<string>(), // Track which users we've already transferred for
+    lastTransferTime: 0,
+    transferPromise: null as Promise<any> | null
+  });
 
   // Simple debug logger
   const debugLog = (step: string, data: any = {}) => {
@@ -125,83 +127,8 @@ export const useAuth = () => {
           authInitialized: true,
       });
 
-      // ENHANCED: Handle guest image transfer ONLY ONCE per session with notification deduplication
-      if (finalUserProfile && !hasAttemptedGuestImageTransfer.current && !isTransferringImages.current) {
-        debugLog('fetchUserProfile_checking_guest_images');
-        hasAttemptedGuestImageTransfer.current = true;
-        isTransferringImages.current = true;
-        
-        // Generate a unique session identifier for this transfer
-        const currentSessionId = `${userId}_${Date.now()}`;
-        
-        // Check if we've already shown notifications for this session
-        if (hasShownTransferNotification.current && lastTransferSessionId.current === currentSessionId) {
-          debugLog('fetchUserProfile_skipping_duplicate_notifications');
-          isTransferringImages.current = false;
-          return;
-        }
-        
-        // Small delay to ensure UI is ready
-        setTimeout(async () => {
-          try {
-            debugLog('fetchUserProfile_starting_guest_transfer');
-            const transferResult = await transferTempImagesToUser(finalUserProfile.id);
-            
-            // ENHANCED: Only show notifications if we haven't shown them for this session
-            if (!hasShownTransferNotification.current || lastTransferSessionId.current !== currentSessionId) {
-              lastTransferSessionId.current = currentSessionId;
-              hasShownTransferNotification.current = true;
-              
-              if (transferResult.insufficientCredits) {
-                toast.error(`Not enough credits to transfer images. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
-                  icon: '💳',
-                  duration: 5000,
-                });
-              } else if (transferResult.success && transferResult.transferredCount > 0) {
-                toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
-                  icon: '✅',
-                  duration: 4000,
-                });
-                
-                // Clear guest session after successful transfer
-                await clearGuestSession();
-              } else if (transferResult.skippedCount > 0 && transferResult.transferredCount === 0) {
-                // Only show this if no new images were transferred
-                console.log(`Skipped ${transferResult.skippedCount} duplicate images (no notification shown)`);
-              }
-              
-              if (transferResult.errors.length > 0) {
-                console.error('Transfer errors:', transferResult.errors);
-                // Only show error notification if there were actual failures
-                if (transferResult.failedCount > 0) {
-                  toast.error('Some images failed to transfer. Please try generating new logos.', {
-                    icon: '⚠️',
-                    duration: 4000,
-                  });
-                }
-              }
-            } else {
-              debugLog('fetchUserProfile_notifications_already_shown');
-            }
-            
-          } catch (error: any) {
-            console.error('Error during guest image transfer:', error);
-            
-            // Only show error notification if we haven't shown notifications for this session
-            if (!hasShownTransferNotification.current || lastTransferSessionId.current !== currentSessionId) {
-              hasShownTransferNotification.current = true;
-              lastTransferSessionId.current = currentSessionId;
-              
-              toast.error('Failed to transfer guest images. Please try generating new logos.', {
-                icon: '⚠️',
-                duration: 4000,
-              });
-            }
-          } finally {
-            isTransferringImages.current = false;
-          }
-        }, 1000);
-      }
+      // ENHANCED: Handle guest image transfer with comprehensive duplicate prevention
+      await handleGuestImageTransfer(finalUserProfile);
 
     } catch (error: any) {
       debugLog('fetchUserProfile_error', { errorMessage: error.message });
@@ -218,14 +145,120 @@ export const useAuth = () => {
     }
   }, []);
 
+  // ENHANCED: Centralized guest image transfer handler with bulletproof duplicate prevention
+  const handleGuestImageTransfer = async (user: User) => {
+    const userId = user.id;
+    const now = Date.now();
+    
+    debugLog('handleGuestImageTransfer_start', { 
+      userId, 
+      isTransferring: transferState.current.isTransferring,
+      hasTransferredForUser: transferState.current.hasTransferredForUser.has(userId),
+      timeSinceLastTransfer: now - transferState.current.lastTransferTime
+    });
+
+    // Multiple layers of duplicate prevention
+    if (transferState.current.isTransferring) {
+      debugLog('handleGuestImageTransfer_already_in_progress');
+      return;
+    }
+
+    if (transferState.current.hasTransferredForUser.has(userId)) {
+      debugLog('handleGuestImageTransfer_already_transferred_for_user');
+      return;
+    }
+
+    // Prevent rapid successive transfers (within 5 seconds)
+    if (now - transferState.current.lastTransferTime < 5000) {
+      debugLog('handleGuestImageTransfer_too_soon_since_last_transfer');
+      return;
+    }
+
+    // If there's already a transfer promise, wait for it instead of starting a new one
+    if (transferState.current.transferPromise) {
+      debugLog('handleGuestImageTransfer_waiting_for_existing_promise');
+      try {
+        await transferState.current.transferPromise;
+      } catch (error) {
+        console.error('Existing transfer promise failed:', error);
+      }
+      return;
+    }
+
+    // Set all the locks
+    transferState.current.isTransferring = true;
+    transferState.current.hasTransferredForUser.add(userId);
+    transferState.current.lastTransferTime = now;
+
+    // Create the transfer promise
+    transferState.current.transferPromise = (async () => {
+      try {
+        debugLog('handleGuestImageTransfer_starting_transfer');
+        
+        const transferResult = await transferTempImagesToUser(userId);
+        
+        debugLog('handleGuestImageTransfer_transfer_completed', {
+          success: transferResult.success,
+          transferredCount: transferResult.transferredCount,
+          skippedCount: transferResult.skippedCount,
+          failedCount: transferResult.failedCount
+        });
+
+        // Show notifications based on results
+        if (transferResult.insufficientCredits) {
+          toast.error(`Not enough credits to transfer images. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
+            icon: '💳',
+            duration: 5000,
+          });
+        } else if (transferResult.success && transferResult.transferredCount > 0) {
+          toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
+            icon: '✅',
+            duration: 4000,
+          });
+          
+          // Clear guest session after successful transfer
+          await clearGuestSession();
+        } else if (transferResult.skippedCount > 0 && transferResult.transferredCount === 0) {
+          // Only log this, don't show notification for skipped duplicates
+          debugLog('handleGuestImageTransfer_all_skipped', { skippedCount: transferResult.skippedCount });
+        }
+        
+        // Only show error notification if there were actual failures (not skips)
+        if (transferResult.errors.length > 0 && transferResult.failedCount > 0) {
+          console.error('Transfer errors:', transferResult.errors);
+          toast.error('Some images failed to transfer. Please try generating new logos.', {
+            icon: '⚠️',
+            duration: 4000,
+          });
+        }
+
+      } catch (error: any) {
+        console.error('Error during guest image transfer:', error);
+        toast.error('Failed to transfer guest images. Please try generating new logos.', {
+          icon: '⚠️',
+          duration: 4000,
+        });
+      } finally {
+        // Release locks
+        transferState.current.isTransferring = false;
+        transferState.current.transferPromise = null;
+        debugLog('handleGuestImageTransfer_completed');
+      }
+    })();
+
+    await transferState.current.transferPromise;
+  };
+
   const signOut = async () => {
     debugLog('signOut_start');
     
-    // Clear guest image transfer flags and notification state
-    hasAttemptedGuestImageTransfer.current = false;
-    isTransferringImages.current = false;
-    hasShownTransferNotification.current = false;
-    lastTransferSessionId.current = null;
+    // Clear all transfer state
+    transferState.current = {
+      isTransferring: false,
+      hasTransferredForUser: new Set(),
+      lastTransferTime: 0,
+      transferPromise: null
+    };
     
     await supabase.auth.signOut();
     // The onAuthStateChange listener will handle the state reset.
@@ -265,20 +298,26 @@ export const useAuth = () => {
         // KEY CHANGE: Treat INITIAL_SESSION (with a user) and SIGNED_IN the same.
         if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
           debugLog('User session detected. Fetching profile...', { event });
-          // Reset transfer flags for new sign-ins only (not for token refresh)
+          
+          // Reset transfer state for new sign-ins only (not for token refresh)
           if (event === 'SIGNED_IN') {
-            hasAttemptedGuestImageTransfer.current = false;
-            isTransferringImages.current = false;
-            hasShownTransferNotification.current = false;
-            lastTransferSessionId.current = null;
+            transferState.current = {
+              isTransferring: false,
+              hasTransferredForUser: new Set(),
+              lastTransferTime: 0,
+              transferPromise: null
+            };
           }
+          
           fetchUserProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           debugLog('User signed out.');
-          hasAttemptedGuestImageTransfer.current = false;
-          isTransferringImages.current = false;
-          hasShownTransferNotification.current = false;
-          lastTransferSessionId.current = null;
+          transferState.current = {
+            isTransferring: false,
+            hasTransferredForUser: new Set(),
+            lastTransferTime: 0,
+            transferPromise: null
+          };
           setState({ 
             user: null, 
             loading: false, 
