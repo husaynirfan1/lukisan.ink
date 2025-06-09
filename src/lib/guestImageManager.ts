@@ -83,6 +83,8 @@ export const storeTempImage = async (params: {
   aspectRatio: string;
 }): Promise<{ success: boolean; tempImage?: TempImage; error?: string }> => {
   try {
+    const guestSession = getOrCreateGuestSession();
+    console.log('storeTempImage - guest_session_id:', guestSession.sessionId);
     console.log('Converting image URL to blob for storage...');
     
     // Convert the image URL to a Blob
@@ -113,7 +115,7 @@ export const storeTempImage = async (params: {
     // Create a temporary image object for compatibility
     const tempImage: TempImage = {
       id: saveResult.imageId!,
-      sessionId: getOrCreateGuestSession().sessionId,
+      sessionId: guestSession.sessionId,
       imageUrl: params.imageUrl, // Keep original URL for reference
       prompt: params.prompt,
       category: params.category,
@@ -124,6 +126,7 @@ export const storeTempImage = async (params: {
     };
     
     console.log('Successfully stored guest image:', saveResult.imageId);
+    console.log('storeTempImage - tempImage:', tempImage);
     
     return { success: true, tempImage };
   } catch (error: any) {
@@ -212,6 +215,9 @@ export const checkUserCredits = async (userId: string): Promise<{
  * Transfers temporary images to user's permanent library using the new IndexedDB approach
  */
 export const transferTempImagesToUser = async (userId: string): Promise<TransferResult> => {
+  console.log('transferTempImagesToUser - userId:', userId);
+  const guestSession = getOrCreateGuestSession();
+  console.log('transferTempImagesToUser - guest_session_id:', guestSession.sessionId);
   console.log(`[Logo Migration Process] Started for user ${userId}. Timestamp: ${new Date().toISOString()}`);
   const result: TransferResult = {
     success: false,
@@ -228,6 +234,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
     
     // Get guest images from IndexedDB
     const guestImages = await getGuestImages();
+    console.log('transferTempImagesToUser - tempImages:', guestImages);
     
     if (guestImages.length === 0) {
       console.log('No guest images to transfer');
@@ -239,6 +246,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
     
     // Check user credits
     const creditInfo = await checkUserCredits(userId);
+    console.log('transferTempImagesToUser - creditInfo:', creditInfo);
     result.creditsAvailable = creditInfo.available;
     result.creditsNeeded = guestImages.length;
     
@@ -288,6 +296,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
     return result;
   } catch (error: any) {
     console.error('Error in transferTempImagesToUser:', error);
+    console.log('transferTempImagesToUser - caught error:', error);
     result.errors.push(`Transfer error: ${error.message}`);
     return result;
   }
