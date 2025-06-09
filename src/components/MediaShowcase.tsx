@@ -48,7 +48,7 @@ const showcaseItems: MediaItem[] = [
   {
     id: 'brand-showcase-1',
     type: 'image',
-    src: 'https://images.pexels.com/photos/3184360/pexels-photo-3184360.jpeg?auto=compress&cs=tinysrgb&w=600&h=600&fit=crop',
+    src: '/assets/images/gallery/sample-1.png',
     title: 'Tech Startup Collection',
     description: 'Modern, clean logos perfect for technology companies',
     aspectRatio: '1:1'
@@ -56,7 +56,7 @@ const showcaseItems: MediaItem[] = [
   {
     id: 'brand-showcase-2',
     type: 'image',
-    src: 'https://images.pexels.com/photos/3184339/pexels-photo-3184339.jpeg?auto=compress&cs=tinysrgb&w=600&h=600&fit=crop',
+    src: '/assets/images/gallery/sample-2.png',
     title: 'Professional Services',
     description: 'Sophisticated designs for consulting and business services',
     aspectRatio: '1:1'
@@ -64,7 +64,7 @@ const showcaseItems: MediaItem[] = [
   {
     id: 'brand-showcase-3',
     type: 'image',
-    src: 'https://images.pexels.com/photos/3184338/pexels-photo-3184338.jpeg?auto=compress&cs=tinysrgb&w=600&h=600&fit=crop',
+    src: '/assets/images/gallery/sample-3.png',
     title: 'Creative Industries',
     description: 'Artistic and innovative logos for creative professionals',
     aspectRatio: '1:1'
