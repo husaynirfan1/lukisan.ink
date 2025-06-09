@@ -83,6 +83,7 @@ export const GuestLogoGenerator: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
+  const [isTransferring, setIsTransferring] = useState(false); // Add this line
   const [generatedLogo, setGeneratedLogo] = useState<GeneratedLogo | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingDownload, setPendingDownload] = useState<GeneratedLogo | null>(null);
@@ -305,70 +306,70 @@ export const GuestLogoGenerator: React.FC = () => {
   };
   
 // New useEffect for transfer logic
-useEffect(() => {
-  const prevUser = prevUserRef.current;
+ // Update the useEffect hook to use isTransferring
+  useEffect(() => {
+    const prevUser = prevUserRef.current;
 
-  // Detect login: guest (no prevUser) to logged-in user (current user exists)
-  if (!prevUser && user) {
-    console.log('Login detected! Initiating transfer of guest images for user ID:', user.id);
-    toast.loading('Authentication successful! Transferring your logos...'); // Moved toast
+    // Detect login: guest (no prevUser) to logged-in user (current user exists)
+    if (!prevUser && user) {
+      console.log('Login detected! Initiating transfer of guest images for user ID:', user.id);
+      setIsTransferring(true);
+      const loadingToast = toast.loading('Authentication successful! Transferring your logos...');
 
-    transferTempImagesToUser(user.id).then(async transferResult => { // Added async here
-      toast.dismiss(); // Dismiss loading toast
+      transferTempImagesToUser(user.id)
+        .then(transferResult => {
+          console.log('Transfer result:', transferResult);
+          toast.dismiss(loadingToast);
+          setIsTransferring(false);
 
-      if (transferResult.insufficientCredits) {
-        toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
-          icon: '💳',
-          duration: 5000,
+          if (transferResult.insufficientCredits) {
+            toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
+              icon: '💳',
+              duration: 5000,
+            });
+            if (generatedLogo) {
+              setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
+            }
+          } else if (transferResult.success) {
+            if (transferResult.transferredCount > 0) {
+              toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
+                icon: '✅',
+                duration: 4000,
+              });
+            }
+
+            // Handle pending download if any
+            if (pendingDownload && !transferResult.insufficientCredits) {
+              handleDownload(pendingDownload);
+              setPendingDownload(null);
+            }
+          }
+
+          // Log any errors
+          if (transferResult.errors.length > 0) {
+            console.error('Transfer errors:', transferResult.errors);
+            if (!transferResult.success) {
+              toast.error(`Transfer completed with errors: ${transferResult.errors.join(', ')}`, {
+                icon: '⚠️',
+                duration: 5000,
+              });
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Error during image transfer:', error);
+          setIsTransferring(false);
+          toast.dismiss(loadingToast);
+          toast.error(`Failed to transfer images: ${error.message || 'Unknown error'}`, {
+            icon: '❌',
+            duration: 5000,
+          });
         });
-        if (generatedLogo) { // Check if generatedLogo is not null
-          setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
-        }
-      } else if (transferResult.success) {
-        toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
-          icon: '✅',
-          duration: 4000,
-        });
+    }
 
-        if (pendingDownload && !transferResult.insufficientCredits) {
-          // It's important that handleDownload is prepared to be called here
-          // and that pendingDownload is correctly managed.
-          handleDownload(pendingDownload);
-          setPendingDownload(null); 
-        }
-        
-        // The redirect to dashboard was previously commented out for testing.
-        // For the fix, it should be restored if desired, or handled by routing.
-        // For now, let's keep it commented to ensure testing the fix is easy.
-        // setTimeout(() => {
-        //   window.location.href = '/dashboard';
-        // }, 1500);
-
-      } else if (transferResult.failedCount > 0) {
-        toast.error(`Transfer completed with errors. ${transferResult.transferredCount} succeeded, ${transferResult.failedCount} failed.`, {
-          icon: '⚠️',
-          duration: 5000,
-        });
-      }
-      
-      // Refresh the credits display with the latest data
-      // Ensure checkUserCredits and setUserCredits are available and work as expected.
-      const updatedCredits = await checkUserCredits(user.id); // Added await
-      setUserCredits(updatedCredits);
-
-    }).catch(error => {
-      toast.dismiss(); // Dismiss loading toast
-      console.error('Error during image transfer triggered by new useEffect:', error);
-      toast.error(`Failed to transfer images: ${error.message || 'Unknown error'}`, {
-        icon: '❌',
-        duration: 5000,
-      });
-    });
-  }
-
-  // Update the ref for the next render.
-  prevUserRef.current = user;
-}, [user, generatedLogo, pendingDownload, setGeneratedLogo, setPendingDownload, setUserCredits, handleDownload]); // Added dependencies
+    // Update the ref with current user at the end of the effect
+    prevUserRef.current = user;
+  }, [user, generatedLogo, pendingDownload, handleDownload]);
 
   
 const handleAuthSuccess = () => {
