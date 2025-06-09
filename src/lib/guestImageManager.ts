@@ -113,17 +113,17 @@ export const storeTempImage = async (params: {
     }
 
     // Create a temporary image object for compatibility
-    const tempImage: TempImage = {
-      id: saveResult.imageId!,
-      sessionId: guestSession.sessionId,
-      imageUrl: params.imageUrl, // Keep original URL for reference
-      prompt: params.prompt,
-      category: params.category,
-      aspectRatio: params.aspectRatio,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + (2 * 60 * 60 * 1000), // 2 hours
-      transferred: false
-    };
+   const tempImage: TempImage = {
+  id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  sessionId: guestSession.sessionId,
+  imageUrl: params.imageUrl,
+  prompt: params.prompt,
+  category: params.category,
+  aspectRatio: params.aspectRatio || '1:1',
+  createdAt: Date.now(),
+  expiresAt: Date.now() + SESSION_DURATION,
+  transferred: false // Explicitly set to false
+};
     
     console.log('Successfully stored guest image:', saveResult.imageId);
     console.log('storeTempImage - tempImage:', tempImage);
