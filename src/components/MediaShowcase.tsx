@@ -285,7 +285,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
                 alt={item.title}
                 className={`w-full h-full transition-all duration-500 ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'
-                } ${item.type === 'logo' ? 'object-contain p-8 bg-white' : 'object-cover'}`}
+                } ${item.type === 'logo' ? 'object-cover p-4 bg-white' : 'object-cover'}`}
                 onLoad={() => setImageLoaded(true)}
                 onError={() => setImageLoaded(true)}
                 loading="lazy"
@@ -502,8 +502,7 @@ export const MediaShowcase: React.FC = () => {
                 <ExternalLink className="h-5 w-5" />
               </motion.button>
             </div>
-               </motion.div>
- 
+          </motion.div>
         </div>
       </section>
       
