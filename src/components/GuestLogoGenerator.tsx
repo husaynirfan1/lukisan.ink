@@ -83,7 +83,7 @@ export const GuestLogoGenerator: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
-  const [isTransferring, setIsTransferring] = useState(false); // Add this line
+  const [isTransferring, setIsTransferring] = useState(false);
   const [generatedLogo, setGeneratedLogo] = useState<GeneratedLogo | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingDownload, setPendingDownload] = useState<GeneratedLogo | null>(null);
@@ -197,7 +197,10 @@ export const GuestLogoGenerator: React.FC = () => {
     setGeneratedLogo(null);
     
     try {
-      console.log('Generating logo for guest user');
+      console.log('=== STARTING GUEST LOGO GENERATION ===');
+      console.log('User authenticated:', !!user);
+      console.log('Prompt:', prompt);
+      console.log('Category:', selectedCategory);
       
       const logoUrl = await generateLogo({
         prompt: prompt,
@@ -209,6 +212,8 @@ export const GuestLogoGenerator: React.FC = () => {
         seed: Math.floor(Math.random() * 2147483647)
       });
 
+      console.log('Logo generated successfully:', logoUrl);
+
       const newLogo: GeneratedLogo = {
         url: logoUrl,
         category: selectedCategory,
@@ -216,27 +221,30 @@ export const GuestLogoGenerator: React.FC = () => {
         timestamp: Date.now(),
       };
 
-      // Store as temporary image for guest users
-      if (!user) {
-        const storeResult = await storeTempImage({
-          imageUrl: logoUrl,
-          prompt: prompt,
-          category: selectedCategory,
-          aspectRatio: '1:1'
-        });
+      // Store as temporary image for guest users OR authenticated users
+      console.log('Storing image for future transfer...');
+      const storeResult = await storeTempImage({
+        imageUrl: logoUrl,
+        prompt: prompt,
+        category: selectedCategory,
+        aspectRatio: '1:1'
+      });
 
-        if (storeResult.success && storeResult.tempImage) {
-          newLogo.tempImageId = storeResult.tempImage.id;
-          console.log('Stored temporary image:', storeResult.tempImage.id);
-        }
+      if (storeResult.success && storeResult.tempImage) {
+        newLogo.tempImageId = storeResult.tempImage.id;
+        console.log('Successfully stored temporary image:', storeResult.tempImage.id);
+      } else {
+        console.warn('Failed to store temporary image:', storeResult.error);
       }
 
       setGeneratedLogo(newLogo);
       toast.success('Logo generated successfully!');
+      console.log('=== GUEST LOGO GENERATION COMPLETED ===');
       
     } catch (error) {
-      toast.error('Failed to generate logo. Please try again.');
+      console.error('=== GUEST LOGO GENERATION FAILED ===');
       console.error('Generation error:', error);
+      toast.error('Failed to generate logo. Please try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -305,109 +313,26 @@ export const GuestLogoGenerator: React.FC = () => {
     }
   };
   
-// New useEffect for transfer logic
- // Update the useEffect hook to use isTransferring
-useEffect(() => {
-  const prevUser = prevUserRef.current;
-
-  // Detect login: guest (no prevUser) to logged-in user (current user exists)
-  if (!prevUser && user) {
-    console.log('Login detected! Initiating transfer of guest images for user ID:', user.id);
-    setIsTransferring(true);
-    const loadingToast = toast.loading('Authentication successful! Transferring your logos...');
-
-    // Add a small delay to ensure auth state is fully updated
-    const transferTimer = setTimeout(async () => {
-      try {
-        const transferResult = await transferTempImagesToUser(user.id);
-        console.log('Transfer result:', transferResult);
-        
-        toast.dismiss(loadingToast);
-        setIsTransferring(false);
-
-        if (transferResult.insufficientCredits) {
-          toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
-            icon: '💳',
-            duration: 5000,
-          });
-          if (generatedLogo) {
-            setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
-          }
-        } else if (transferResult.success) {
-          if (transferResult.transferredCount > 0) {
-            toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
-              icon: '✅',
-              duration: 4000,
-            });
-            cleanupAllGuestImages(); 
-          }
-
-          // Handle pending download if any
-          if (pendingDownload && !transferResult.insufficientCredits) {
-            handleDownload(pendingDownload);
-            setPendingDownload(null);
-          }
-        }
-
-        // Log any errors
-        if (transferResult.errors.length > 0) {
-          console.error('Transfer errors:', transferResult.errors);
-          if (!transferResult.success) {
-            toast.error(`Transfer completed with errors: ${transferResult.errors.join(', ')}`, {
-              icon: '⚠️',
-              duration: 5000,
-            });
-          }
-        }
-      } catch (error: any) {
-        console.error('Error during image transfer:', error);
-        setIsTransferring(false);
-        toast.dismiss(loadingToast);
-        
-        // Handle auth errors specifically
-        if (error.status === 400 && error.message.includes('Refresh Token')) {
-          console.log('Auth token expired, refreshing session...');
-          // Try to refresh the session
-          const { data, error: refreshError } = await supabase.auth.refreshSession();
-          if (refreshError) {
-            console.error('Error refreshing session:', refreshError);
-            toast.error('Session expired. Please sign in again.', {
-              icon: '🔑',
-              duration: 5000,
-            });
-          } else {
-            // Retry the transfer after refresh
-            console.log('Session refreshed, retrying transfer...');
-            const retryResult = await transferTempImagesToUser(user.id);
-            // Handle retry result...
-          }
-        } else {
-          toast.error(`Failed to transfer images: ${error.message || 'Unknown error'}`, {
-            icon: '❌',
-            duration: 5000,
-          });
-        }
-      }
-    }, 1000); // 1 second delay to ensure auth state is updated
-
-    return () => clearTimeout(transferTimer);
-  }
-
-  // Update the ref with current user at the end of the effect
-  prevUserRef.current = user;
-}, [user, generatedLogo, pendingDownload]);
-  
-const handleAuthSuccess = () => {
-    // This function is now much simpler.
-    // 1. Close the modal.
+  // Enhanced auth success handler
+  const handleAuthSuccess = () => {
+    console.log('=== AUTH SUCCESS IN GUEST GENERATOR ===');
     setShowAuthModal(false);
     
-    // 2. Set a flag indicating a transfer should begin.
-    // The useEffect above will be triggered once the `user` object is updated by the useAuth hook.
+    // The useAuth hook will automatically handle the transfer
+    // We just need to show a loading state
     setIsTransferring(true);
-    toast.loading('Authentication successful! Transferring your logos...');
+    
+    // Clear the transferring state after a delay
+    setTimeout(() => {
+      setIsTransferring(false);
+      
+      // Handle pending download if any
+      if (pendingDownload) {
+        handleDownload(pendingDownload);
+        setPendingDownload(null);
+      }
+    }, 3000);
   };
-  
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
@@ -785,7 +710,7 @@ const handleAuthSuccess = () => {
         </div>
       </div>
       
-      {/* Make sure the AuthModal uses the new handleAuthSuccess function */}
+      {/* Enhanced AuthModal with proper success handling */}
       <AuthModal 
         isOpen={showAuthModal} 
         onClose={() => setShowAuthModal(false)}

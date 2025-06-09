@@ -14,7 +14,7 @@ interface AuthState {
   subscription: any;
   error: string | null;
   authStep: string;
-  authInitialized: boolean; // <-- ADD THIS LINE
+  authInitialized: boolean;
 }
 
 export const useAuth = () => {
@@ -24,7 +24,7 @@ export const useAuth = () => {
     subscription: null,
     error: null,
     authStep: 'initializing',
-    authInitialized: false, // <-- ADD THIS LINE
+    authInitialized: false,
   });
 
   const isFetchingProfile = useRef(false);
@@ -88,15 +88,16 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
             email: authUser.email!,
             name: authUser.user_metadata?.full_name || authUser.email!.split('@')[0],
             avatar_url: authUser.user_metadata?.avatar_url,
-            // Add any other default fields for your 'users' table here
-            // e.g., credits_remaining: 10, tier: 'free'
+            tier: 'free',
+            credits_remaining: 0,
+            daily_generations: 0,
         };
 
         const { data: createdUser, error: createError } = await supabase
             .from('users')
             .insert(newUserData)
             .select()
-            .single(); // .single() is safe here because we are sure we just inserted one row.
+            .single();
 
         if (createError) throw new Error(`Profile creation failed: ${createError.message}`);
         
@@ -119,6 +120,46 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
           authInitialized: true,
       });
 
+      // ENHANCED: Handle guest image transfer after successful profile fetch
+      if (finalUserProfile && !hasAttemptedGuestImageTransfer.current) {
+        debugLog('fetchUserProfile_checking_guest_images');
+        hasAttemptedGuestImageTransfer.current = true;
+        
+        // Small delay to ensure UI is ready
+        setTimeout(async () => {
+          try {
+            debugLog('fetchUserProfile_starting_guest_transfer');
+            const transferResult = await transferTempImagesToUser(finalUserProfile.id);
+            
+            if (transferResult.insufficientCredits) {
+              toast.error(`Not enough credits to transfer images. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
+                icon: '💳',
+                duration: 5000,
+              });
+            } else if (transferResult.success && transferResult.transferredCount > 0) {
+              toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
+                icon: '✅',
+                duration: 4000,
+              });
+              
+              // Clear guest session after successful transfer
+              await clearGuestSession();
+            }
+            
+            if (transferResult.errors.length > 0) {
+              console.error('Transfer errors:', transferResult.errors);
+            }
+            
+          } catch (error: any) {
+            console.error('Error during guest image transfer:', error);
+            toast.error('Failed to transfer guest images. Please try generating new logos.', {
+              icon: '⚠️',
+              duration: 4000,
+            });
+          }
+        }, 1000);
+      }
+
     } catch (error: any) {
       debugLog('fetchUserProfile_error', { errorMessage: error.message });
       setState(prev => ({
@@ -133,17 +174,27 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
       isFetchingProfile.current = false;
     }
   }, []);
+
   const signOut = async () => {
     debugLog('signOut_start');
+    
+    // Clear guest image transfer flag
+    hasAttemptedGuestImageTransfer.current = false;
+    
     await supabase.auth.signOut();
     // The onAuthStateChange listener will handle the state reset.
     // We also clear refs and state here as a fallback.
-    hasAttemptedGuestImageTransfer.current = false;
     lastSuccessfulFetchTimestamp.current = 0;
-    setState({ user: null, loading: false, subscription: null, error: null, authStep: 'signed_out' });
+    setState({ 
+      user: null, 
+      loading: false, 
+      subscription: null, 
+      error: null, 
+      authStep: 'signed_out',
+      authInitialized: true 
+    });
     window.location.href = '/'; // Force a clean reload to the home page
   };
-
 
 // Main effect for handling initialization and auth state changes
   useEffect(() => {
@@ -163,15 +214,27 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
         clearTimeout(safetyTimeout);
         if (!isMounted) return;
 
+        debugLog('Auth state change', { event, hasUser: !!session?.user });
+
         // KEY CHANGE: Treat INITIAL_SESSION (with a user) and SIGNED_IN the same.
         if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
           debugLog('User session detected. Fetching profile...', { event });
-          // REMOVED the intermediate setState call that caused the bug.
-          // Go directly to fetching the profile.
+          // Reset transfer flag for new sessions
+          if (event === 'SIGNED_IN') {
+            hasAttemptedGuestImageTransfer.current = false;
+          }
           fetchUserProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           debugLog('User signed out.');
-          setState({ ...state, user: null, loading: false, subscription: null, error: null, authStep: 'signed_out', authInitialized: true });
+          hasAttemptedGuestImageTransfer.current = false;
+          setState({ 
+            user: null, 
+            loading: false, 
+            subscription: null, 
+            error: null, 
+            authStep: 'signed_out', 
+            authInitialized: true 
+          });
         } else if (!session?.user) {
           debugLog('No user session detected.');
           setState(prev => ({ ...prev, loading: false, authInitialized: true, authStep: 'no_session' }));
@@ -186,7 +249,6 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
       clearTimeout(safetyTimeout);
     };
   }, []); // Correctly empty dependency array
-
 
   // Effect for handling tab visibility to prevent stale data
   useEffect(() => {
@@ -215,8 +277,7 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [state.user, state.loading, ]);
-
+  }, [state.user, state.loading, fetchUserProfile]);
 
   // Helper functions remain the same...
   const canGenerate = () => {
@@ -247,7 +308,7 @@ const fetchUserProfile = useCallback(async (userId: string, isInitialLoad = fals
 
   const refetchUser = () => {
     if (state.user) {
-        (state.user.id)
+        fetchUserProfile(state.user.id);
     }
   }
 
@@ -257,7 +318,7 @@ return {
     subscription: state.subscription,
     error: state.error,
     authStep: state.authStep,
-    authInitialized: state.authInitialized, // <-- ADD THIS LINE
+    authInitialized: state.authInitialized,
     signOut,
     canGenerate,
     getRemainingGenerations,
