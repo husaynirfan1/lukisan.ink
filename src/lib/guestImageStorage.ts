@@ -63,6 +63,7 @@ export const saveGuestImageLocally = async (
  */
 export const transferGuestImagesToUserAccount = async (
   user: any, // Supabase user object
+  imagesToTransfer: GuestImageData[], // <-- ACCEPT THE LIST DIRECTLY
   uploadAndSaveLogo: (blob: Blob, prompt: string, category: string, userId: string, aspectRatio?: string) => Promise<{ success: boolean; error?: string }>
 ): Promise<{
   success: boolean;
@@ -78,49 +79,32 @@ export const transferGuestImagesToUserAccount = async (
   };
 
   try {
-    console.log('Starting guest image transfer to user account...');
+    console.log(`[transferGuestImagesToUserAccount] Received ${imagesToTransfer.length} images to process.`);
 
-    // Get all keys from IndexedDB that start with 'guest-image-'
-    const allKeys = await keys();
-    const guestImageKeys = allKeys.filter(key => 
-      typeof key === 'string' && key.startsWith('guest-image-')
-    ) as string[];
-
-    if (guestImageKeys.length === 0) {
-      console.log('No guest images found to transfer.');
+    if (imagesToTransfer.length === 0) {
+      console.log('No guest images provided to transfer.');
       result.success = true;
       return result;
     }
 
-    console.log(`Found ${guestImageKeys.length} guest images to transfer.`);
-
-    // Process each guest image
-    for (const imageKey of guestImageKeys) {
+    // Process each guest image from the provided list
+    for (const imageData of imagesToTransfer) {
+      const imageKey = imageData.id; // Use the id from the object
       try {
         console.log(`Processing guest image: ${imageKey}`);
 
-        // Retrieve the image data from IndexedDB
-        const imageData: GuestImageData | undefined = await get(imageKey);
+        // No need to get from DB, we already have imageData
 
-        if (!imageData) {
-          console.warn(`Image data not found for key: ${imageKey}`);
-          result.failedCount++;
-          result.errors.push(`Image data not found for ${imageKey}`);
-          continue;
-        }
-
-        // Check if the image has expired
+        // Check if the image has expired (optional but good practice)
         if (Date.now() > imageData.expiresAt) {
           console.log(`Image ${imageKey} has expired, skipping transfer`);
-          // Delete expired image from IndexedDB
-          await del(imageKey);
+          await del(imageKey); // Clean up expired image
           result.failedCount++;
           result.errors.push(`Image ${imageKey} has expired`);
           continue;
         }
 
-        console.log(`[Logo Migration] Attempting to migrate logo ${imageData.id} for user ${user.id}. Prompt: "${imageData.prompt}". Timestamp: ${new Date().toISOString()}`);
-        // Upload and save the logo using the existing function
+        console.log(`[Logo Migration] Attempting to migrate logo ${imageData.id} for user ${user.id}.`);
         const uploadResult = await uploadAndSaveLogo(
           imageData.blob,
           imageData.prompt,
@@ -130,12 +114,11 @@ export const transferGuestImagesToUserAccount = async (
         );
 
         if (uploadResult.success) {
-        console.log(`Successfully transferred image: ${imageKey}`);
-        result.transferredCount++;
-        // Delete the image from IndexedDB after successful transfer
-        await del(imageKey);
-        console.log(`Cleaned up IndexedDB entry: ${imageKey}`);
-
+          console.log(`Successfully transferred image: ${imageKey}`);
+          result.transferredCount++;
+          // Delete the image from IndexedDB after successful transfer
+          await del(imageKey);
+          console.log(`Cleaned up IndexedDB entry: ${imageKey}`);
         } else {
           console.error(`Failed to upload image ${imageKey}:`, uploadResult.error);
           result.failedCount++;
@@ -149,11 +132,8 @@ export const transferGuestImagesToUserAccount = async (
       }
     }
 
-    // Mark as successful if at least one image was transferred
     result.success = result.transferredCount > 0;
-
     console.log(`Transfer completed: ${result.transferredCount} successful, ${result.failedCount} failed`);
-
     return result;
 
   } catch (error: any) {
