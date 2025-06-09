@@ -233,28 +233,118 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
     console.log('Starting image transfer for user:', userId);
     
     // Get guest images from IndexedDB for the current session only
-    const guestImages = (await getGuestImages()).filter(img => 
-      img.sessionId === guestSession.sessionId && !img.transferred
-    );
+    const guestImages = await getGuestImages();
+    const sessionImages = guestImages.filter(img => !img.transferred);
     
-    console.log(`Found ${guestImages.length} guest images to transfer for session ${guestSession.sessionId}`);
+    console.log(`Found ${sessionImages.length} guest images to transfer for session ${guestSession.sessionId}`);
     
-    if (guestImages.length === 0) {
+    if (sessionImages.length === 0) {
       console.log('No guest images to transfer for current session');
       result.success = true;
       return result;
     }
 
-    // Rest of the function remains the same...
+    // Check user credits
     const creditInfo = await checkUserCredits(userId);
-    // ... rest of the function
+    console.log('transferTempImagesToUser - creditInfo:', creditInfo);
+    result.creditsAvailable = creditInfo.available;
+    result.creditsNeeded = sessionImages.length;
+    
+    if (!creditInfo.canGenerate || creditInfo.available < sessionImages.length) {
+      console.log('Insufficient credits for transfer');
+      result.insufficientCredits = true;
+      result.errors.push(`Insufficient credits. Need ${sessionImages.length}, have ${creditInfo.available}`);
+      return result;
+    }
+
+    // Get fresh session to ensure valid auth
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('Error getting user session:', sessionError);
+      result.errors.push('Authentication error. Please sign in again.');
+      return result;
+    }
+
+    // Upload and save function
+    const uploadAndSaveLogo = async (
+      blob: Blob, 
+      prompt: string, 
+      category: string, 
+      userId: string, 
+      aspectRatio?: string
+    ) => {
+      try {
+        const fileName = `logo-${Date.now()}.png`;
+        const filePath = `${userId}/${fileName}`;
+        
+        // Upload to storage
+        const { error: uploadError } = await supabase.storage
+          .from('logos')
+          .upload(filePath, blob, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: 'image/png'
+          });
+
+        if (uploadError) {
+          console.error('Error uploading logo:', uploadError);
+          return { success: false, error: uploadError.message };
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('logos')
+          .getPublicUrl(filePath);
+
+        // Save to database
+        const { error: dbError } = await supabase
+          .from('generated_logos')
+          .insert([{
+            user_id: userId,
+            prompt,
+            category,
+            image_url: publicUrl,
+            aspect_ratio: aspectRatio || '1:1'
+          }]);
+
+        if (dbError) {
+          console.error('Error saving logo to database:', dbError);
+          return { success: false, error: dbError.message };
+        }
+
+        return { success: true };
+      } catch (error: any) {
+        console.error('Error in uploadAndSaveLogo:', error);
+        return { success: false, error: error.message };
+      }
+    };
+
+    // Transfer the images
+    const transferResult = await transferGuestImagesToUserAccount(
+      { id: userId },
+      uploadAndSaveLogo
+    );
+
+    // Update result with transfer results
+    result.success = transferResult.success;
+    result.transferredCount = transferResult.transferredCount;
+    result.failedCount = transferResult.failedCount;
+    result.errors = transferResult.errors;
+
+    // Update user credits if any images were transferred
+    if (result.transferredCount > 0) {
+      await deductUserCredits(userId, result.transferredCount, creditInfo.isProUser);
+    }
+
+    console.log(`Transfer completed: ${result.transferredCount} transferred, ${result.failedCount} failed`);
+    return result;
+
   } catch (error: any) {
     console.error('Error in transferTempImagesToUser:', error);
     result.errors.push(`Transfer error: ${error.message}`);
     return result;
   }
 };
-
 /**
  * Deducts credits from user account
  */
