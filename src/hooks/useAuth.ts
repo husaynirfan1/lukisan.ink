@@ -32,6 +32,10 @@ export const useAuth = () => {
   const lastSuccessfulFetchTimestamp = useRef<number>(0);
   const hasAttemptedGuestImageTransfer = useRef(false);
   const isTransferringImages = useRef(false);
+  
+  // ENHANCED: Add notification tracking to prevent duplicate toasts
+  const hasShownTransferNotification = useRef(false);
+  const lastTransferSessionId = useRef<string | null>(null);
 
   // Simple debug logger
   const debugLog = (step: string, data: any = {}) => {
@@ -121,11 +125,21 @@ export const useAuth = () => {
           authInitialized: true,
       });
 
-      // ENHANCED: Handle guest image transfer ONLY ONCE per session with better locking
+      // ENHANCED: Handle guest image transfer ONLY ONCE per session with notification deduplication
       if (finalUserProfile && !hasAttemptedGuestImageTransfer.current && !isTransferringImages.current) {
         debugLog('fetchUserProfile_checking_guest_images');
         hasAttemptedGuestImageTransfer.current = true;
         isTransferringImages.current = true;
+        
+        // Generate a unique session identifier for this transfer
+        const currentSessionId = `${userId}_${Date.now()}`;
+        
+        // Check if we've already shown notifications for this session
+        if (hasShownTransferNotification.current && lastTransferSessionId.current === currentSessionId) {
+          debugLog('fetchUserProfile_skipping_duplicate_notifications');
+          isTransferringImages.current = false;
+          return;
+        }
         
         // Small delay to ensure UI is ready
         setTimeout(async () => {
@@ -133,33 +147,56 @@ export const useAuth = () => {
             debugLog('fetchUserProfile_starting_guest_transfer');
             const transferResult = await transferTempImagesToUser(finalUserProfile.id);
             
-            if (transferResult.insufficientCredits) {
-              toast.error(`Not enough credits to transfer images. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
-                icon: '💳',
-                duration: 5000,
-              });
-            } else if (transferResult.success && transferResult.transferredCount > 0) {
-              toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
-                icon: '✅',
-                duration: 4000,
-              });
+            // ENHANCED: Only show notifications if we haven't shown them for this session
+            if (!hasShownTransferNotification.current || lastTransferSessionId.current !== currentSessionId) {
+              lastTransferSessionId.current = currentSessionId;
+              hasShownTransferNotification.current = true;
               
-              // Clear guest session after successful transfer
-              await clearGuestSession();
-            } else if (transferResult.skippedCount > 0) {
-              console.log(`Skipped ${transferResult.skippedCount} duplicate images`);
-            }
-            
-            if (transferResult.errors.length > 0) {
-              console.error('Transfer errors:', transferResult.errors);
+              if (transferResult.insufficientCredits) {
+                toast.error(`Not enough credits to transfer images. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
+                  icon: '💳',
+                  duration: 5000,
+                });
+              } else if (transferResult.success && transferResult.transferredCount > 0) {
+                toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
+                  icon: '✅',
+                  duration: 4000,
+                });
+                
+                // Clear guest session after successful transfer
+                await clearGuestSession();
+              } else if (transferResult.skippedCount > 0 && transferResult.transferredCount === 0) {
+                // Only show this if no new images were transferred
+                console.log(`Skipped ${transferResult.skippedCount} duplicate images (no notification shown)`);
+              }
+              
+              if (transferResult.errors.length > 0) {
+                console.error('Transfer errors:', transferResult.errors);
+                // Only show error notification if there were actual failures
+                if (transferResult.failedCount > 0) {
+                  toast.error('Some images failed to transfer. Please try generating new logos.', {
+                    icon: '⚠️',
+                    duration: 4000,
+                  });
+                }
+              }
+            } else {
+              debugLog('fetchUserProfile_notifications_already_shown');
             }
             
           } catch (error: any) {
             console.error('Error during guest image transfer:', error);
-            toast.error('Failed to transfer guest images. Please try generating new logos.', {
-              icon: '⚠️',
-              duration: 4000,
-            });
+            
+            // Only show error notification if we haven't shown notifications for this session
+            if (!hasShownTransferNotification.current || lastTransferSessionId.current !== currentSessionId) {
+              hasShownTransferNotification.current = true;
+              lastTransferSessionId.current = currentSessionId;
+              
+              toast.error('Failed to transfer guest images. Please try generating new logos.', {
+                icon: '⚠️',
+                duration: 4000,
+              });
+            }
           } finally {
             isTransferringImages.current = false;
           }
@@ -184,9 +221,11 @@ export const useAuth = () => {
   const signOut = async () => {
     debugLog('signOut_start');
     
-    // Clear guest image transfer flags
+    // Clear guest image transfer flags and notification state
     hasAttemptedGuestImageTransfer.current = false;
     isTransferringImages.current = false;
+    hasShownTransferNotification.current = false;
+    lastTransferSessionId.current = null;
     
     await supabase.auth.signOut();
     // The onAuthStateChange listener will handle the state reset.
@@ -230,12 +269,16 @@ export const useAuth = () => {
           if (event === 'SIGNED_IN') {
             hasAttemptedGuestImageTransfer.current = false;
             isTransferringImages.current = false;
+            hasShownTransferNotification.current = false;
+            lastTransferSessionId.current = null;
           }
           fetchUserProfile(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           debugLog('User signed out.');
           hasAttemptedGuestImageTransfer.current = false;
           isTransferringImages.current = false;
+          hasShownTransferNotification.current = false;
+          lastTransferSessionId.current = null;
           setState({ 
             user: null, 
             loading: false, 
