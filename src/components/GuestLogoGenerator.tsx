@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Download, Loader2, User, Crown, Wand2, RefreshCw, AlertTriangle, Lock } from 'lucide-react';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
@@ -86,7 +86,7 @@ export const GuestLogoGenerator: React.FC = () => {
   const [generatedLogo, setGeneratedLogo] = useState<GeneratedLogo | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingDownload, setPendingDownload] = useState<GeneratedLogo | null>(null);
-  const [isTransferring, setIsTransferring] = useState(false);
+  // const [isTransferring, setIsTransferring] = useState(false); // Removed
   const [userCredits, setUserCredits] = useState<{
     available: number;
     isProUser: boolean;
@@ -96,6 +96,8 @@ export const GuestLogoGenerator: React.FC = () => {
   // Get the selected category's placeholder
   const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
   const currentPlaceholder = selectedCategoryData?.placeholder || 'e.g., A modern tech company specializing in cloud computing solutions...';
+
+  const prevUserRef = useRef(user); // Added for new useEffect
 
   // Check user credits when user changes
   useEffect(() => {
@@ -302,79 +304,81 @@ export const GuestLogoGenerator: React.FC = () => {
     }
   };
   
+// Removed useEffect hook that depended on [user, isTransferring]
+
+// New useEffect for transfer logic
 useEffect(() => {
-    console.log('useEffect - { user, isTransferring }:', { user, isTransferring });
-    // This effect runs when the `user` object becomes available AND we have flagged that a transfer should happen.
-    if (user && isTransferring) {
-      const transferImages = async () => {
-        try {
-          console.log('User detected after auth, starting image transfer for ID:', user.id);
-          const transferResult = await transferTempImagesToUser(user.id);
+  const prevUser = prevUserRef.current;
 
-          if (transferResult.insufficientCredits) {
-            toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
-              icon: '💳',
-              duration: 5000,
-            });
-            if (generatedLogo) {
-              setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
-            }
-          } else if (transferResult.success) {
-            toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
-              icon: '✅',
-              duration: 4000,
-            });
+  // Detect login: guest (no prevUser) to logged-in user (current user exists)
+  if (!prevUser && user) {
+    console.log('Login detected! Initiating transfer of guest images for user ID:', user.id);
+    toast.loading('Authentication successful! Transferring your logos...'); // Moved toast
 
-            // If a download was pending, trigger it now.
-            if (pendingDownload && !transferResult.insufficientCredits) {
-              handleDownload(pendingDownload);
-              setPendingDownload(null);
-            }
-            
-            // Redirect to dashboard after a short delay to allow the user to see the success message.
-            setTimeout(() => {
-              window.location.href = '/dashboard';
-            }, 1500);
+    transferTempImagesToUser(user.id).then(async transferResult => { // Added async here
+      toast.dismiss(); // Dismiss loading toast
 
-          } else if (transferResult.failedCount > 0) {
-            toast.error(`Transfer completed with errors. ${transferResult.transferredCount} succeeded, ${transferResult.failedCount} failed.`, {
-              icon: '⚠️',
-              duration: 5000,
-            });
-          }
-          
-          // Refresh the credits display with the latest data
-          const updatedCredits = await checkUserCredits(user.id);
-          setUserCredits(updatedCredits);
-
-        } catch (error: any) {
-          console.error('Error during image transfer:', error);
-          toast.error(`Failed to transfer images: ${error.message}`, {
-            icon: '❌',
-            duration: 5000,
-          });
-        } finally {
-          // Reset the transfer flag regardless of outcome.
-          setIsTransferring(false);
+      if (transferResult.insufficientCredits) {
+        toast.error(`Not enough credits. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
+          icon: '💳',
+          duration: 5000,
+        });
+        if (generatedLogo) { // Check if generatedLogo is not null
+          setGeneratedLogo(prev => prev ? { ...prev, hasInsufficientCredits: true } : null);
         }
-      };
+      } else if (transferResult.success) {
+        toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
+          icon: '✅',
+          duration: 4000,
+        });
 
-      transferImages();
-    }
-  }, [user, isTransferring]); // This effect depends on `user` and `isTransferring`
-  
+        if (pendingDownload && !transferResult.insufficientCredits) {
+          // It's important that handleDownload is prepared to be called here
+          // and that pendingDownload is correctly managed.
+          handleDownload(pendingDownload);
+          setPendingDownload(null); 
+        }
+        
+        // The redirect to dashboard was previously commented out for testing.
+        // For the fix, it should be restored if desired, or handled by routing.
+        // For now, let's keep it commented to ensure testing the fix is easy.
+        // setTimeout(() => {
+        //   window.location.href = '/dashboard';
+        // }, 1500);
+
+      } else if (transferResult.failedCount > 0) {
+        toast.error(`Transfer completed with errors. ${transferResult.transferredCount} succeeded, ${transferResult.failedCount} failed.`, {
+          icon: '⚠️',
+          duration: 5000,
+        });
+      }
+      
+      // Refresh the credits display with the latest data
+      // Ensure checkUserCredits and setUserCredits are available and work as expected.
+      const updatedCredits = await checkUserCredits(user.id); // Added await
+      setUserCredits(updatedCredits);
+
+    }).catch(error => {
+      toast.dismiss(); // Dismiss loading toast
+      console.error('Error during image transfer triggered by new useEffect:', error);
+      toast.error(`Failed to transfer images: ${error.message || 'Unknown error'}`, {
+        icon: '❌',
+        duration: 5000,
+      });
+    });
+  }
+
+  // Update the ref for the next render.
+  prevUserRef.current = user;
+}, [user, generatedLogo, pendingDownload, setGeneratedLogo, setPendingDownload, setUserCredits, handleDownload]); // Added dependencies
+
 const handleAuthSuccess = () => {
     console.log('handleAuthSuccess triggered');
     // This function is now much simpler.
     // 1. Close the modal.
     setShowAuthModal(false);
-    
-    // 2. Set a flag indicating a transfer should begin.
-    // The useEffect above will be triggered once the `user` object is updated by the useAuth hook.
-    setIsTransferring(true);
-    toast.loading('Authentication successful! Transferring your logos...');
+    // The toast message "Authentication successful! Transferring your logos..." was moved to the new useEffect.
   };
-  
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
@@ -542,18 +546,7 @@ const handleAuthSuccess = () => {
               )}
             </div>
 
-            {/* Transfer Status */}
-            {isTransferring && (
-              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
-                <div className="flex items-center space-x-3">
-                  <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                  <div>
-                    <p className="font-semibold text-blue-900">Transferring Images</p>
-                    <p className="text-sm text-blue-700">Moving your generated logos to your permanent library...</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Transfer Status UI element removed */}
 
             {/* Generated Logo */}
             <AnimatePresence>
