@@ -21,7 +21,7 @@ const showcaseItems: MediaItem[] = [
     type: 'logo',
     src: '/assets/images/gallery/lukisan-logo.png',
     title: 'Lukisan Brand Identity',
-    description: 'Our signature logo representing innovation in AI-powered creative solutions',
+    description: 'Our banner logo representing innovation in AI-powered creative solutions',
     aspectRatio: '2:1',
     featured: true
 
