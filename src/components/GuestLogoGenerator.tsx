@@ -303,6 +303,7 @@ export const GuestLogoGenerator: React.FC = () => {
   };
   
 useEffect(() => {
+    console.log('useEffect - { user, isTransferring }:', { user, isTransferring });
     // This effect runs when the `user` object becomes available AND we have flagged that a transfer should happen.
     if (user && isTransferring) {
       const transferImages = async () => {
@@ -363,6 +364,7 @@ useEffect(() => {
   }, [user, isTransferring]); // This effect depends on `user` and `isTransferring`
   
 const handleAuthSuccess = () => {
+    console.log('handleAuthSuccess triggered');
     // This function is now much simpler.
     // 1. Close the modal.
     setShowAuthModal(false);
