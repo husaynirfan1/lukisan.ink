@@ -132,7 +132,7 @@ export const transferGuestImagesToUserAccount = async (
         if (uploadResult.success) {
           console.log(`Successfully transferred image: ${imageKey}`);
           result.transferredCount++;
-
+          await markGuestImageAsTransferred(image.id);
           // Delete the image from IndexedDB after successful transfer
           await del(imageKey);
           console.log(`Cleaned up IndexedDB entry: ${imageKey}`);
