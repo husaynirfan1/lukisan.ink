@@ -382,7 +382,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
             >
               ⭐ Featured
             </motion.div>
-          )}
+          </div>
         )}
 
         {/* Hover Glow Effect */}
