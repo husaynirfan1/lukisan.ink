@@ -279,44 +279,44 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
         
         // Upload to storage
         const { error: uploadError } = await supabase.storage
-          .from('generated-images')
-          .upload(filePath, blob, {
-            cacheControl: '3600',
-            upsert: true,
-            contentType: 'image/png'
-          });
+      .from('generated-images') 
+      .upload(filePath, blob, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: 'image/png'
+      });
 
-        if (uploadError) {
-          console.error('Error uploading logo:', uploadError);
-          return { success: false, error: uploadError.message };
-        }
+    if (uploadError) {
+      console.error('Error uploading logo:', uploadError);
+      return { success: false, error: uploadError.message };
+    }
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('logos')
-          .getPublicUrl(filePath);
+    // Get public URL from the correct bucket
+    const { data: { publicUrl } } = supabase.storage
+      .from('generated-images') // Also update this to the correct bucket name
+      .getPublicUrl(filePath);
 
         // Save to database
-        const { error: dbError } = await supabase
-          .from('logo_generations')
-          .insert([{
-            user_id: userId,
-            prompt,
-            category,
-            image_url: publicUrl,
-            aspect_ratio: aspectRatio || '1:1'
-          }]);
+       const { error: dbError } = await supabase
+      .from('logo_generations') 
+      .insert([{
+        user_id: userId,
+        prompt,
+        category,
+        image_url: publicUrl,
+        aspect_ratio: aspectRatio || '1:1'
+      }]);
 
-        if (dbError) {
-          console.error('Error saving logo to database:', dbError);
-          return { success: false, error: dbError.message };
-        }
+    if (dbError) {
+      console.error('Error saving logo to database:', dbError);
+      return { success: false, error: dbError.message };
+    }
 
-        return { success: true };
-      } catch (error: any) {
-        console.error('Error in uploadAndSaveLogo:', error);
-        return { success: false, error: error.message };
-      }
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error in uploadAndSaveLogo:', error);
+    return { success: false, error: error.message };
+  }
     };
 
     // Transfer the images
