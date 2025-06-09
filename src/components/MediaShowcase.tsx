@@ -502,7 +502,7 @@ export const MediaShowcase: React.FC = () => {
                 <ExternalLink className="h-5 w-5" />
               </motion.button>
             </div>
-          </div>
+  
         </div>
       </section>
 
