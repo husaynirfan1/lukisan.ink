@@ -22,8 +22,8 @@ const showcaseItems: MediaItem[] = [
     src: '/assets/images/gallery/lukisan-logo.png',
     title: 'Lukisan Brand Identity',
     description: 'Our signature logo representing innovation in AI-powered creative solutions',
-    aspectRatio: '16:9',
-    featured: true
+    aspectRatio: '16:9'
+
   },
   {
     id: 'ai-logo-demo',
@@ -32,8 +32,8 @@ const showcaseItems: MediaItem[] = [
     thumbnail: 'https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?auto=compress&cs=tinysrgb&w=800&h=450&fit=crop',
     title: 'AI Logo Generation in Action',
     description: 'Watch our AI create professional logos from simple text descriptions in real-time',
-    aspectRatio: '16:9',
-    featured: true
+    aspectRatio: '16:9'
+   
   },
   {
     id: 'video-creation-demo',
@@ -42,8 +42,8 @@ const showcaseItems: MediaItem[] = [
     thumbnail: 'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=800&h=450&fit=crop',
     title: 'Personalized Video Creation',
     description: 'See how we transform static logos into engaging, personalized video content',
-    aspectRatio: '16:9',
-    featured: true
+    aspectRatio: '16:9'
+  
   },
   {
     id: 'brand-showcase-1',
