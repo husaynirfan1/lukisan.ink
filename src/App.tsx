@@ -5,7 +5,6 @@ import { Router } from './components/Router';
 import { DebugPanel } from './components/DebugPanel';
 import { DashboardLoader } from './components/DashboardLoader';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { EmailVerificationBar } from './components/EmailVerificationBar';
 import { useAuth } from './hooks/useAuth';
 
 function App() {
@@ -77,9 +76,6 @@ function App() {
         />
         
         <Header />
-        
-        {/* Email Verification Bar */}
-        <EmailVerificationBar />
         
         {/* Show error state */}
         {error && !loading && (

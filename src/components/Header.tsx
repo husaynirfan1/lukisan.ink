@@ -2,19 +2,12 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, User, LogOut, Crown, AlertCircle, Home } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { useEmailVerification } from '../hooks/useEmailVerification';
-import { createCheckoutSession } from '../lib/stripe';
-import { stripeProducts } from '../stripe-config';
 import { AuthModal } from './auth/AuthModal';
-import { EmailVerificationModal } from './EmailVerificationModal';
-import toast from 'react-hot-toast';
+import { stripeProducts } from '../stripe-config';
 
 export const Header: React.FC = () => {
   const { user, subscription, signOut, getUserTier, loading, error, authStep } = useAuth();
-  const { checkEmailBeforePayment } = useEmailVerification();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [isUpgrading, setIsUpgrading] = useState(false);
 
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
@@ -36,43 +29,6 @@ export const Header: React.FC = () => {
     setTimeout(() => {
       window.location.href = '/dashboard';
     }, 100);
-  };
-
-  const handleUpgradeClick = async () => {
-    if (!user) {
-      setShowAuthModal(true);
-      return;
-    }
-
-    // Check email verification before proceeding with payment
-    const canProceed = await checkEmailBeforePayment();
-    if (!canProceed) {
-      setShowVerificationModal(true);
-      return;
-    }
-
-    setIsUpgrading(true);
-
-    try {
-      const { url } = await createCheckoutSession({
-        priceId: product.priceId,
-        mode: product.mode,
-      });
-
-      if (url) {
-        window.location.href = url;
-      }
-    } catch (error: any) {
-      if (error.message === 'EMAIL_NOT_VERIFIED') {
-        toast.error('Please verify your email address before upgrading');
-        setShowVerificationModal(true);
-      } else {
-        toast.error(error.message || 'Failed to start upgrade process');
-      }
-      console.error('Upgrade error:', error);
-    } finally {
-      setIsUpgrading(false);
-    }
   };
 
   return (
@@ -100,6 +56,8 @@ export const Header: React.FC = () => {
                 Lukisan
               </span>
             </motion.button>
+
+            {/* The redundant navigation button has been removed from here */}
 
             <div className="flex items-center space-x-4">
               {/* Loading State */}
@@ -132,22 +90,6 @@ export const Header: React.FC = () => {
                       {isProUser ? `${user.credits_remaining} credits` : `Free tier`}
                     </span>
                   </div>
-                  
-                  {/* Upgrade Button for Free Users */}
-                  {!isProUser && (
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={handleUpgradeClick}
-                      disabled={isUpgrading}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg hover:from-yellow-500 hover:to-orange-600 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Crown className="h-4 w-4" />
-                      <span className="text-sm font-medium">
-                        {isUpgrading ? 'Processing...' : 'Upgrade'}
-                      </span>
-                    </motion.button>
-                  )}
                   
                   {subscription?.subscription_status === 'active' && (
                     <div className="px-3 py-1 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 rounded-full border border-yellow-200">
@@ -198,13 +140,6 @@ export const Header: React.FC = () => {
         isOpen={showAuthModal} 
         onClose={() => setShowAuthModal(false)}
         onSuccess={handleSignInSuccess}
-      />
-
-      <EmailVerificationModal
-        isOpen={showVerificationModal}
-        onClose={() => setShowVerificationModal(false)}
-        title="Email Verification Required"
-        message="Please verify your email address before upgrading to Creator. This helps us protect your account and ensure you receive important updates about your subscription."
       />
     </>
   );

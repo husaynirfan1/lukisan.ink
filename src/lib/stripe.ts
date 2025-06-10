@@ -16,43 +16,7 @@ export interface CreateCheckoutSessionRequest {
   cancelUrl?: string;
 }
 
-/**
- * Check if user's email is verified before allowing payment
- */
-const checkEmailVerification = async (): Promise<{ verified: boolean; user: any }> => {
-  const { data: { user }, error } = await supabase.auth.getUser();
-  
-  if (error || !user) {
-    throw new Error('User not authenticated');
-  }
-
-  // Get user profile to check verification status
-  const { data: userProfile, error: profileError } = await supabase
-    .from('users')
-    .select('is_email_verified')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError) {
-    console.error('Error checking user profile:', profileError);
-    // If we can't check, assume not verified for safety
-    return { verified: false, user };
-  }
-
-  return { 
-    verified: userProfile?.is_email_verified || false, 
-    user 
-  };
-};
-
 export const createCheckoutSession = async (request: CreateCheckoutSessionRequest) => {
-  // CRITICAL: Check email verification before any payment processing
-  const { verified, user } = await checkEmailVerification();
-  
-  if (!verified) {
-    throw new Error('EMAIL_NOT_VERIFIED');
-  }
-
   const { data: { session } } = await supabase.auth.getSession();
   
   if (!session?.access_token) {
