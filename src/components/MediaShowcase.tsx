@@ -162,7 +162,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ item, isHovered, onHover }) =
       {/* Loading State */}
       {!isLoaded && (
         <div className="absolute inset-0 bg-gray-200 animate-pulse flex items-center justify-center">
-          <div className="text-gray-500">Loading video...</div>
+          <div className="caption-text text-gray-500">Loading video...</div>
         </div>
       )}
 
@@ -282,7 +282,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
             <div className="relative w-full h-full">
               {!imageLoaded && (
                 <div className="absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse rounded-2xl flex items-center justify-center">
-                  <div className="text-gray-500">Loading...</div>
+                  <div className="caption-text text-gray-500">Loading...</div>
                 </div>
               )}
               <img
@@ -299,12 +299,30 @@ const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
           )}
         </motion.div>
 
-        {/* ... rest of the component */}
-        {/* ... */}
+        {/* Content Overlay */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: isHovered ? 1 : 0 }}
+          transition={{ duration: 0.3 }}
+          className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-6"
+        >
+          <div className="text-white">
+            <h3 className="heading-quaternary text-white mb-2">{item.title}</h3>
+            <p className="body-small text-white/90">{item.description}</p>
+          </div>
+        </motion.div>
+
+        {/* Type Badge */}
+        <div className="absolute top-4 left-4">
+          <span className="px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full ui-text-small text-gray-800 capitalize">
+            {item.type}
+          </span>
+        </div>
       </div>
     </motion.div>
   );
 };
+
 export const MediaShowcase: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
   const isInView = useInView(sectionRef, { once: true, margin: "-150px" });
@@ -355,7 +373,7 @@ export const MediaShowcase: React.FC = () => {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={isInView ? { scale: 1, opacity: 1 } : { scale: 0.9, opacity: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium mb-6"
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full ui-text-small font-medium mb-6"
             >
               <Sparkles className="h-4 w-4" />
               <span>Creative Showcase</span>
@@ -363,21 +381,21 @@ export const MediaShowcase: React.FC = () => {
 
             <h2 
               id="media-showcase-title"
-              className="text-4xl md:text-6xl font-bold text-gray-900 mb-8 leading-tight"
+              className="heading-primary text-gray-900 mb-8"
             >
               Accelerate development.
               <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent leading-tight pb-1">
                 We Design, You Innovate.
               </span>
             </h2>
-            <motion.p
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
               transition={{ duration: 0.6, delay: 0.4 }}
-              className="text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed"
+              className="body-large text-gray-600 max-w-4xl mx-auto"
             >
-             Discover how our AI platform effortlessly transforms your ideas into professional logos, engaging videos, and stunning visual                   content, allowing your team to bypass design delays and focus on core innovation.
-            </motion.p>
+              Discover how our AI platform effortlessly transforms your ideas into professional logos, engaging videos, and stunning visual content, allowing your team to bypass design delays and focus on core innovation.
+            </motion.div>
           </motion.div>
 
           {/* Media Grid */}
@@ -399,17 +417,17 @@ export const MediaShowcase: React.FC = () => {
             className="text-center"
           >
             <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-8 md:p-12 border border-gray-200/50 shadow-xl">
-              <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+              <h3 className="heading-secondary text-gray-900 mb-4">
                 Ready to Create Something Amazing?
               </h3>
-              <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
+              <p className="body-large text-gray-600 mb-8 max-w-2xl mx-auto">
                 Join thousands of creators who trust our AI-powered platform to bring their visions to life.
               </p>
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={handleStartCreating}
-                className="inline-flex items-center space-x-3 px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="inline-flex items-center space-x-3 px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl button-text hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
               >
                 <Sparkles className="h-5 w-5" />
                 <span>Start Creating Now</span>

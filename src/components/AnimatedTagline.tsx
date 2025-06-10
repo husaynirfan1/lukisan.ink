@@ -20,7 +20,7 @@ export const AnimatedTagline: React.FC = () => {
   }, []);
 
   return (
-    <div className="text-2xl md:text-3xl lg:text-4xl font-semibold text-gray-700 leading-tight my-8 mb-12">
+    <div className="heading-secondary text-gray-700 leading-tight my-8 mb-12">
       <div className="flex flex-col items-center space-y-2">
         <span className="mb-4">Then, Elevate Your Brand with</span>
         <div className="relative h-16 md:h-18 lg:h-20 flex items-center justify-center min-w-[300px] md:min-w-[400px] mt-4 overflow-visible">

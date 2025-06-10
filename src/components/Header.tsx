@@ -45,26 +45,24 @@ export const Header: React.FC = () => {
               className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
               whileHover={{ scale: 1.05 }}
             >
-             <div className="h-8 w-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl overflow-hidden">
-  <img 
-    src="/favicon.png" 
-    alt="Lukisan Logo" 
-    className="w-full h-full object-cover" 
-  />
-</div>
-              <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              <div className="h-8 w-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl overflow-hidden">
+                <img 
+                  src="/favicon.png" 
+                  alt="Lukisan Logo" 
+                  className="w-full h-full object-cover" 
+                />
+              </div>
+              <span className="heading-quaternary bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 Lukisan
               </span>
             </motion.button>
-
-            {/* The redundant navigation button has been removed from here */}
 
             <div className="flex items-center space-x-4">
               {/* Loading State */}
               {loading && (
                 <div className="flex items-center space-x-2 text-gray-600">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                  <span className="text-sm">Loading...</span>
+                  <span className="ui-text-small">Loading...</span>
                   {process.env.NODE_ENV === 'development' && (
                     <span className="text-xs text-gray-400">({authStep})</span>
                   )}
@@ -75,7 +73,7 @@ export const Header: React.FC = () => {
               {error && !loading && (
                 <div className="flex items-center space-x-2 text-red-600">
                   <AlertCircle className="h-4 w-4" />
-                  <span className="text-sm">Auth Error</span>
+                  <span className="ui-text-small">Auth Error</span>
                 </div>
               )}
 
@@ -86,14 +84,14 @@ export const Header: React.FC = () => {
                     {isProUser && (
                       <Crown className="h-4 w-4 text-yellow-500" />
                     )}
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="ui-text-small text-gray-700">
                       {isProUser ? `${user.credits_remaining} credits` : `Free tier`}
                     </span>
                   </div>
                   
                   {subscription?.subscription_status === 'active' && (
                     <div className="px-3 py-1 bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 rounded-full border border-yellow-200">
-                      <span className="text-sm font-medium">{product.name}</span>
+                      <span className="ui-text-small font-medium">{product.name}</span>
                     </div>
                   )}
                   
@@ -103,7 +101,7 @@ export const Header: React.FC = () => {
                       alt={user.name}
                       className="h-8 w-8 rounded-full"
                     />
-                    <span className="hidden sm:block text-sm font-medium text-gray-700">
+                    <span className="hidden sm:block ui-text-small text-gray-700">
                       {user.name}
                     </span>
                   </div>
@@ -125,7 +123,7 @@ export const Header: React.FC = () => {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setShowAuthModal(true)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl button-text"
                 >
                   <User className="h-4 w-4" />
                   <span>Sign In</span>

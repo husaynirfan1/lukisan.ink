@@ -1,3 +1,104 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Typography Base Styles */
+@layer base {
+  /* Set Raleway as default sans-serif for headings and UI elements */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Raleway', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+  }
+  
+  /* Set Merriweather for body text */
+  p, article, blockquote {
+    font-family: 'Merriweather', serif;
+    line-height: 1.6;
+  }
+  
+  /* Navigation and UI elements use Raleway */
+  nav, button, .btn, .nav-item {
+    font-family: 'Raleway', sans-serif;
+  }
+  
+  /* Form elements use Raleway for consistency */
+  input, textarea, select, label {
+    font-family: 'Raleway', sans-serif;
+  }
+}
+
+@layer components {
+  /* Typography Component Classes */
+  .heading-primary {
+    @apply font-raleway font-bold text-4xl md:text-6xl lg:text-7xl leading-tight tracking-tight;
+  }
+  
+  .heading-secondary {
+    @apply font-raleway font-semibold text-2xl md:text-3xl lg:text-4xl leading-tight tracking-tight;
+  }
+  
+  .heading-tertiary {
+    @apply font-raleway font-semibold text-xl md:text-2xl leading-tight;
+  }
+  
+  .heading-quaternary {
+    @apply font-raleway font-medium text-lg md:text-xl leading-tight;
+  }
+  
+  .body-large {
+    @apply font-merriweather text-lg md:text-xl leading-relaxed;
+  }
+  
+  .body-regular {
+    @apply font-merriweather text-base leading-relaxed;
+  }
+  
+  .body-small {
+    @apply font-merriweather text-sm leading-relaxed;
+  }
+  
+  .ui-text {
+    @apply font-raleway font-medium;
+  }
+  
+  .ui-text-small {
+    @apply font-raleway font-medium text-sm;
+  }
+  
+  .button-text {
+    @apply font-raleway font-semibold tracking-wide;
+  }
+  
+  .nav-text {
+    @apply font-raleway font-medium tracking-wide;
+  }
+  
+  .quote-text {
+    @apply font-merriweather italic text-lg leading-relaxed;
+  }
+  
+  .caption-text {
+    @apply font-raleway text-sm font-medium text-gray-600;
+  }
+}
+
+@layer utilities {
+  /* Font Weight Utilities */
+  .font-light { font-weight: 300; }
+  .font-normal { font-weight: 400; }
+  .font-medium { font-weight: 500; }
+  .font-semibold { font-weight: 600; }
+  .font-bold { font-weight: 700; }
+  .font-extrabold { font-weight: 800; }
+  .font-black { font-weight: 900; }
+  
+  /* Letter Spacing Utilities */
+  .tracking-tighter { letter-spacing: -0.05em; }
+  .tracking-tight { letter-spacing: -0.025em; }
+  .tracking-normal { letter-spacing: 0em; }
+  .tracking-wide { letter-spacing: 0.025em; }
+  .tracking-wider { letter-spacing: 0.05em; }
+  .tracking-widest { letter-spacing: 0.1em; }
+}

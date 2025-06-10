@@ -23,11 +23,11 @@ export const Hero: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
-              <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6">
+              <h1 className="heading-primary text-gray-900 mb-6">
                 Create Stunning
-               <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent pb-4">
-  AI-Powered Logos
-</span>
+                <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent pb-4">
+                  AI-Powered Logos
+                </span>
               </h1>
             </motion.div>
 
@@ -41,15 +41,15 @@ export const Hero: React.FC = () => {
               <AnimatedTagline />
             </motion.div>
 
-            <motion.p
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed"
+              className="body-large text-gray-600 mb-12 max-w-3xl mx-auto"
             >
               Transform your ideas into professional logos and personalized videos with cutting-edge AI technology. 
               Create stunning visuals and engaging content that elevates your brand in seconds.
-            </motion.p>
+            </motion.div>
 
             {/* Feature Grid */}
             <motion.div
@@ -62,32 +62,32 @@ export const Hero: React.FC = () => {
                 <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
                   <Sparkles className="h-6 w-6 text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-900">AI Logo Generation</h3>
-                <p className="text-sm text-gray-600 text-center">Professional logos created instantly</p>
+                <h3 className="heading-quaternary text-gray-900">AI Logo Generation</h3>
+                <p className="body-small text-gray-600 text-center">Professional logos created instantly</p>
               </div>
 
               <div className="flex flex-col items-center space-y-3 p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/50 hover:bg-white/80 transition-all duration-300">
                 <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl">
                   <Users className="h-6 w-6 text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-900">Welcome Videos</h3>
-                <p className="text-sm text-gray-600 text-center">Personalized onboarding content</p>
+                <h3 className="heading-quaternary text-gray-900">Welcome Videos</h3>
+                <p className="body-small text-gray-600 text-center">Personalized onboarding content</p>
               </div>
 
               <div className="flex flex-col items-center space-y-3 p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/50 hover:bg-white/80 transition-all duration-300">
                 <div className="p-3 bg-gradient-to-br from-pink-500 to-red-600 rounded-xl">
                   <Megaphone className="h-6 w-6 text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-900">Marketing Snippets</h3>
-                <p className="text-sm text-gray-600 text-center">Engaging promotional videos</p>
+                <h3 className="heading-quaternary text-gray-900">Marketing Snippets</h3>
+                <p className="body-small text-gray-600 text-center">Engaging promotional videos</p>
               </div>
 
               <div className="flex flex-col items-center space-y-3 p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/50 hover:bg-white/80 transition-all duration-300">
                 <div className="p-3 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl">
                   <Download className="h-6 w-6 text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-900">High-Quality Downloads</h3>
-                <p className="text-sm text-gray-600 text-center">Multiple formats available</p>
+                <h3 className="heading-quaternary text-gray-900">High-Quality Downloads</h3>
+                <p className="body-small text-gray-600 text-center">Multiple formats available</p>
               </div>
             </motion.div>
 
@@ -96,7 +96,7 @@ export const Hero: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.4 }}
-              className="flex flex-wrap justify-center gap-8 text-sm text-gray-500 mb-16"
+              className="flex flex-wrap justify-center gap-8 ui-text-small text-gray-500 mb-16"
             >
               <div className="flex items-center space-x-2">
                 <Zap className="h-5 w-5 text-indigo-500" />
@@ -121,10 +121,10 @@ export const Hero: React.FC = () => {
             className="mt-16"
           >
             <div className="text-center mb-8">
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              <h2 className="heading-secondary text-gray-900 mb-4">
                 Try It Now - No Sign Up Required
               </h2>
-              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              <p className="body-large text-gray-600 max-w-2xl mx-auto">
                 Experience the power of AI logo generation instantly. Create your first logo and see the magic happen!
               </p>
             </div>

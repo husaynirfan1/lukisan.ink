@@ -46,8 +46,8 @@ export const SubscriptionCard: React.FC = () => {
             <Crown className="h-7 w-7 text-white" />
           </div>
           <div>
-            <h3 className="text-2xl font-bold text-gray-900">{product.name}</h3>
-            <p className="text-gray-600 text-lg">{product.description}</p>
+            <h3 className="heading-tertiary text-gray-900">{product.name}</h3>
+            <p className="body-regular text-gray-600">{product.description}</p>
           </div>
         </div>
         
@@ -56,15 +56,15 @@ export const SubscriptionCard: React.FC = () => {
         ) : isActive ? (
           <div className="flex items-center space-x-2 px-4 py-2 bg-green-100 text-green-800 rounded-full shadow-sm">
             <Check className="h-5 w-5" />
-            <span className="font-medium">Active</span>
+            <span className="ui-text font-medium">Active</span>
           </div>
         ) : null}
       </div>
 
       <div className="mb-6">
-        <div className="text-4xl font-bold text-gray-900 mb-3">
+        <div className="heading-secondary text-gray-900 mb-3">
           {product.currency} {product.price.toFixed(2)}
-          <span className="text-xl font-normal text-gray-600">/month</span>
+          <span className="heading-quaternary font-normal text-gray-600">/month</span>
         </div>
         
         <ul className="space-y-3 text-gray-700">
@@ -72,54 +72,53 @@ export const SubscriptionCard: React.FC = () => {
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
               <Check className="h-3 w-3 text-green-600" />
             </div>
-            <span className="text-lg">100 AI logo generation credits per month</span>
+            <span className="body-regular">100 AI logo generation credits per month</span>
           </li>
           <li className="flex items-center space-x-3">
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
               <Check className="h-3 w-3 text-green-600" />
             </div>
-            <span className="text-lg">AI video generation capabilities</span>
+            <span className="body-regular">AI video generation capabilities</span>
           </li>
           <li className="flex items-center space-x-3">
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
               <Check className="h-3 w-3 text-green-600" />
             </div>
-            <span className="text-lg">High-quality PNG & SVG downloads</span>
+            <span className="body-regular">High-quality PNG & SVG downloads</span>
           </li>
           <li className="flex items-center space-x-3">
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
               <Check className="h-3 w-3 text-green-600" />
             </div>
-            <span className="text-lg">Personalized video creation</span>
+            <span className="body-regular">Personalized video creation</span>
           </li>
           <li className="flex items-center space-x-3">
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
               <Check className="h-3 w-3 text-green-600" />
             </div>
-            <span className="text-lg">Priority support</span>
+            <span className="body-regular">Priority support</span>
           </li>
           <li className="flex items-center space-x-3">
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
               <Check className="h-3 w-3 text-green-600" />
             </div>
-            <span className="text-lg">Unlock all premium options</span>
+            <span className="body-regular">Unlock all premium options</span>
           </li>
         </ul>
       </div>
 
       {!isActive && (
         <PaymentButton className="w-full py-4 text-lg">
-          
           <span>Upgrade to Creator</span>
         </PaymentButton>
       )}
 
       {isActive && subscription && (
         <div className="text-center text-gray-600 bg-white/50 rounded-lg p-4">
-          <p className="font-medium text-lg mb-1">
+          <p className="ui-text font-medium mb-1">
             Your Creator subscription is active
           </p>
-          <p className="text-sm">
+          <p className="body-small">
             Renews on {new Date(subscription.current_period_end * 1000).toLocaleDateString('en-MY', {
               year: 'numeric',
               month: 'long',
@@ -127,7 +126,7 @@ export const SubscriptionCard: React.FC = () => {
             })}
           </p>
           {subscription.cancel_at_period_end && (
-            <p className="text-orange-600 mt-2 font-medium">
+            <p className="text-orange-600 mt-2 ui-text font-medium">
               Subscription will cancel at the end of the current period
             </p>
           )}

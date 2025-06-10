@@ -89,8 +89,8 @@ export const Dashboard: React.FC = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h2>
-          <p className="text-gray-600">Please sign in to access the dashboard</p>
+          <h2 className="heading-tertiary text-gray-900 mb-4">Access Denied</h2>
+          <p className="body-regular text-gray-600">Please sign in to access the dashboard</p>
         </div>
       </div>
     );
@@ -105,10 +105,10 @@ export const Dashboard: React.FC = () => {
             {/* Welcome Section */}
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">
+                <h1 className="heading-secondary text-gray-900">
                   Welcome back, {user.name}!
                 </h1>
-                <p className="text-gray-600 mt-1">
+                <p className="body-regular text-gray-600 mt-1">
                   {isProUser ? 'Creator Account' : 'Free Account'} • 
                   {isProUser 
                     ? ` ${user.credits_remaining} credits remaining`
@@ -116,8 +116,6 @@ export const Dashboard: React.FC = () => {
                   }
                 </p>
               </div>
-              
-             
             </div>
 
             {/* Tab Navigation */}
@@ -134,7 +132,7 @@ export const Dashboard: React.FC = () => {
                     whileTap={{ scale: isDisabled ? 1 : 0.98 }}
                     onClick={() => !isDisabled && handleTabChange(tab.id)}
                     disabled={isDisabled}
-                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-all duration-200 relative ${
+                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-md transition-all duration-200 relative nav-text ${
                       isActive
                         ? 'bg-white text-indigo-600 shadow-sm'
                         : isDisabled
@@ -143,7 +141,7 @@ export const Dashboard: React.FC = () => {
                     }`}
                   >
                     <IconComponent className="h-5 w-5" />
-                    <span className="font-medium">{tab.name}</span>
+                    <span>{tab.name}</span>
                     {tab.proOnly && !isProUser && !debugAllowVideoTabForFree && (
                       <Crown className="h-4 w-4 text-yellow-500" />
                     )}
