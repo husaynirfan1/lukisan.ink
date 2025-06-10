@@ -374,7 +374,7 @@ export const MediaShowcase: React.FC = () => {
     We Design, You Innovate.
   </span>
 </h2>
-What I changed:
+
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
