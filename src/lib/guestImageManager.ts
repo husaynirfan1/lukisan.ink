@@ -44,9 +44,14 @@ export interface TransferResult {
 // Session management
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
-// Global transfer lock to prevent concurrent transfers
-let isTransferInProgress = false;
-let transferPromise: Promise<TransferResult> | null = null;
+// ENHANCED: Global transfer state management with better duplicate prevention
+const transferState = {
+  isTransferInProgress: false,
+  transferPromise: null as Promise<TransferResult> | null,
+  transferredUsers: new Set<string>(), // Track users who have already had transfers
+  lastTransferTime: 0,
+  transferCooldown: 5000, // 5 second cooldown between transfers
+};
 
 /**
  * Creates or retrieves a guest session identifier
@@ -219,20 +224,56 @@ export const checkUserCredits = async (userId: string): Promise<{
 };
 
 /**
- * ENHANCED: Transfers temporary images to user's permanent library with duplicate prevention
+ * ENHANCED: Transfers temporary images to user's permanent library with bulletproof duplicate prevention
  */
 export const transferTempImagesToUser = async (userId: string): Promise<TransferResult> => {
   console.log('=== STARTING TRANSFER PROCESS ===');
   console.log('transferTempImagesToUser - userId:', userId);
   
-  // Check if transfer is already in progress
-  if (isTransferInProgress && transferPromise) {
-    console.log('Transfer already in progress, returning existing promise');
-    return transferPromise;
+  const now = Date.now();
+  
+  // ENHANCED: Multiple layers of duplicate prevention
+  
+  // 1. Check if this user already had a transfer
+  if (transferState.transferredUsers.has(userId)) {
+    console.log('Transfer already completed for this user, skipping');
+    return {
+      success: true,
+      transferredCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      insufficientCredits: false,
+      creditsNeeded: 0,
+      creditsAvailable: 0,
+      errors: []
+    };
   }
   
-  // Set transfer lock
-  isTransferInProgress = true;
+  // 2. Check cooldown period
+  if (now - transferState.lastTransferTime < transferState.transferCooldown) {
+    console.log('Transfer cooldown active, skipping');
+    return {
+      success: true,
+      transferredCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      insufficientCredits: false,
+      creditsNeeded: 0,
+      creditsAvailable: 0,
+      errors: []
+    };
+  }
+  
+  // 3. Check if transfer is already in progress
+  if (transferState.isTransferInProgress && transferState.transferPromise) {
+    console.log('Transfer already in progress, returning existing promise');
+    return transferState.transferPromise;
+  }
+  
+  // 4. Set all locks immediately
+  transferState.isTransferInProgress = true;
+  transferState.transferredUsers.add(userId);
+  transferState.lastTransferTime = now;
   
   const result: TransferResult = {
     success: false,
@@ -245,7 +286,7 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
     errors: []
   };
 
-  transferPromise = (async () => {
+  transferState.transferPromise = (async () => {
     try {
       console.log('Starting image transfer for user:', userId);
       
@@ -403,13 +444,13 @@ export const transferTempImagesToUser = async (userId: string): Promise<Transfer
       result.errors.push(`Transfer error: ${error.message}`);
       return result;
     } finally {
-      // Release transfer lock
-      isTransferInProgress = false;
-      transferPromise = null;
+      // Release transfer lock but keep user in transferred set
+      transferState.isTransferInProgress = false;
+      transferState.transferPromise = null;
     }
   })();
 
-  return transferPromise;
+  return transferState.transferPromise;
 };
 
 /**
@@ -483,7 +524,7 @@ export const cleanupExpiredTempImages = async (): Promise<void> => {
 };
 
 /**
- * Clears all temporary data for a session
+ * ENHANCED: Clears all temporary data for a session and resets transfer state
  */
 export const clearGuestSession = async (sessionId?: string): Promise<void> => {
   try {
@@ -493,11 +534,13 @@ export const clearGuestSession = async (sessionId?: string): Promise<void> => {
     // Clean up localStorage
     localStorage.removeItem('guest_session');
     
-    // Reset transfer state
-    isTransferInProgress = false;
-    transferPromise = null;
+    // Reset transfer state completely
+    transferState.isTransferInProgress = false;
+    transferState.transferPromise = null;
+    transferState.transferredUsers.clear();
+    transferState.lastTransferTime = 0;
     
-    console.log('Cleared all guest session data');
+    console.log('Cleared all guest session data and reset transfer state');
   } catch (error) {
     console.error('Error clearing guest session:', error);
   }
@@ -511,11 +554,18 @@ export const getSessionInfo = async (): Promise<{
   tempImageCount: number;
   isExpired: boolean;
   transferInProgress: boolean;
+  transferredUsersCount: number;
 }> => {
   try {
     const sessionData = localStorage.getItem('guest_session');
     if (!sessionData) {
-      return { session: null, tempImageCount: 0, isExpired: false, transferInProgress: isTransferInProgress };
+      return { 
+        session: null, 
+        tempImageCount: 0, 
+        isExpired: false, 
+        transferInProgress: transferState.isTransferInProgress,
+        transferredUsersCount: transferState.transferredUsers.size
+      };
     }
 
     const session: GuestSession = JSON.parse(sessionData);
@@ -526,11 +576,18 @@ export const getSessionInfo = async (): Promise<{
       session,
       tempImageCount: guestImages.length,
       isExpired,
-      transferInProgress: isTransferInProgress
+      transferInProgress: transferState.isTransferInProgress,
+      transferredUsersCount: transferState.transferredUsers.size
     };
   } catch (error) {
     console.error('Error getting session info:', error);
-    return { session: null, tempImageCount: 0, isExpired: true, transferInProgress: isTransferInProgress };
+    return { 
+      session: null, 
+      tempImageCount: 0, 
+      isExpired: true, 
+      transferInProgress: transferState.isTransferInProgress,
+      transferredUsersCount: transferState.transferredUsers.size
+    };
   }
 };
 

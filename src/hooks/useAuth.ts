@@ -31,10 +31,10 @@ export const useAuth = () => {
   const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSuccessfulFetchTimestamp = useRef<number>(0);
   
-  // ENHANCED: Global transfer management to prevent any duplicates
+  // ENHANCED: Global transfer management with session-based tracking
   const transferState = useRef({
     isTransferring: false,
-    hasTransferredForUser: new Set<string>(), // Track which users we've already transferred for
+    hasTransferredInSession: false, // Track if transfer happened in this session
     lastTransferTime: 0,
     transferPromise: null as Promise<any> | null
   });
@@ -128,7 +128,7 @@ export const useAuth = () => {
           authInitialized: true,
       });
 
-      // ENHANCED: Handle guest image transfer with comprehensive duplicate prevention
+      // ENHANCED: Handle guest image transfer with session-based duplicate prevention
       await handleGuestImageTransfer(finalUserProfile);
 
     } catch (error: any) {
@@ -146,7 +146,7 @@ export const useAuth = () => {
     }
   }, []);
 
-  // ENHANCED: Centralized guest image transfer handler with bulletproof duplicate prevention
+  // ENHANCED: Session-based guest image transfer handler
   const handleGuestImageTransfer = async (user: User) => {
     const userId = user.id;
     const now = Date.now();
@@ -154,18 +154,18 @@ export const useAuth = () => {
     debugLog('handleGuestImageTransfer_start', { 
       userId, 
       isTransferring: transferState.current.isTransferring,
-      hasTransferredForUser: transferState.current.hasTransferredForUser.has(userId),
+      hasTransferredInSession: transferState.current.hasTransferredInSession,
       timeSinceLastTransfer: now - transferState.current.lastTransferTime
     });
 
-    // Multiple layers of duplicate prevention
-    if (transferState.current.isTransferring) {
-      debugLog('handleGuestImageTransfer_already_in_progress');
+    // ENHANCED: Session-based duplicate prevention
+    if (transferState.current.hasTransferredInSession) {
+      debugLog('handleGuestImageTransfer_already_transferred_in_session');
       return;
     }
 
-    if (transferState.current.hasTransferredForUser.has(userId)) {
-      debugLog('handleGuestImageTransfer_already_transferred_for_user');
+    if (transferState.current.isTransferring) {
+      debugLog('handleGuestImageTransfer_already_in_progress');
       return;
     }
 
@@ -188,7 +188,7 @@ export const useAuth = () => {
 
     // Set all the locks
     transferState.current.isTransferring = true;
-    transferState.current.hasTransferredForUser.add(userId);
+    transferState.current.hasTransferredInSession = true; // Mark as transferred for this session
     transferState.current.lastTransferTime = now;
 
     // Create the transfer promise
@@ -205,13 +205,14 @@ export const useAuth = () => {
           failedCount: transferResult.failedCount
         });
 
-        // Show notifications based on results
+        // ENHANCED: Only show notifications for actual transfers, not skips
         if (transferResult.insufficientCredits) {
           toast.error(`Not enough credits to transfer images. Need ${transferResult.creditsNeeded}, have ${transferResult.creditsAvailable}`, {
             icon: '💳',
             duration: 5000,
           });
         } else if (transferResult.success && transferResult.transferredCount > 0) {
+          // Only show success notification if images were actually transferred
           toast.success(`Successfully transferred ${transferResult.transferredCount} logo(s) to your library!`, {
             icon: '✅',
             duration: 4000,
@@ -219,10 +220,8 @@ export const useAuth = () => {
           
           // Clear guest session after successful transfer
           await clearGuestSession();
-        } else if (transferResult.skippedCount > 0 && transferResult.transferredCount === 0) {
-          // Only log this, don't show notification for skipped duplicates
-          debugLog('handleGuestImageTransfer_all_skipped', { skippedCount: transferResult.skippedCount });
         }
+        // Don't show any notification for skipped transfers (duplicates)
         
         // Only show error notification if there were actual failures (not skips)
         if (transferResult.errors.length > 0 && transferResult.failedCount > 0) {
@@ -256,7 +255,7 @@ export const useAuth = () => {
     // Clear all transfer state
     transferState.current = {
       isTransferring: false,
-      hasTransferredForUser: new Set(),
+      hasTransferredInSession: false,
       lastTransferTime: 0,
       transferPromise: null
     };
@@ -274,40 +273,6 @@ export const useAuth = () => {
       authInitialized: true 
     });
     window.location.href = '/'; // Force a clean reload to the home page
-  };
-
-  // Email verification functions
-  const resendVerificationEmail = async () => {
-    if (!state.user) {
-      toast.error('No user found');
-      return;
-    }
-
-    try {
-      // Call Supabase's built-in resend function
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: state.user.email,
-      });
-
-      if (error) {
-        console.error('Error resending verification email:', error);
-        toast.error('Failed to resend verification email');
-        return;
-      }
-
-      toast.success('Verification email sent! Please check your inbox.');
-    } catch (error) {
-      console.error('Error in resendVerificationEmail:', error);
-      toast.error('Failed to resend verification email');
-    }
-  };
-
-  const refreshUser = async () => {
-    if (state.user && !isFetchingProfile.current) {
-      debugLog('Refetching user data');
-      await fetchUserProfile(state.user.id);
-    }
   };
 
   // Main effect for handling initialization and auth state changes
@@ -338,7 +303,7 @@ export const useAuth = () => {
           if (event === 'SIGNED_IN') {
             transferState.current = {
               isTransferring: false,
-              hasTransferredForUser: new Set(),
+              hasTransferredInSession: false,
               lastTransferTime: 0,
               transferPromise: null
             };
@@ -349,7 +314,7 @@ export const useAuth = () => {
           debugLog('User signed out.');
           transferState.current = {
             isTransferring: false,
-            hasTransferredForUser: new Set(),
+            hasTransferredInSession: false,
             lastTransferTime: 0,
             transferPromise: null
           };
@@ -404,6 +369,40 @@ export const useAuth = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [state.user, state.loading, fetchUserProfile]);
+
+  // Email verification functions
+  const resendVerificationEmail = async () => {
+    if (!state.user) {
+      toast.error('No user found');
+      return;
+    }
+
+    try {
+      // Call Supabase's built-in resend function
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: state.user.email,
+      });
+
+      if (error) {
+        console.error('Error resending verification email:', error);
+        toast.error('Failed to resend verification email');
+        return;
+      }
+
+      toast.success('Verification email sent! Please check your inbox.');
+    } catch (error) {
+      console.error('Error in resendVerificationEmail:', error);
+      toast.error('Failed to resend verification email');
+    }
+  };
+
+  const refreshUser = async () => {
+    if (state.user && !isFetchingProfile.current) {
+      debugLog('Refetching user data');
+      await fetchUserProfile(state.user.id);
+    }
+  };
 
   // Check for email verification on URL hash change (when user clicks verification link)
   useEffect(() => {
