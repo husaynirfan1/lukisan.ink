@@ -123,8 +123,11 @@ export const VerificationErrorPage: React.FC = () => {
             </ul>
           </div>
             </motion.div>
+          </motion.div>
         </div>
+      
       </motion.div>
+    
     </div>
   );
 };
