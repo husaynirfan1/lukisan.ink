@@ -91,7 +91,7 @@ export const PaymentButton: React.FC<PaymentButtonProps> = ({
           </>
         ) : (
           <>
-            <Crown className="h-5 w-5" />
+
             <span>{children || 'Upgrade to Creator'}</span>
           </>
         )}
