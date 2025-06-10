@@ -62,7 +62,7 @@ const showcaseItems: MediaItem[] = [
     description: 'Mixed abstract design of a chicken rice shop.',
     aspectRatio: '1:1'
   },
-    {
+  {
     id: 'brand-showcase-2',
     type: 'image',
     src: '/assets/images/gallery/sample-4.png',
@@ -231,83 +231,83 @@ interface MediaCardProps {
 }
 
 const MediaCard: React.FC<MediaCardProps> = ({ item, index }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const isInView = useInView(cardRef, { once: true, margin: "-100px" });
+  const [isHovered, setIsHovered] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isInView = useInView(cardRef, { once: true, margin: "-100px" });
 
-  const getGridSpan = () => {
-    if (item.featured) {
-      if (item.type === 'logo') return 'md:col-span-2 lg:col-span-2';
-      if (item.type === 'video') return 'md:col-span-2 lg:col-span-2';
-    }
-    return 'md:col-span-1';
-  };
+  const getGridSpan = () => {
+    if (item.featured) {
+      if (item.type === 'logo') return 'md:col-span-2 lg:col-span-2';
+      if (item.type === 'video') return 'md:col-span-2 lg:col-span-2';
+    }
+    return 'md:col-span-1';
+  };
 
-  const getCardHeight = () => {
-    if (item.featured && item.type === 'logo') return 'h-64 md:h-80';
-    if (item.featured && item.type === 'video') return 'h-64 md:h-80';
-    return 'h-64';
-  };
+  const getCardHeight = () => {
+    if (item.featured && item.type === 'logo') return 'h-64 md:h-80';
+    if (item.featured && item.type === 'video') return 'h-64 md:h-80';
+    return 'h-64';
+  };
 
-  return (
-    <motion.div
-      ref={cardRef}
-      initial={{ opacity: 0, y: 60, scale: 0.9 }}
-      animate={isInView ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 60, scale: 0.9 }}
-      transition={{ 
-        duration: 0.7, 
-        delay: index * 0.15,
-        ease: [0.25, 0.46, 0.45, 0.94]
-      }}
-      className={`group relative ${getGridSpan()}`}
-    >
-      <div
-        className={`relative ${getCardHeight()} bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl overflow-hidden shadow-lg transition-all duration-500 group-hover:shadow-2xl group-hover:shadow-indigo-500/20`}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        {/* Media Content */}
-        <motion.div
-          animate={{ 
-            scale: isHovered ? 1.05 : 1,
-            filter: isHovered ? 'brightness(1.1)' : 'brightness(1)'
-          }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="w-full h-full relative"
-        >
-          {item.type === 'video' ? (
-            <VideoPlayer
-              item={item}
-              isHovered={isHovered}
-              onHover={setIsHovered}
-            />
-          ) : (
-            <div className="relative w-full h-full">
-              {!imageLoaded && (
-                <div className="absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse rounded-2xl flex items-center justify-center">
-                  <div className="text-gray-500">Loading...</div>
-                </div>
-              )}
-              <img
-                src={item.src}
-                alt={item.title}
-                className={`w-full h-full transition-all duration-500 ${
-                  imageLoaded ? 'opacity-100' : 'opacity-0'
-                } ${item.type === 'logo' ? 'object-cover bg-white' : 'object-cover'}`}
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageLoaded(true)}
-                loading="lazy"
-              />
-            </div>
-          )}
-        </motion.div>
+  return (
+    <motion.div
+      ref={cardRef}
+      initial={{ opacity: 0, y: 60, scale: 0.9 }}
+      animate={isInView ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 60, scale: 0.9 }}
+      transition={{ 
+        duration: 0.7, 
+        delay: index * 0.15,
+        ease: [0.25, 0.46, 0.45, 0.94]
+      }}
+      className={`group relative ${getGridSpan()}`}
+    >
+      <div
+        className={`relative ${getCardHeight()} bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl overflow-hidden shadow-lg transition-all duration-500 group-hover:shadow-2xl group-hover:shadow-indigo-500/20`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* Media Content */}
+        <motion.div
+          animate={{ 
+            scale: isHovered ? 1.05 : 1,
+            filter: isHovered ? 'brightness(1.1)' : 'brightness(1)'
+          }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="w-full h-full relative"
+        >
+          {item.type === 'video' ? (
+            <VideoPlayer
+              item={item}
+              isHovered={isHovered}
+              onHover={setIsHovered}
+            />
+          ) : (
+            <div className="relative w-full h-full">
+              {!imageLoaded && (
+                <div className="absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse rounded-2xl flex items-center justify-center">
+                  <div className="text-gray-500">Loading...</div>
+                </div>
+              )}
+              <img
+                src={item.src}
+                alt={item.title}
+                className={`w-full h-full transition-all duration-500 ${
+                  imageLoaded ? 'opacity-100' : 'opacity-0'
+                } ${item.type === 'logo' ? 'object-cover bg-white' : 'object-cover'}`}
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageLoaded(true)}
+                loading="lazy"
+              />
+            </div>
+          )}
+        </motion.div>
 
-        {/* ... rest of the component */}
+        {/* ... rest of the component */}
         {/* ... */}
-      </div>
-    </motion.div>
-  );
+      </div>
+    </motion.div>
+  );
 };
 export const MediaShowcase: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
@@ -367,10 +367,10 @@ export const MediaShowcase: React.FC = () => {
 
             <h2 
               id="media-showcase-title"
-              className="text-4xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight"
+              className="text-4xl md:text-6xl font-bold text-gray-900 mb-8 leading-tight"
             >
               Accelerate development. 
-              <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent mb-4">
+              <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent leading-tight">
                 We Design, You Innovate.
               </span>
             </h2>
