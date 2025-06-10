@@ -8,8 +8,18 @@ export const EmailVerificationBar: React.FC = () => {
   const [isResending, setIsResending] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
-  // Don't show if user is not logged in, email is verified, or bar is dismissed
-  if (!user || isEmailVerified || isDismissed) {
+  // CRITICAL: Always show if user is logged in and email is NOT verified
+  const shouldShow = user && !isEmailVerified && !isDismissed;
+
+  console.log('[EmailVerificationBar] Debug:', {
+    hasUser: !!user,
+    isEmailVerified,
+    isDismissed,
+    shouldShow,
+    userEmail: user?.email
+  });
+
+  if (!shouldShow) {
     return null;
   }
 

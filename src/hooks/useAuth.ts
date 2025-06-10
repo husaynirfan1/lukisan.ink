@@ -67,6 +67,13 @@ export const useAuth = () => {
     }, AUTH_FLOW_TIMEOUT_MS);
 
     try {
+      // Get the current auth user to check email verification status
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) {
+        throw new Error(`Auth user fetch error: ${authError.message}`);
+      }
+
       // 1. Use .maybeSingle() to prevent an error if the user profile doesn't exist yet.
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
@@ -86,8 +93,6 @@ export const useAuth = () => {
         debugLog('fetchUserProfile_creating_profile');
         setState(prev => ({ ...prev, authStep: 'creating_profile' }));
         
-        // Get the master user object from auth to access metadata like name/email
-        const { data: { user: authUser } } = await supabase.auth.getUser();
         if (!authUser) throw new Error('Could not get authenticated user to create a profile.');
 
         const newUserData = {
@@ -98,7 +103,8 @@ export const useAuth = () => {
             tier: 'free',
             credits_remaining: 0,
             daily_generations: 0,
-            is_email_verified: authUser.email_confirmed_at ? true : false, // Set based on Supabase auth
+            // CRITICAL: Set email verification based on Supabase auth status
+            is_email_verified: authUser.email_confirmed_at ? true : false,
         };
 
         const { data: createdUser, error: createError } = await supabase
@@ -111,6 +117,28 @@ export const useAuth = () => {
         
         finalUserProfile = createdUser;
         toast.success('Welcome! Your profile has been created.');
+      } else {
+        // CRITICAL: Update existing user's email verification status from Supabase auth
+        if (authUser) {
+          const isVerifiedInAuth = authUser.email_confirmed_at ? true : false;
+          
+          // Only update if there's a mismatch
+          if (finalUserProfile.is_email_verified !== isVerifiedInAuth) {
+            debugLog('Syncing email verification status', { 
+              currentStatus: finalUserProfile.is_email_verified, 
+              authStatus: isVerifiedInAuth 
+            });
+            
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ is_email_verified: isVerifiedInAuth })
+              .eq('id', userId);
+
+            if (!updateError) {
+              finalUserProfile.is_email_verified = isVerifiedInAuth;
+            }
+          }
+        }
       }
 
       // 3. From here, the function continues as normal with a valid user profile.
@@ -378,7 +406,9 @@ export const useAuth = () => {
     }
 
     try {
-      // Call Supabase's built-in resend function
+      debugLog('Resending verification email', { email: state.user.email });
+      
+      // Use Supabase's built-in resend function
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email: state.user.email,
@@ -386,12 +416,12 @@ export const useAuth = () => {
 
       if (error) {
         console.error('Error resending verification email:', error);
-        toast.error('Failed to resend verification email');
+        toast.error(`Failed to resend verification email: ${error.message}`);
         return;
       }
 
       toast.success('Verification email sent! Please check your inbox.');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in resendVerificationEmail:', error);
       toast.error('Failed to resend verification email');
     }
@@ -404,16 +434,21 @@ export const useAuth = () => {
     }
   };
 
-  // Check for email verification on URL hash change (when user clicks verification link)
+  // CRITICAL: Check for email verification on URL hash change (when user clicks verification link)
   useEffect(() => {
     const handleHashChange = async () => {
       const hash = window.location.hash;
       
-      if (hash.includes('type=email_change') || hash.includes('type=signup')) {
-        // User clicked verification link, refresh their profile
+      if (hash.includes('type=signup') || hash.includes('type=email_change')) {
+        debugLog('Email verification link detected in URL');
+        
+        // Small delay to ensure auth state is updated
         setTimeout(async () => {
           await refreshUser();
           toast.success('Email verified successfully!');
+          
+          // Clear the hash from URL
+          window.history.replaceState(null, null, window.location.pathname);
         }, 1000);
       }
     };

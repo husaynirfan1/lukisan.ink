@@ -30,8 +30,15 @@ export const PaymentButton: React.FC<PaymentButtonProps> = ({
       return;
     }
 
-    // Check email verification status
+    console.log('[PaymentButton] Debug:', {
+      hasUser: !!user,
+      isEmailVerified,
+      userEmail: user.email
+    });
+
+    // CRITICAL: Check email verification status
     if (!isEmailVerified) {
+      console.log('[PaymentButton] Email not verified, showing modal');
       setShowVerificationModal(true);
       return;
     }
