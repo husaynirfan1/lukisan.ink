@@ -3,6 +3,8 @@ import { Dashboard } from '../pages/Dashboard';
 import { SuccessPage } from './SuccessPage';
 import { CancelPage } from './CancelPage';
 import { AuthCallback } from './auth/AuthCallback';
+import { VerificationSuccessPage } from './VerificationSuccessPage';
+import { VerificationErrorPage } from './VerificationErrorPage';
 import { Hero } from './Hero';
 import { useAuth } from '../hooks/useAuth';
 
@@ -21,6 +23,21 @@ export const Router: React.FC = () => {
 
   if (path === '/auth/callback') {
     return <AuthCallback />;
+  }
+
+  // Email verification routes
+  if (path === '/verify-email') {
+    // This will be handled by the backend function
+    window.location.href = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-email${window.location.search}`;
+    return <div>Redirecting...</div>;
+  }
+
+  if (path === '/verification-success') {
+    return <VerificationSuccessPage />;
+  }
+
+  if (path === '/verification-error') {
+    return <VerificationErrorPage />;
   }
 
   // Dashboard routes

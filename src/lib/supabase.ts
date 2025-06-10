@@ -20,6 +20,8 @@ export interface User {
   last_generation_date: string;
   created_at: string;
   pro_expires_at?: string;
+  is_email_verified: boolean;
+  email_verification_token?: string;
 }
 
 export interface LogoGeneration {
