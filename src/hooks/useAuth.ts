@@ -114,7 +114,13 @@ export const useAuth = () => {
         if (createError) throw new Error(`Profile creation failed: ${createError.message}`);
         
         finalUserProfile = createdUser;
-        toast.success('Welcome! Your profile has been created.');
+        
+        // Show appropriate welcome message based on email verification
+        if (isEmailConfirmed) {
+          toast.success('Welcome! Your profile has been created.');
+        } else {
+          toast.success('Welcome! Please check your email to verify your account.');
+        }
       } else {
         // Check if we need to sync email verification status with Supabase auth
         const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -131,6 +137,7 @@ export const useAuth = () => {
           
           if (updatedUser) {
             finalUserProfile = updatedUser;
+            toast.success('Email verification confirmed!');
           }
         }
       }
@@ -149,6 +156,22 @@ export const useAuth = () => {
           authStep: 'complete',
           authInitialized: true,
       });
+
+      // Show email verification reminder for unverified users
+      if (finalUserProfile && !finalUserProfile.is_email_verified) {
+        // Delay the toast to avoid overwhelming the user with notifications
+        setTimeout(() => {
+          toast('Please verify your email address to access all features', {
+            icon: '📧',
+            duration: 5000,
+            style: {
+              background: '#FEF3C7',
+              color: '#92400E',
+              border: '1px solid #F59E0B',
+            },
+          });
+        }, 2000);
+      }
 
       // ENHANCED: Handle guest image transfer with comprehensive duplicate prevention
       await handleGuestImageTransfer(finalUserProfile);
