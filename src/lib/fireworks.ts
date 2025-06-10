@@ -143,8 +143,8 @@ Provide only the refined prompt without any quotes or additional formatting.`;
     // Remove any quotes that might be present in the response
     refinedPrompt = refinedPrompt.replace(/^["']|["']$/g, '');
     
-    console.log('Original prompt:', request.originalPrompt);
-    console.log('Refined prompt:', refinedPrompt);
+    // console.log('Original prompt:', request.originalPrompt);
+    // console.log('Refined prompt:', refinedPrompt);
     
     return refinedPrompt;
   } catch (error) {
@@ -215,7 +215,7 @@ export const generateLogo = async (request: LogoGenerationRequest): Promise<stri
   // Create the tailored prompt based on user input and selected style
   const enhancedPrompt = createTailoredPrompt(request.prompt, request.category, request.aspectRatio);
 
-  console.log('Generated tailored prompt:', enhancedPrompt);
+  // console.log('Generated tailored prompt:', enhancedPrompt);
   console.log('Generation parameters:', {
     aspectRatio: request.aspectRatio,
     guidanceScale: request.guidanceScale,
