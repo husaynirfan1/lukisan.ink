@@ -41,6 +41,8 @@ import toast from 'react-hot-toast';
 
 type GenerationMode = 'text-to-video' | 'image-to-video';
 
+const CREDITS_PER_VIDEO = 3; // Define the credit cost per video generation
+
 export const VideoGenerator: React.FC = () => {
   const { user, canGenerate, getRemainingGenerations, refetchUser, getUserTier } = useAuth();
   const [mode, setMode] = useState<GenerationMode>('text-to-video');
@@ -75,6 +77,15 @@ export const VideoGenerator: React.FC = () => {
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
   const isAvailable = isVideoGenerationAvailable();
+
+  // Check if user has enough credits for video generation
+  const hasEnoughCredits = () => {
+    if (debugAllowVideoTabForFree) return true;
+    if (!user) return false;
+    
+    const remainingCredits = getRemainingGenerations();
+    return remainingCredits >= CREDITS_PER_VIDEO;
+  };
 
   // useEffect for polling cleanup
   useEffect(() => {
@@ -232,6 +243,16 @@ export const VideoGenerator: React.FC = () => {
         return;
     }
 
+    // Check if user has enough credits
+    if (!hasEnoughCredits()) {
+        const remainingCredits = getRemainingGenerations();
+        toast.error(`Not enough credits. Video generation requires ${CREDITS_PER_VIDEO} credits, but you only have ${remainingCredits}.`, {
+            icon: '💳',
+            duration: 5000,
+        });
+        return;
+    }
+
     if (mode === 'text-to-video' && !textPrompt.trim()) {
       toast.error('Please enter a video description');
       return;
@@ -292,22 +313,53 @@ export const VideoGenerator: React.FC = () => {
           console.error('Database error:', dbError);
         }
 
-        // Update user credits
+        // Update user credits - DEDUCT 3 CREDITS
         if (isProUser) {
           const { error: updateError } = await supabase
             .from('users')
             .update({
-              credits_remaining: Math.max(0, user.credits_remaining - 1),
+              credits_remaining: Math.max(0, user.credits_remaining - CREDITS_PER_VIDEO),
             })
             .eq('id', user.id);
 
           if (updateError) {
             console.error('Update error:', updateError);
           }
+        } else {
+          // For free users, update daily generations (if debug mode allows)
+          if (debugAllowVideoTabForFree) {
+            const today = new Date().toISOString();
+            const { data: userData, error: fetchError } = await supabase
+              .from('users')
+              .select('daily_generations, last_generation_date')
+              .eq('id', user.id)
+              .single();
+
+            if (!fetchError && userData) {
+              const todayDate = today.split('T')[0];
+              const lastGenDate = userData.last_generation_date?.split('T')[0];
+              
+              const newDailyCount = lastGenDate === todayDate 
+                ? userData.daily_generations + CREDITS_PER_VIDEO 
+                : CREDITS_PER_VIDEO;
+
+              const { error: updateError } = await supabase
+                .from('users')
+                .update({
+                  daily_generations: newDailyCount,
+                  last_generation_date: today
+                })
+                .eq('id', user.id);
+
+              if (updateError) {
+                console.error('Update error:', updateError);
+              }
+            }
+          }
         }
 
         refetchUser();
-        toast.success('Video generation started!');
+        toast.success(`Video generation started! (${CREDITS_PER_VIDEO} credits used)`);
         startPolling(createTaskResponse.task_id);
 
     } catch (error: any) {
@@ -429,6 +481,20 @@ export const VideoGenerator: React.FC = () => {
                   <span className="font-medium text-sm">Debug Mode</span>
                 </div>
               )}
+              
+              {/* Credits needed indicator */}
+              <div className={`px-3 py-2 rounded-lg ${
+                hasEnoughCredits() 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                <p className="text-sm font-medium">
+                  {CREDITS_PER_VIDEO} credits per video
+                </p>
+                <p className="text-xs">
+                  {hasEnoughCredits() ? '✓ Sufficient credits' : '✗ Insufficient credits'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -731,15 +797,24 @@ export const VideoGenerator: React.FC = () => {
               onClick={handleGenerateSubmit}
               disabled={
                 (status === 'pending' || status === 'processing') ||
-                (!debugAllowVideoTabForFree && !canGenerate()) ||
+                (!debugAllowVideoTabForFree && !hasEnoughCredits()) ||
                 (mode === 'text-to-video' && !textPrompt.trim()) ||
                 (mode === 'image-to-video' && !selectedImage)
               }
               className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
             >
               <Video className="h-5 w-5" />
-              <span>Generate Video {debugAllowVideoTabForFree ? '(Debug Mode)' : '(1 credit)'}</span>
+              <span>
+                Generate Video {debugAllowVideoTabForFree ? '(Debug Mode)' : `(${CREDITS_PER_VIDEO} credits)`}
+              </span>
             </motion.button>
+            
+            {!hasEnoughCredits() && !debugAllowVideoTabForFree && (
+              <p className="text-red-600 text-sm mt-2">
+                You need {CREDITS_PER_VIDEO} credits but only have {getRemainingGenerations()}
+              </p>
+            )}
+            
             {status === 'failed' && errorMessage && (
               <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
                 <div className="flex items-center space-x-2">
