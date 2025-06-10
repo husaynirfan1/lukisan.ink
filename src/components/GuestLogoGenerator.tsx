@@ -74,6 +74,7 @@ interface GeneratedLogo {
   timestamp: number;
   tempImageId?: string;
   hasInsufficientCredits?: boolean;
+  isTransferred?: boolean; // NEW: Track if this logo was transferred from guest session
 }
 
 export const GuestLogoGenerator: React.FC = () => {
@@ -111,6 +112,46 @@ export const GuestLogoGenerator: React.FC = () => {
   useEffect(() => {
     cleanupExpiredTempImages();
   }, []);
+
+  // ENHANCED: Check for transferred logos when user signs in
+  useEffect(() => {
+    if (user && !generatedLogo) {
+      // Check if there are any recently generated logos in the database
+      const checkRecentLogos = async () => {
+        try {
+          const { data: recentLogos, error } = await supabase
+            .from('logo_generations')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (!error && recentLogos && recentLogos.length > 0) {
+            const recentLogo = recentLogos[0];
+            // Check if this logo was created in the last 5 minutes (likely from guest transfer)
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const logoCreatedAt = new Date(recentLogo.created_at);
+
+            if (logoCreatedAt > fiveMinutesAgo) {
+              // This is likely a transferred logo, show it
+              setGeneratedLogo({
+                url: recentLogo.image_url,
+                category: recentLogo.category,
+                prompt: recentLogo.prompt,
+                timestamp: Date.now(),
+                isTransferred: true // Mark as transferred
+              });
+              hasGeneratedInSession.current = true;
+            }
+          }
+        } catch (error) {
+          console.error('Error checking recent logos:', error);
+        }
+      };
+
+      checkRecentLogos();
+    }
+  }, [user, generatedLogo]);
 
   // Prevent right-click context menu on logo images
   const handleImageRightClick = (e: React.MouseEvent) => {
@@ -223,6 +264,7 @@ export const GuestLogoGenerator: React.FC = () => {
         category: selectedCategory,
         prompt: prompt,
         timestamp: Date.now(),
+        isTransferred: false // This is a new generation
       };
 
       // Store as temporary image for guest users OR authenticated users
@@ -256,7 +298,8 @@ export const GuestLogoGenerator: React.FC = () => {
   };
 
   const handleDownload = async (logo: GeneratedLogo) => {
-    if (!user) {
+    // ENHANCED: Allow download for transferred logos even if user just signed in
+    if (!user && !logo.isTransferred) {
       // Store the logo for download after sign-in
       setPendingDownload(logo);
       setShowAuthModal(true);
@@ -267,8 +310,8 @@ export const GuestLogoGenerator: React.FC = () => {
       return;
     }
 
-    // Check if user has insufficient credits for this logo
-    if (logo.hasInsufficientCredits) {
+    // Check if user has insufficient credits for this logo (only for new generations)
+    if (logo.hasInsufficientCredits && !logo.isTransferred) {
       toast.error('Not enough credits to download this logo', {
         icon: '💳',
         duration: 4000,
@@ -523,6 +566,12 @@ export const GuestLogoGenerator: React.FC = () => {
                         <span>Insufficient Credits</span>
                       </div>
                     )}
+                    {generatedLogo.isTransferred && (
+                      <div className="flex items-center space-x-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                        <Crown className="h-4 w-4" />
+                        <span>Transferred to Library</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -552,7 +601,7 @@ export const GuestLogoGenerator: React.FC = () => {
                         />
                         
                         {/* Invisible overlay to prevent interactions for non-authenticated users */}
-                        {!user && (
+                        {!user && !generatedLogo.isTransferred && (
                           <div 
                             className="absolute inset-0 bg-transparent cursor-not-allowed"
                             onContextMenu={handleImageRightClick}
@@ -563,7 +612,7 @@ export const GuestLogoGenerator: React.FC = () => {
                         )}
                         
                         {/* Watermark overlay for non-authenticated users */}
-                        {!user && (
+                        {!user && !generatedLogo.isTransferred && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div className="bg-black/10 text-white/60 px-3 py-1 rounded-lg text-xs font-medium backdrop-blur-sm">
                               Sign in to download
@@ -629,7 +678,7 @@ export const GuestLogoGenerator: React.FC = () => {
                               <span>Download Locked</span>
                             </motion.button>
                           </div>
-                        ) : !user ? (
+                        ) : !user && !generatedLogo.isTransferred ? (
                           <div className="text-center">
                             <User className="h-8 w-8 text-indigo-600 mx-auto mb-2" />
                             <h5 className="font-semibold text-gray-900 mb-2">Sign in to Download</h5>
@@ -651,7 +700,10 @@ export const GuestLogoGenerator: React.FC = () => {
                             <Crown className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
                             <h5 className="font-semibold text-gray-900 mb-2">Ready to Download</h5>
                             <p className="text-sm text-gray-600 mb-4">
-                              Your logo is ready for download and has been saved to your library
+                              {generatedLogo.isTransferred 
+                                ? 'Your logo has been transferred to your library and is ready for download'
+                                : 'Your logo is ready for download and has been saved to your library'
+                              }
                             </p>
                             <motion.button
                               whileHover={{ scale: 1.05 }}
