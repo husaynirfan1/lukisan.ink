@@ -125,6 +125,6 @@ export const VerificationErrorPage: React.FC = () => {
           
           </div>
        
-        </div>};
-  );
+        </div>
+
 };
