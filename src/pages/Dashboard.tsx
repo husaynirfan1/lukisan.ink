@@ -117,9 +117,7 @@ export const Dashboard: React.FC = () => {
                 </p>
               </div>
               
-              {isProUser && (
-           
-              )} 
+             
             </div>
 
             {/* Tab Navigation */}
