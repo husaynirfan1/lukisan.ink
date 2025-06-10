@@ -32,15 +32,7 @@ const showcaseItems: MediaItem[] = [
     src: '/assets/images/gallery/sample-1.png',
     title: 'Fishermen Friend',
     description: 'Modern, clean and simple with natural blend.',
-    aspectRatio: '1:1'
-  },
-   {
-    id: 'brand-showcase-1',
-    type: 'image',
-    src: '/assets/images/gallery/sample-1.png',
-    title: 'Fishermen Friend',
-    description: 'Modern, clean and simple with natural blend.',
-    aspectRatio: '1:1'
+    aspectRatio: '2:1'
   },
   {
     id: 'brand-showcase-1',
