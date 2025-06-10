@@ -154,6 +154,101 @@ Provide only the refined prompt without any quotes or additional formatting.`;
   }
 };
 
+// NEW: Function to refine video prompts using Llama model
+export const refineVideoPrompt = async (originalPrompt: string): Promise<string> => {
+  const videoRefinementPrompt = `You are a creative director for viral marketing videos and an expert in video production. Your task is to take a basic user idea and expand it into a detailed, vivid prompt for AI video generation that will create compelling, professional-quality videos.
+
+Original user idea: "${originalPrompt}"
+
+Transform this into a comprehensive video prompt by adding:
+
+1. **Cinematic Style & Visual Aesthetics:**
+   - Specific camera angles (close-up, wide shot, drone shot, tracking shot, etc.)
+   - Lighting style (natural, studio, dramatic, soft, golden hour, etc.)
+   - Color grading and mood (warm, cool, high contrast, desaturated, etc.)
+   - Visual composition and framing techniques
+
+2. **Technical Specifications:**
+   - Shot types and camera movements
+   - Transition styles between scenes
+   - Visual effects or motion graphics if appropriate
+   - Pacing and rhythm of the video
+
+3. **Audio & Music:**
+   - Background music style and tempo
+   - Sound design elements
+   - Voiceover style if applicable
+
+4. **Narrative Structure:**
+   - Clear beginning, middle, and end
+   - Key moments or beats to highlight
+   - Call-to-action or message delivery
+
+5. **Production Value:**
+   - Professional quality indicators
+   - Specific visual elements that enhance the message
+   - Brand-appropriate styling
+
+Guidelines:
+- Keep the core concept from the original idea
+- Make it specific enough for AI to generate high-quality video
+- Focus on visual storytelling elements
+- Ensure the prompt is actionable and detailed
+- Aim for 3-4 sentences that paint a vivid picture
+- Include specific technical and creative direction
+
+Provide only the enhanced video prompt without quotes or additional formatting.`;
+
+  try {
+    const response = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${FIREWORKS_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'accounts/fireworks/models/llama4-scout-instruct-basic',
+        messages: [
+          {
+            role: 'user',
+            content: videoRefinementPrompt
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.8,
+        top_p: 0.9,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('Fireworks AI video refinement error:', response.status, errorData);
+      throw new Error(`Fireworks AI API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('Invalid response format from video refinement:', data);
+      throw new Error('Invalid response format from Fireworks AI');
+    }
+
+    let refinedPrompt = data.choices[0].message.content.trim();
+    
+    // Remove any quotes that might be present in the response
+    refinedPrompt = refinedPrompt.replace(/^["']|["']$/g, '');
+    
+    console.log('Original video prompt:', originalPrompt);
+    console.log('Refined video prompt:', refinedPrompt);
+    
+    return refinedPrompt;
+  } catch (error) {
+    console.error('Error refining video prompt:', error);
+    // Return original prompt if refinement fails
+    return originalPrompt;
+  }
+};
+
 // Function to create a tailored prompt based on style and user input
 const createTailoredPrompt = (userPrompt: string, category: string, aspectRatio?: string): string => {
   const style = stylePrompts[category as keyof typeof stylePrompts];

@@ -25,17 +25,16 @@ import {
   generateTextToVideo, 
   generateImageToVideo, 
   checkVideoStatus,
-  // downloadVideo, // This might be handled locally or differently
   isVideoGenerationAvailable,
   validateImageFile,
   formatDuration,
-  type TextToVideoRequest, // Updated import
-  type ImageToVideoRequest, // Updated import
-  // type VideoGenerationResponse, // Replaced by TaskStatusResponse
-  // type VideoGenerationJob // Will be simplified or removed for active task
-  type CreateTaskResponse, // New from piapi.ts
-  type TaskStatusResponse // New from piapi.ts
+  type TextToVideoRequest,
+  type ImageToVideoRequest,
+  type CreateTaskResponse,
+  type TaskStatusResponse
 } from '../../lib/piapi';
+import { VideoPresets, VideoPreset } from './VideoPresets';
+import { AIPromptRefiner } from './AIPromptRefiner';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -45,8 +44,6 @@ type GenerationMode = 'text-to-video' | 'image-to-video';
 export const VideoGenerator: React.FC = () => {
   const { user, canGenerate, getRemainingGenerations, refetchUser, getUserTier } = useAuth();
   const [mode, setMode] = useState<GenerationMode>('text-to-video');
-  // const [isGenerating, setIsGenerating] = useState(false); // Replaced by status
-  // const [generatedVideos, setGeneratedVideos] = useState<VideoGenerationJob[]>([]); // To be refactored for single active task or new history
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [debugAllowVideoTabForFree, setDebugAllowVideoTabForFree] = useState(false);
 
@@ -60,7 +57,7 @@ export const VideoGenerator: React.FC = () => {
   
   // Text-to-video state
   const [textPrompt, setTextPrompt] = useState('');
-  const [selectedPreset, setSelectedPreset] = useState<keyof typeof videoStylePresets>('product-showcase');
+  const [selectedPreset, setSelectedPreset] = useState<VideoPreset | null>(null);
   
   // Image-to-video state
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -108,12 +105,18 @@ export const VideoGenerator: React.FC = () => {
   }, []);
 
   // Handle preset selection
-  const handlePresetSelect = (presetKey: keyof typeof videoStylePresets) => {
-    const preset = videoStylePresets[presetKey];
-    setSelectedPreset(presetKey);
+  const handlePresetSelect = (preset: VideoPreset) => {
+    setSelectedPreset(preset);
+    setTextPrompt(preset.prompt);
     setDuration(preset.duration);
-    setAspectRatio(preset.aspectRatio);
-    setStyle(preset.style);
+    // You can also set other parameters based on the preset
+    if (preset.category === 'product') {
+      setStyle('cinematic');
+    } else if (preset.category === 'explainer') {
+      setStyle('animated');
+    } else {
+      setStyle('realistic');
+    }
   };
 
   // Handle image upload
@@ -156,15 +159,11 @@ export const VideoGenerator: React.FC = () => {
   }, []);
 
   // Upload image to get URL
-// Place this inside your VideoGenerator component
-
-const uploadImageForVideo = async (file: File): Promise<string> => {
+  const uploadImageForVideo = async (file: File): Promise<string> => {
     if (!user) throw new Error("User not authenticated for image upload.");
 
     const fileName = `${user.id}/${Date.now()}-${file.name}`;
     
-    // Upload file to Supabase Storage in the 'video-inputs' bucket
-    // Make sure you have created a bucket named 'video-inputs' in your Supabase project.
     const { data, error } = await supabase.storage
         .from('video-inputs')
         .upload(fileName, file);
@@ -174,7 +173,6 @@ const uploadImageForVideo = async (file: File): Promise<string> => {
         throw new Error("Failed to upload image.");
     }
     
-    // Get the public URL of the uploaded file
     const { data: { publicUrl } } = supabase.storage
         .from('video-inputs')
         .getPublicUrl(fileName);
@@ -184,7 +182,7 @@ const uploadImageForVideo = async (file: File): Promise<string> => {
     }
 
     return publicUrl;
-};
+  };
 
   const startPolling = (currentTaskId: string) => {
       if (pollingIntervalRef.current) {
@@ -193,13 +191,13 @@ const uploadImageForVideo = async (file: File): Promise<string> => {
 
       pollingIntervalRef.current = setInterval(async () => {
           try {
-              const statusResponse = await checkVideoStatus(currentTaskId); // from piapi.ts
+              const statusResponse = await checkVideoStatus(currentTaskId);
               setProgress(statusResponse.progress || 0);
 
               if (statusResponse.status === 'completed') {
                   if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
                   setStatus('completed');
-                  setFinalVideoUrl(statusResponse.video_url || null); // Ensure it handles undefined video_url
+                  setFinalVideoUrl(statusResponse.video_url || null);
                   toast.success('Video generation completed!');
               } else if (statusResponse.status === 'failed') {
                   if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
@@ -207,9 +205,8 @@ const uploadImageForVideo = async (file: File): Promise<string> => {
                   setErrorMessage(statusResponse.error || 'Video generation failed.');
                   toast.error(statusResponse.error || 'Video generation failed.');
               } else if (statusResponse.status === 'processing' || statusResponse.status === 'pending') {
-                  setStatus(statusResponse.status); // Update status if it changes e.g. from pending to processing
+                  setStatus(statusResponse.status);
               }
-              // If status is still 'pending' or 'processing', do nothing more, interval continues.
 
           } catch (error: any) {
               if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
@@ -217,18 +214,15 @@ const uploadImageForVideo = async (file: File): Promise<string> => {
               setErrorMessage(error.message || 'Error while checking video status.');
               toast.error(error.message || 'Error while checking video status.');
           }
-      }, 5000); // Poll every 5 seconds
+      }, 5000);
   };
 
-  // Place this inside your VideoGenerator component
-
-const handleGenerateSubmit = async () => {
+  const handleGenerateSubmit = async () => {
     if (status === 'pending' || status === 'processing') {
         toast.warn('A video generation is already in progress.');
         return;
     }
 
-    // Pre-generation checks remain the same...
     if (!user) {
         toast.error('Please sign in to generate videos');
         return;
@@ -237,7 +231,16 @@ const handleGenerateSubmit = async () => {
         toast.error('Video generation is available for Creator users only');
         return;
     }
-    // ... other checks for credits, prompts, etc.
+
+    if (mode === 'text-to-video' && !textPrompt.trim()) {
+      toast.error('Please enter a video description');
+      return;
+    }
+
+    if (mode === 'image-to-video' && !selectedImage) {
+      toast.error('Please upload an image for video generation');
+      return;
+    }
 
     // Reset state for a new job
     setStatus('pending');
@@ -253,35 +256,58 @@ const handleGenerateSubmit = async () => {
         let createTaskResponse: CreateTaskResponse;
 
         if (mode === 'text-to-video') {
-            // Build the request using only the parameters our new API function uses
             const request = {
                 prompt: textPrompt,
                 aspectRatio: aspectRatio,
-                // negativePrompt: // You can add a state for this if you want a negative prompt input
             };
             createTaskResponse = await generateTextToVideo(request);
-        } else { // image-to-video
+        } else {
             if (!selectedImage) throw new Error("Image not selected for image-to-video");
             
-            // Upload the image to get a real public URL
             const imageUrl = await uploadImageForVideo(selectedImage);
 
-            // Build the request using only the parameters our new API function uses
             const request = {
                 imageUrl: imageUrl,
                 prompt: imagePrompt || undefined,
                 aspectRatio: aspectRatio,
-                // negativePrompt: // Add if you have a state for this
             };
             createTaskResponse = await generateImageToVideo(request);
         }
 
         setTaskId(createTaskResponse.task_id);
-        setStatus('processing'); // Task submitted, now processing
+        setStatus('processing');
 
-        // The rest of the function (database logic, credit deduction) is good and can remain.
-        // ... (Supabase insert, credit update, toasts, etc.)
+        // Save to database
+        const { error: dbError } = await supabase
+          .from('video_generations')
+          .insert({
+            user_id: user.id,
+            video_type: mode === 'text-to-video' ? 'marketing' : 'welcome',
+            message: mode === 'text-to-video' ? textPrompt : imagePrompt,
+            video_id: createTaskResponse.task_id,
+            video_url: '', // Will be updated when completed
+          });
 
+        if (dbError) {
+          console.error('Database error:', dbError);
+        }
+
+        // Update user credits
+        if (isProUser) {
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({
+              credits_remaining: Math.max(0, user.credits_remaining - 1),
+            })
+            .eq('id', user.id);
+
+          if (updateError) {
+            console.error('Update error:', updateError);
+          }
+        }
+
+        refetchUser();
+        toast.success('Video generation started!');
         startPolling(createTaskResponse.task_id);
 
     } catch (error: any) {
@@ -289,17 +315,15 @@ const handleGenerateSubmit = async () => {
         setErrorMessage(error.message || 'Failed to submit video generation task.');
         toast.error(error.message || 'Failed to submit video generation task.');
     }
-};
+  };
 
-  // Download video (This function might need to be adapted or removed if piapi.ts changes)
-  // For now, assume it's a local helper if needed for the final video URL.
+  // Download video
   const handleDownloadLocal = async (videoUrl: string | null, filenamePrefix: string = 'video') => {
     if (!videoUrl) {
       toast.error('Video not available for download');
       return;
     }
     try {
-      // Use a generic download approach if piapi.ts downloadVideo is removed/changed
       const response = await fetch(videoUrl);
       if (!response.ok) throw new Error('Network response was not ok.');
       const blob = await response.blob();
@@ -309,28 +333,13 @@ const handleGenerateSubmit = async () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(link.href); // Clean up
+      URL.revokeObjectURL(link.href);
       toast.success('Video downloaded successfully!');
     } catch (error) {
       console.error('Download error:', error);
       toast.error('Failed to download video.');
     }
   };
-
-  // const handleDownload = async (job: VideoGenerationJob) => { // Old handleDownload
-  //    if (!job.videoUrl) {
-  //      toast.error('Video not available for download');
-  //      return;
-  //   }
-  //   try {
-  //     const filename = `video-${job.type}-${Date.now()}.mp4`;
-  //     await downloadVideo(job.videoUrl, filename); // This downloadVideo was from old piapi
-  //     toast.success('Video downloaded successfully!');
-  //   } catch (error) {
-  //     console.error('Download error:', error);
-  //     toast.error('Failed to download video');
-  //   }
-  // };
 
   if (!user) {
     return (
@@ -412,6 +421,7 @@ const handleGenerateSubmit = async () => {
                 }
               </p>
             </div>
+            
             <div className="flex items-center space-x-2">
               {debugAllowVideoTabForFree && (
                 <div className="flex items-center space-x-2 px-3 py-2 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
@@ -419,7 +429,6 @@ const handleGenerateSubmit = async () => {
                   <span className="font-medium text-sm">Debug Mode</span>
                 </div>
               )}
-             
             </div>
           </div>
         </div>
@@ -481,27 +490,37 @@ const handleGenerateSubmit = async () => {
               >
                 <h3 className="text-lg font-semibold text-gray-900">Text to Video Generation</h3>
                 
-                {/* Style Presets */}
-                
+                {/* Video Presets */}
+                <VideoPresets 
+                  onPresetSelect={handlePresetSelect}
+                  selectedPresetId={selectedPreset?.id}
+                />
 
                 {/* Text Prompt */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Video Description
-                  </label>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Video Description
+                    </label>
+                    <AIPromptRefiner
+                      currentPrompt={textPrompt}
+                      onRefinedPrompt={setTextPrompt}
+                      disabled={status === 'pending' || status === 'processing'}
+                    />
+                  </div>
                   <textarea
                     value={textPrompt}
                     onChange={(e) => setTextPrompt(e.target.value)}
                     placeholder="Describe the video you want to create. Be specific about scenes, actions, style, and mood. Example: 'A sleek product showcase of a modern smartphone rotating slowly on a minimalist white background with soft lighting and subtle reflections.'"
                     className="w-full h-32 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                    maxLength={500}
+                    maxLength={1000}
                   />
                   <div className="flex justify-between items-center mt-2">
                     <p className="text-sm text-gray-500">
                       Be specific about scenes, actions, and visual style for best results
                     </p>
                     <span className="text-sm text-gray-400">
-                      {textPrompt.length}/500
+                      {textPrompt.length}/1000
                     </span>
                   </div>
                 </div>
@@ -566,32 +585,31 @@ const handleGenerateSubmit = async () => {
 
                 {/* Animation Prompt */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Animation Description (Optional)
-                  </label>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Animation Description (Optional)
+                    </label>
+                    <AIPromptRefiner
+                      currentPrompt={imagePrompt}
+                      onRefinedPrompt={setImagePrompt}
+                      disabled={status === 'pending' || status === 'processing'}
+                    />
+                  </div>
                   <textarea
                     value={imagePrompt}
                     onChange={(e) => setImagePrompt(e.target.value)}
                     placeholder="Describe how you want the image to be animated. Example: 'Add gentle swaying motion to the trees and flowing movement to the water, with soft lighting changes.'"
                     className="w-full h-24 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                    maxLength={200}
+                    maxLength={500}
                   />
                   <div className="flex justify-between items-center mt-2">
                     <p className="text-sm text-gray-500">
                       Leave empty for automatic animation detection
                     </p>
                     <span className="text-sm text-gray-400">
-                      {imagePrompt.length}/200
+                      {imagePrompt.length}/500
                     </span>
                   </div>
-                </div>
-
-                {/* Motion Strength */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Motion Strength
-                  </label>
-                  
                 </div>
               </motion.div>
             )}
@@ -612,9 +630,6 @@ const handleGenerateSubmit = async () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Duration */}
-           
-
             {/* Resolution */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -687,28 +702,24 @@ const handleGenerateSubmit = async () => {
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* Advanced Settings */}
-          <AnimatePresence>
-            {showAdvanced && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-6 pt-6 border-t border-gray-200"
+            {/* Duration */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Duration
+              </label>
+              <select
+                value={duration}
+                onChange={(e) => setDuration(parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               >
-                {mode === 'text-to-video' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Visual Style
-                    </label>
-                   
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                <option value={15}>15 seconds</option>
+                <option value={30}>30 seconds</option>
+                <option value={45}>45 seconds</option>
+                <option value={60}>60 seconds</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Generate Button and Status Display */}
@@ -785,11 +796,7 @@ const handleGenerateSubmit = async () => {
                   setFinalVideoUrl(null);
                   setTaskId(null);
                   setProgress(0);
-                  // Optionally reset prompts
-                  // setTextPrompt('');
-                  // setImagePrompt('');
-                  // setSelectedImage(null);
-                  // setImagePreview(null);
+                  setSelectedPreset(null);
                 }}
                 className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
               >
@@ -799,14 +806,6 @@ const handleGenerateSubmit = async () => {
             </div>
           </div>
         ) : null}
-
-        {/* Generated Videos History (Commented out for now to focus on active task) */}
-        {/* {generatedVideos.length > 0 && (
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Generated Videos</h3>
-            { ... existing map logic ... }
-          </div>
-        )} */}
       </div>
     </div>
   );
