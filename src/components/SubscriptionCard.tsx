@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 
 export const SubscriptionCard: React.FC = () => {
   const { user } = useAuth();
-  const { requireEmailVerification } = useEmailVerification();
+  const { checkEmailBeforePayment } = useEmailVerification();
   const [isLoading, setIsLoading] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
@@ -39,15 +39,14 @@ export const SubscriptionCard: React.FC = () => {
       return;
     }
 
-    // Check email verification before allowing payment
-    const canProceed = requireEmailVerification(
-      () => proceedWithPayment(),
-      () => setShowVerificationModal(true)
-    );
-
+    // Check email verification before proceeding
+    const canProceed = await checkEmailBeforePayment();
     if (!canProceed) {
+      setShowVerificationModal(true);
       return;
     }
+
+    await proceedWithPayment();
   };
 
   const proceedWithPayment = async () => {
@@ -64,7 +63,12 @@ export const SubscriptionCard: React.FC = () => {
         window.location.href = url;
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create checkout session');
+      if (error.message === 'EMAIL_NOT_VERIFIED') {
+        toast.error('Please verify your email address before making a purchase');
+        setShowVerificationModal(true);
+      } else {
+        toast.error(error.message || 'Failed to create checkout session');
+      }
       console.error('Checkout error:', error);
     } finally {
       setIsLoading(false);

@@ -74,6 +74,29 @@ Deno.serve(async (req) => {
       return corsResponse({ error: 'User not found' }, 404);
     }
 
+    // CRITICAL: Check email verification before processing payment
+    console.log(`Checking email verification for user: ${user.id}`);
+    
+    const { data: userProfile, error: profileError } = await supabase
+      .from('users')
+      .select('is_email_verified')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError) {
+      console.error('Error checking user profile:', profileError);
+      return corsResponse({ error: 'Failed to verify user profile' }, 500);
+    }
+
+    if (!userProfile?.is_email_verified) {
+      console.log(`Email not verified for user: ${user.id}`);
+      return corsResponse({ 
+        error: 'Email verification required before making payments. Please verify your email address first.' 
+      }, 403);
+    }
+
+    console.log(`Email verified for user: ${user.id}, proceeding with payment`);
+
     const { data: customer, error: getCustomerError } = await supabase
       .from('stripe_customers')
       .select('customer_id')

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { checkEmailVerificationStatus } from '../lib/emailVerification';
+import toast from 'react-hot-toast';
 
 export const useEmailVerification = () => {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ export const useEmailVerification = () => {
 
   const requireEmailVerification = (action: () => void, onBlocked?: () => void) => {
     if (!user) {
+      toast.error('Please sign in to continue');
       return false;
     }
 
@@ -46,7 +48,29 @@ export const useEmailVerification = () => {
       action();
       return true;
     } else {
+      // Show user-friendly message
+      toast.error('Please verify your email address before making a purchase', {
+        duration: 4000,
+        icon: '📧',
+      });
       onBlocked?.();
+      return false;
+    }
+  };
+
+  const checkEmailBeforePayment = async (): Promise<boolean> => {
+    if (!user) {
+      toast.error('Please sign in to continue');
+      return false;
+    }
+
+    if (isVerified) {
+      return true;
+    } else {
+      toast.error('Please verify your email address before making a purchase', {
+        duration: 4000,
+        icon: '📧',
+      });
       return false;
     }
   };
@@ -55,6 +79,7 @@ export const useEmailVerification = () => {
     isVerified,
     isLoading,
     requireEmailVerification,
+    checkEmailBeforePayment,
     needsVerification: user && !isVerified,
   };
 };
