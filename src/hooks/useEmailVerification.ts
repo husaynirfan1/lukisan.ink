@@ -19,12 +19,14 @@ export const useEmailVerification = () => {
       try {
         // First check the user object from auth context
         if (user.is_email_verified !== undefined) {
+          console.log('[useEmailVerification] Using user context verification status:', user.is_email_verified);
           setIsVerified(user.is_email_verified);
           setIsLoading(false);
           return;
         }
 
         // Fallback to API check
+        console.log('[useEmailVerification] Falling back to API check');
         const verified = await checkEmailVerificationStatus();
         setIsVerified(verified);
       } catch (error) {
@@ -64,7 +66,18 @@ export const useEmailVerification = () => {
       return false;
     }
 
-    if (isVerified) {
+    console.log('[useEmailVerification] Checking email before payment:', {
+      hasUser: !!user,
+      isVerified,
+      userEmailVerified: user.is_email_verified
+    });
+
+    // Use the most current verification status
+    const currentVerificationStatus = user.is_email_verified !== undefined 
+      ? user.is_email_verified 
+      : isVerified;
+
+    if (currentVerificationStatus) {
       return true;
     } else {
       toast.error('Please verify your email address before making a purchase', {
@@ -76,10 +89,10 @@ export const useEmailVerification = () => {
   };
 
   return {
-    isVerified,
+    isVerified: user?.is_email_verified !== undefined ? user.is_email_verified : isVerified,
     isLoading,
     requireEmailVerification,
     checkEmailBeforePayment,
-    needsVerification: user && !isVerified,
+    needsVerification: user && !user.is_email_verified,
   };
 };

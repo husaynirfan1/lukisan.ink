@@ -12,12 +12,25 @@ export const EmailVerificationBar: React.FC = () => {
 
   // Check if we should show the verification bar
   useEffect(() => {
-    if (user && !user.is_email_verified && !isDismissed) {
+    console.log('[EmailVerificationBar] User state:', {
+      hasUser: !!user,
+      isEmailVerified: user?.is_email_verified,
+      isDismissed
+    });
+
+    if (user && user.is_email_verified === false && !isDismissed) {
+      console.log('[EmailVerificationBar] Showing verification bar');
       setIsVisible(true);
     } else {
+      console.log('[EmailVerificationBar] Hiding verification bar');
       setIsVisible(false);
     }
   }, [user, isDismissed]);
+
+  // Reset dismissed state when user changes
+  useEffect(() => {
+    setIsDismissed(false);
+  }, [user?.id]);
 
   // Don't render if user is not logged in or email is verified
   if (!user || user.is_email_verified) {

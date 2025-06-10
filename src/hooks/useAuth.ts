@@ -98,6 +98,8 @@ export const useAuth = () => {
             tier: 'free',
             credits_remaining: 0,
             daily_generations: 0,
+            is_email_verified: false, // IMPORTANT: New users start unverified
+            email_verification_token: null,
         };
 
         const { data: createdUser, error: createError } = await supabase
