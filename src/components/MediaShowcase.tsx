@@ -380,8 +380,7 @@ export const MediaShowcase: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed"
             >
-              Discover how our cutting-edge AI platform transforms simple ideas into stunning visual content. 
-              From professional logos to personalized videos, witness the future of creative design in action.
+             Discover how our AI platform effortlessly transforms your ideas into professional logos, engaging videos, and stunning visual                   content, allowing your team to bypass design delays and focus on core innovation.
             </motion.p>
           </motion.div>
 
