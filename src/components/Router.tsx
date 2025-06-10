@@ -1,5 +1,6 @@
 import React from 'react';
 import { Dashboard } from '../pages/Dashboard';
+import { EmailValidationPage } from '../pages/EmailValidationPage';
 import { SuccessPage } from './SuccessPage';
 import { CancelPage } from './CancelPage';
 import { AuthCallback } from './auth/AuthCallback';
@@ -21,6 +22,11 @@ export const Router: React.FC = () => {
 
   if (path === '/auth/callback') {
     return <AuthCallback />;
+  }
+
+  // Email validation demo route
+  if (path === '/email-validation') {
+    return <EmailValidationPage />;
   }
 
   // Dashboard routes

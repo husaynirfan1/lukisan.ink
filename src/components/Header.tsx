@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, User, LogOut, Crown, AlertCircle, Home } from 'lucide-react';
+import { Sparkles, User, LogOut, Crown, AlertCircle, Home, Shield } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { AuthModal } from './auth/AuthModal';
 import { stripeProducts } from '../stripe-config';
@@ -57,7 +57,23 @@ export const Header: React.FC = () => {
               </span>
             </motion.button>
 
-            {/* The redundant navigation button has been removed from here */}
+            {/* Navigation Links */}
+            <div className="hidden md:flex items-center space-x-6">
+              <a 
+                href="/" 
+                className="flex items-center space-x-1 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <Home className="h-4 w-4" />
+                <span>Home</span>
+              </a>
+              <a 
+                href="/email-validation" 
+                className="flex items-center space-x-1 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <Shield className="h-4 w-4" />
+                <span>Email Validation</span>
+              </a>
+            </div>
 
             <div className="flex items-center space-x-4">
               {/* Loading State */}
