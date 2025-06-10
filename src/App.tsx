@@ -46,6 +46,10 @@ function App() {
       case 'loading_subscription':
         stage = 'loading_data';
         break;
+      case 'network_error':
+        stage = 'initializing';
+        message = 'Checking connection...';
+        break;
       default:
         if (authStep.includes('error') || authStep.includes('timeout')) {
           message = 'Taking longer than expected...';
@@ -76,18 +80,39 @@ function App() {
         {/* Email Verification Bar - only show for authenticated users */}
         {user && <EmailVerificationBar />}
         
-        {/* Show error state */}
+        {/* Show error state with better network error handling */}
         {error && !loading && (
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
             <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-              <h2 className="text-xl font-semibold text-red-800 mb-2">Authentication Error</h2>
+              <h2 className="text-xl font-semibold text-red-800 mb-2">
+                {authStep === 'network_error' ? 'Connection Error' : 'Authentication Error'}
+              </h2>
               <p className="text-red-600 mb-4">{error}</p>
-              <button
-                onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Refresh Page
-              </button>
+              <div className="space-x-3">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Refresh Page
+                </button>
+                {authStep === 'network_error' && (
+                  <button
+                    onClick={() => {
+                      // Try to check connectivity and provide more specific guidance
+                      fetch('https://www.google.com/favicon.ico', { mode: 'no-cors' })
+                        .then(() => {
+                          alert('Internet connection appears to be working. The issue may be with the Supabase configuration. Please check that your local development URL (https://localhost:5173) is added to your Supabase project\'s allowed origins in the Authentication settings.');
+                        })
+                        .catch(() => {
+                          alert('Please check your internet connection and try again.');
+                        });
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Check Connection
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

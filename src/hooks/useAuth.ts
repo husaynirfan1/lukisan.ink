@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase, User } from '../lib/supabase';
+import { supabase, User, withRetry, handleSupabaseError, checkSupabaseConnectivity } from '../lib/supabase';
 import { getUserSubscription } from '../lib/stripe';
 import { transferTempImagesToUser, clearGuestSession } from '../lib/guestImageManager';
 import toast from 'react-hot-toast';
@@ -67,19 +67,33 @@ export const useAuth = () => {
     }, AUTH_FLOW_TIMEOUT_MS);
 
     try {
-      // Get the current auth user to check email verification status
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      // Enhanced: Check connectivity first
+      const isConnected = await checkSupabaseConnectivity();
+      if (!isConnected) {
+        throw new Error('Unable to connect to the server. Please check your internet connection.');
+      }
+
+      // Get the current auth user to check email verification status with retry
+      const { data: { user: authUser }, error: authError } = await withRetry(
+        () => supabase.auth.getUser(),
+        3,
+        1000
+      );
       
       if (authError) {
         throw new Error(`Auth user fetch error: ${authError.message}`);
       }
 
       // 1. Use .maybeSingle() to prevent an error if the user profile doesn't exist yet.
-      const { data: userProfile, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const { data: userProfile, error: profileError } = await withRetry(
+        () => supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle(),
+        3,
+        1000
+      );
 
       // Throw if there's a real error, but ignore 'PGRST116' (no rows found), which we now expect for new users.
       if (profileError && profileError.code !== 'PGRST116') {
@@ -107,11 +121,15 @@ export const useAuth = () => {
             is_email_verified: authUser.email_confirmed_at ? true : false,
         };
 
-        const { data: createdUser, error: createError } = await supabase
+        const { data: createdUser, error: createError } = await withRetry(
+          () => supabase
             .from('users')
             .insert(newUserData)
             .select()
-            .single();
+            .single(),
+          3,
+          1000
+        );
 
         if (createError) throw new Error(`Profile creation failed: ${createError.message}`);
         
@@ -129,10 +147,14 @@ export const useAuth = () => {
               authStatus: isVerifiedInAuth 
             });
             
-            const { error: updateError } = await supabase
-              .from('users')
-              .update({ is_email_verified: isVerifiedInAuth })
-              .eq('id', userId);
+            const { error: updateError } = await withRetry(
+              () => supabase
+                .from('users')
+                .update({ is_email_verified: isVerifiedInAuth })
+                .eq('id', userId),
+              2,
+              1000
+            );
 
             if (!updateError) {
               finalUserProfile.is_email_verified = isVerifiedInAuth;
@@ -161,11 +183,13 @@ export const useAuth = () => {
 
     } catch (error: any) {
       debugLog('fetchUserProfile_error', { errorMessage: error.message });
+      const errorInfo = handleSupabaseError(error, 'fetchUserProfile');
+      
       setState(prev => ({
         ...prev,
         loading: false,
-        error: error.message || 'An unknown error occurred while fetching your profile.',
-        authStep: 'profile_fetch_error',
+        error: errorInfo.userMessage,
+        authStep: errorInfo.isNetworkError ? 'network_error' : 'profile_fetch_error',
         authInitialized: true,
       }));
     } finally {
@@ -288,7 +312,13 @@ export const useAuth = () => {
       transferPromise: null
     };
     
-    await supabase.auth.signOut();
+    try {
+      await withRetry(() => supabase.auth.signOut(), 2, 1000);
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Continue with cleanup even if sign out fails
+    }
+    
     // The onAuthStateChange listener will handle the state reset.
     // We also clear refs and state here as a fallback.
     lastSuccessfulFetchTimestamp.current = 0;
@@ -383,11 +413,15 @@ export const useAuth = () => {
         } else if (!state.user && !state.loading) {
             // If we don't have a user and aren't loading, check the session.
             debugLog('No user in state, re-checking session on visibility change.');
-            supabase.auth.getSession().then(({ data: { session } }) => {
+            withRetry(() => supabase.auth.getSession(), 2, 1000)
+              .then(({ data: { session } }) => {
                 if(session?.user) {
                     fetchUserProfile(session.user.id);
                 }
-            });
+              })
+              .catch(error => {
+                console.error('Session check failed:', error);
+              });
         }
       }
     };
@@ -408,22 +442,28 @@ export const useAuth = () => {
     try {
       debugLog('Resending verification email', { email: state.user.email });
       
-      // Use Supabase's built-in resend function
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: state.user.email,
-      });
+      // Use Supabase's built-in resend function with retry
+      const { error } = await withRetry(
+        () => supabase.auth.resend({
+          type: 'signup',
+          email: state.user!.email,
+        }),
+        2,
+        1000
+      );
 
       if (error) {
         console.error('Error resending verification email:', error);
-        toast.error(`Failed to resend verification email: ${error.message}`);
+        const errorInfo = handleSupabaseError(error, 'resendVerificationEmail');
+        toast.error(errorInfo.userMessage);
         return;
       }
 
       toast.success('Verification email sent! Please check your inbox.');
     } catch (error: any) {
       console.error('Error in resendVerificationEmail:', error);
-      toast.error('Failed to resend verification email');
+      const errorInfo = handleSupabaseError(error, 'resendVerificationEmail');
+      toast.error(errorInfo.userMessage);
     }
   };
 
