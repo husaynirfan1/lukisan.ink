@@ -9,7 +9,7 @@ export interface EmailVerificationResult {
 }
 
 /**
- * Request a new verification email for the current user
+ * Request a new verification email for the current user using Supabase auth
  */
 export const requestVerificationEmail = async (): Promise<EmailVerificationResult> => {
   try {
@@ -57,6 +57,9 @@ export const checkEmailVerificationStatus = async (): Promise<boolean> => {
       return false;
     }
 
+    // Check both Supabase auth confirmation and our custom flag
+    const isSupabaseConfirmed = user.email_confirmed_at !== null;
+    
     const { data: userProfile, error } = await supabase
       .from('users')
       .select('is_email_verified')
@@ -65,7 +68,17 @@ export const checkEmailVerificationStatus = async (): Promise<boolean> => {
 
     if (error) {
       console.error('Error checking verification status:', error);
-      return false;
+      return isSupabaseConfirmed; // Fallback to Supabase confirmation
+    }
+
+    // If Supabase says confirmed but our flag is false, update our flag
+    if (isSupabaseConfirmed && !userProfile?.is_email_verified) {
+      await supabase
+        .from('users')
+        .update({ is_email_verified: true })
+        .eq('id', user.id);
+      
+      return true;
     }
 
     return userProfile?.is_email_verified || false;

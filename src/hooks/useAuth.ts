@@ -90,6 +90,9 @@ export const useAuth = () => {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (!authUser) throw new Error('Could not get authenticated user to create a profile.');
 
+        // Check if email is confirmed in Supabase auth
+        const isEmailConfirmed = authUser.email_confirmed_at !== null;
+
         const newUserData = {
             id: userId,
             email: authUser.email!,
@@ -98,7 +101,7 @@ export const useAuth = () => {
             tier: 'free',
             credits_remaining: 0,
             daily_generations: 0,
-            is_email_verified: false, // IMPORTANT: New users start unverified
+            is_email_verified: isEmailConfirmed, // Set based on Supabase auth confirmation
             email_verification_token: null,
         };
 
@@ -112,6 +115,24 @@ export const useAuth = () => {
         
         finalUserProfile = createdUser;
         toast.success('Welcome! Your profile has been created.');
+      } else {
+        // Check if we need to sync email verification status with Supabase auth
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const isSupabaseConfirmed = authUser?.email_confirmed_at !== null;
+        
+        if (isSupabaseConfirmed && !finalUserProfile.is_email_verified) {
+          // Update our flag to match Supabase confirmation
+          const { data: updatedUser } = await supabase
+            .from('users')
+            .update({ is_email_verified: true })
+            .eq('id', userId)
+            .select()
+            .single();
+          
+          if (updatedUser) {
+            finalUserProfile = updatedUser;
+          }
+        }
       }
 
       // 3. From here, the function continues as normal with a valid user profile.
