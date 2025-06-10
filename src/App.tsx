@@ -5,13 +5,15 @@ import { Router } from './components/Router';
 import { DebugPanel } from './components/DebugPanel';
 import { DashboardLoader } from './components/DashboardLoader';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { EmailVerificationBar } from './components/EmailVerificationBar';
+import { AuthProvider } from './contexts/AuthProvider';
 import { useAuth } from './hooks/useAuth';
 
-function App() {
-  // 1. Ensure authInitialized is destructured from the hook
+function AppContent() {
+  // Use the existing useAuth hook for backward compatibility
   const { user, loading, error, authStep, authInitialized } = useAuth();
 
-  // Handle authentication-based redirects (no changes needed here)
+  // Handle authentication-based redirects
   useEffect(() => {
     if (user && !loading) {
       const path = window.location.pathname;
@@ -24,13 +26,11 @@ function App() {
     }
   }, [user, loading]);
 
-  // 2. CHANGED: Show the loading screen if auth is not yet initialized OR if it's actively loading data.
-  // This is the gatekeeper that prevents the "glimpse".
+  // Show loading screen if auth is not yet initialized OR if it's actively loading data
   if (!authInitialized || loading) {
     let stage: 'initializing' | 'authenticating' | 'loading_profile' | 'loading_data' | 'complete' = 'initializing';
     let message = '';
 
-    // This switch statement is still useful for showing detailed loading steps.
     switch (authStep) {
       case 'initializing':
       case 'checking_session':
@@ -53,12 +53,9 @@ function App() {
         }
     }
 
-    // When !authInitialized, the message will be the default for the 'initializing' stage.
     return <DashboardLoader stage={stage} message={message} />;
   }
 
-  // 3. The rest of the component remains the same.
-  // By the time the code reaches here, we are certain about the user's auth state.
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
@@ -76,6 +73,9 @@ function App() {
         />
         
         <Header />
+        
+        {/* Email Verification Bar - only show for authenticated users */}
+        {user && <EmailVerificationBar />}
         
         {/* Show error state */}
         {error && !loading && (
@@ -124,6 +124,14 @@ function App() {
         </footer>
       </div>
     </ErrorBoundary>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

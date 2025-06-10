@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Crown, Loader2, Check, Sparkles } from 'lucide-react';
 import { stripeProducts } from '../stripe-config';
-import { createCheckoutSession, getUserSubscription } from '../lib/stripe';
+import { getUserSubscription } from '../lib/stripe';
 import { useAuth } from '../hooks/useAuth';
+import { PaymentButton } from './PaymentButton';
 import toast from 'react-hot-toast';
 
 export const SubscriptionCard: React.FC = () => {
   const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
 
@@ -26,32 +26,6 @@ export const SubscriptionCard: React.FC = () => {
       console.error('Error fetching subscription:', error);
     } finally {
       setLoadingSubscription(false);
-    }
-  };
-
-  const handleSubscribe = async () => {
-    if (!user) {
-      toast.error('Please sign in to subscribe');
-      return;
-    }
-
-    const product = stripeProducts[0]; // Pro product
-    setIsLoading(true);
-
-    try {
-      const { url } = await createCheckoutSession({
-        priceId: product.priceId,
-        mode: product.mode,
-      });
-
-      if (url) {
-        window.location.href = url;
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create checkout session');
-      console.error('Checkout error:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -134,25 +108,10 @@ export const SubscriptionCard: React.FC = () => {
       </div>
 
       {!isActive && (
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleSubscribe}
-          disabled={isLoading}
-          className="w-full py-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-xl font-bold text-lg hover:from-yellow-500 hover:to-orange-600 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-3"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <span>Processing...</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-6 w-6" />
-              <span>Upgrade to Creator</span>
-            </>
-          )}
-        </motion.button>
+        <PaymentButton className="w-full py-4 text-lg">
+          <Sparkles className="h-6 w-6" />
+          <span>Upgrade to Creator</span>
+        </PaymentButton>
       )}
 
       {isActive && subscription && (

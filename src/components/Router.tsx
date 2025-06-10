@@ -3,6 +3,7 @@ import { Dashboard } from '../pages/Dashboard';
 import { SuccessPage } from './SuccessPage';
 import { CancelPage } from './CancelPage';
 import { AuthCallback } from './auth/AuthCallback';
+import { EmailVerificationPage } from './EmailVerificationPage';
 import { Hero } from './Hero';
 import { useAuth } from '../hooks/useAuth';
 
@@ -21,6 +22,11 @@ export const Router: React.FC = () => {
 
   if (path === '/auth/callback') {
     return <AuthCallback />;
+  }
+
+  // Email verification route
+  if (path === '/verify-email') {
+    return <EmailVerificationPage />;
   }
 
   // Dashboard routes
