@@ -365,16 +365,15 @@ export const MediaShowcase: React.FC = () => {
               <span>Creative Showcase</span>
             </motion.div>
 
-          <h2
+           <h2
   id="media-showcase-title"
-  className="text-4xl md:text-6xl font-bold text-gray-900 mb-6 **leading-normal**"
+  className="text-4xl md:text-6xl font-bold text-gray-900 mb-6"
 >
-  Accelerate Development.
-  <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent">
+  Accelerate development.
+  <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent mb-8">
     We Design, You Innovate.
   </span>
 </h2>
-
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
