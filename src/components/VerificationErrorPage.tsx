@@ -122,9 +122,9 @@ export const VerificationErrorPage: React.FC = () => {
               <li>• Contact support if you continue having issues</li>
             </ul>
           </div>
-            </motion.div>
+         </motion.div>
         </div>
-        
+       
       </motion.div>
     </div>
   );
