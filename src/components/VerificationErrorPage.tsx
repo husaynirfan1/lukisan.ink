@@ -122,9 +122,8 @@ export const VerificationErrorPage: React.FC = () => {
               <li>• Contact support if you continue having issues</li>
             </ul>
          </motion.div>
-          
-          </div>
-       
-        </div>
-
+   </div>
+      </motion.div> {/* CORRECTED: Was likely </div> in your original file */}
+    </div>
+  );
 };
