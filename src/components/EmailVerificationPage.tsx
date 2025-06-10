@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthProvider';
+import { useAuth } from '../hooks/useAuth';
 
 export const EmailVerificationPage: React.FC = () => {
   const { refreshUser } = useAuth();
