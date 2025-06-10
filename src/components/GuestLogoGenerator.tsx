@@ -491,7 +491,7 @@ export const GuestLogoGenerator: React.FC = () => {
                 ) : (
                   <>
                     <Sparkles className="h-5 w-5" />
-                    <span>{user ? 'Generate Logo' : 'Generate Logo - Free Trial'}</span>
+                    <span>{user ? 'Generate Logo' : 'Generate Logo - Free'}</span>
                   </>
                 )}
               </motion.button>
