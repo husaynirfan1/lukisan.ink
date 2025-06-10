@@ -121,10 +121,11 @@ export const VerificationErrorPage: React.FC = () => {
               <li>• Verification links expire after 24 hours for security</li>
               <li>• Contact support if you continue having issues</li>
             </ul>
-              </motion.div>
           </div>
-            </motion.div>
-          </motion.div>
-     
+       
+        </div>
+        
+      </motion.div>
+    </div>
   );
 };
