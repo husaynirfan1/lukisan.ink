@@ -367,7 +367,7 @@ export const MediaShowcase: React.FC = () => {
 
             <h2 
               id="media-showcase-title"
-              className="text-4xl md:text-6xl font-bold text-gray-900 mb-4 leading-tight"
+              className="text-4xl md:text-6xl font-bold text-gray-900 mb-8 leading-tight"
             >
               Accelerate development. 
               <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent leading-tight">
