@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, X, Loader2, AlertCircle } from 'lucide-react';
-import { useAuth } from '../contexts/AuthProvider';
+import { useAuth } from '../hooks/useAuth';
 
 export const EmailVerificationBar: React.FC = () => {
   const { user, isEmailVerified, resendVerificationEmail } = useAuth();

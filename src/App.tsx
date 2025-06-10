@@ -6,11 +6,10 @@ import { DebugPanel } from './components/DebugPanel';
 import { DashboardLoader } from './components/DashboardLoader';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { EmailVerificationBar } from './components/EmailVerificationBar';
-import { AuthProvider } from './contexts/AuthProvider';
 import { useAuth } from './hooks/useAuth';
 
-function AppContent() {
-  // Use the existing useAuth hook for backward compatibility
+function App() {
+  // Use the existing useAuth hook (now enhanced with email verification)
   const { user, loading, error, authStep, authInitialized } = useAuth();
 
   // Handle authentication-based redirects
@@ -124,14 +123,6 @@ function AppContent() {
         </footer>
       </div>
     </ErrorBoundary>
-  );
-}
-
-function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
   );
 }
 

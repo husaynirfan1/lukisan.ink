@@ -98,6 +98,7 @@ export const useAuth = () => {
             tier: 'free',
             credits_remaining: 0,
             daily_generations: 0,
+            is_email_verified: authUser.email_confirmed_at ? true : false, // Set based on Supabase auth
         };
 
         const { data: createdUser, error: createError } = await supabase
@@ -275,6 +276,40 @@ export const useAuth = () => {
     window.location.href = '/'; // Force a clean reload to the home page
   };
 
+  // Email verification functions
+  const resendVerificationEmail = async () => {
+    if (!state.user) {
+      toast.error('No user found');
+      return;
+    }
+
+    try {
+      // Call Supabase's built-in resend function
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: state.user.email,
+      });
+
+      if (error) {
+        console.error('Error resending verification email:', error);
+        toast.error('Failed to resend verification email');
+        return;
+      }
+
+      toast.success('Verification email sent! Please check your inbox.');
+    } catch (error) {
+      console.error('Error in resendVerificationEmail:', error);
+      toast.error('Failed to resend verification email');
+    }
+  };
+
+  const refreshUser = async () => {
+    if (state.user && !isFetchingProfile.current) {
+      debugLog('Refetching user data');
+      await fetchUserProfile(state.user.id);
+    }
+  };
+
   // Main effect for handling initialization and auth state changes
   useEffect(() => {
     debugLog('Auth effect initializing...');
@@ -370,6 +405,31 @@ export const useAuth = () => {
     };
   }, [state.user, state.loading, fetchUserProfile]);
 
+  // Check for email verification on URL hash change (when user clicks verification link)
+  useEffect(() => {
+    const handleHashChange = async () => {
+      const hash = window.location.hash;
+      
+      if (hash.includes('type=email_change') || hash.includes('type=signup')) {
+        // User clicked verification link, refresh their profile
+        setTimeout(async () => {
+          await refreshUser();
+          toast.success('Email verified successfully!');
+        }, 1000);
+      }
+    };
+
+    // Check on mount
+    handleHashChange();
+
+    // Listen for hash changes
+    window.addEventListener('hashchange', handleHashChange);
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, [state.user]);
+
   // Helper functions remain the same...
   const canGenerate = () => {
     if (!state.user) return false;
@@ -410,10 +470,13 @@ export const useAuth = () => {
     error: state.error,
     authStep: state.authStep,
     authInitialized: state.authInitialized,
+    isEmailVerified: state.user?.is_email_verified || false,
     signOut,
     canGenerate,
     getRemainingGenerations,
     getUserTier,
-    refetchUser
+    refetchUser,
+    resendVerificationEmail,
+    refreshUser
   };
 };

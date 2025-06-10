@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Crown, Mail, AlertCircle, X } from 'lucide-react';
-import { useAuth } from '../contexts/AuthProvider';
+import { useAuth } from '../hooks/useAuth';
 import { createCheckoutSession } from '../lib/stripe';
 import { stripeProducts } from '../stripe-config';
 import toast from 'react-hot-toast';
