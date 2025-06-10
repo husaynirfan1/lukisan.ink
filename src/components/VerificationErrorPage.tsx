@@ -126,6 +126,6 @@ export const VerificationErrorPage: React.FC = () => {
         </div>
        
       </motion.div>
-    </div>
+    
   );
 };
