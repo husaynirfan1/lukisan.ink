@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';Add commentMore actions
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Images, Crown, Video } from 'lucide-react';
 import { LogoGenerator } from '../components/LogoGenerator';
