@@ -31,7 +31,6 @@ interface StoredVideo {
   error_message?: string;
 }
 
-// --- FIX: Changed 'export default' back to 'export' to match the import statement ---
 export function VideoLibrary() {
   const { user, getUserTier } = useAuth();
   const [videos, setVideos] = useState<StoredVideo[]>([]);
@@ -68,13 +67,23 @@ export function VideoLibrary() {
         return;
       }
       
-      const fetchedVideos = (data || []).map(video => ({
-        ...video,
-        storage_path: video.video_url ? extractStoragePath(video.video_url) : undefined
-      }));
+      const fetchedVideos = (data || []).map(video => {
+        // --- FIX 1: Treat null/undefined status as 'pending' ---
+        // If the status is not one of the known values, default it to 'pending'.
+        const validStatuses = ['pending', 'processing', 'running', 'completed', 'failed'];
+        const currentStatus = validStatuses.includes(video.status) ? video.status : 'pending';
+
+        return {
+            ...video,
+            status: currentStatus, // Ensure status is always valid
+            storage_path: video.video_url ? extractStoragePath(video.video_url) : undefined
+        };
+      });
 
       setVideos(fetchedVideos);
 
+      // --- FIX 2: Reliably start monitoring ---
+      // This loop will now correctly identify videos with a 'pending' status.
       fetchedVideos.forEach(video => {
         if (['pending', 'processing', 'running'].includes(video.status || '')) {
           videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
@@ -126,7 +135,6 @@ export function VideoLibrary() {
     
     try {
       await videoStatusManager.manualStatusCheck(video.id, video.video_id, user.id);
-      // Realtime subscription will handle the UI update.
     } catch (error: any) {
       toast.error(`Failed to re-check status: ${error.message}`, { id: video.id });
     } finally {
@@ -156,7 +164,6 @@ export function VideoLibrary() {
         .eq('user_id', user.id);
       if (dbError) throw new Error(dbError.message);
       toast.success('Video deleted successfully');
-      // Realtime will update the list, but we can do it optimistically too
       setVideos(prev => prev.filter(v => v.id !== videoId));
     } catch (error: any) {
       toast.error(`Failed to delete video: ${error.message}`);
@@ -186,6 +193,8 @@ export function VideoLibrary() {
   const getStatusDisplay = (video: StoredVideo) => {
     const isChecking = checkingStatus.has(video.id);
     if (isChecking) return { icon: <Loader2 className="h-4 w-4 animate-spin" />, color: 'text-blue-600', bg: 'bg-blue-100', text: 'Checking...' };
+    
+    // The default case is now removed, as the status is normalized during fetch.
     switch (video.status) {
       case 'pending': return { icon: <Clock className="h-4 w-4" />, color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Pending' };
       case 'processing':
@@ -193,7 +202,7 @@ export function VideoLibrary() {
         return { icon: <Loader2 className="h-4 w-4 animate-spin" />, color: 'text-blue-600', bg: 'bg-blue-100', text: `Processing ${video.progress || 0}%` };
       case 'completed': return { icon: <CheckCircle className="h-4 w-4" />, color: 'text-green-600', bg: 'bg-green-100', text: 'Ready' };
       case 'failed': return { icon: <XCircle className="h-4 w-4" />, color: 'text-red-600', bg: 'bg-red-100', text: 'Failed' };
-      default: return { icon: <CheckCircle className="h-4 w-4" />, color: 'text-gray-500', bg: 'bg-gray-100', text: 'Unknown' };
+      default: return { icon: <Clock className="h-4 w-4" />, color: 'text-gray-500', bg: 'bg-gray-100', text: 'Pending' }; // Default to pending
     }
   };
 
@@ -208,13 +217,11 @@ export function VideoLibrary() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* --- Header and Stats sections can be pasted back here from your original file --- */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Video Library</h1>
         <p className="text-gray-600">Track and manage your generated videos.</p>
       </div>
       
-      {/* --- Controls section can be pasted back here from your original file --- */}
       <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-gray-200/50 mb-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -228,7 +235,6 @@ export function VideoLibrary() {
         </div>
       </div>
 
-      {/* --- Content Grid / List --- */}
       {filteredVideos.length === 0 ? (
         <div className="text-center py-12">
           <Video className="h-16 w-16 text-gray-300 mx-auto mb-4" />
