@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { checkVideoStatus, type TaskStatusResponse } from './piapi';
+import { storeVideoInSupabase } from './videoStorage';
 import toast from 'react-hot-toast';
 
 export interface VideoStatusUpdate {
@@ -70,10 +71,10 @@ export class VideoStatusManager {
       if (statusResponse.status === 'completed' && statusResponse.video_url) {
         // Stop polling this task as it's completed
         this.stopMonitoring(videoId);
-        console.log(`[VideoStatusManager] Video ${videoId} completed, delegating to backend`);
+        console.log(`[VideoStatusManager] Video ${videoId} completed, processing video storage`);
         
-        // Delegate the complex work to the backend
-        await this.handleVideoCompletionOnBackend(videoId, statusResponse.video_url, userId, taskId);
+        // Process the completed video
+        await this.handleVideoCompletion(videoId, statusResponse.video_url, userId, taskId);
       } else if (statusResponse.status === 'failed') {
         this.stopMonitoring(videoId);
         console.log(`[VideoStatusManager] Video ${videoId} failed:`, statusResponse.error);
@@ -122,33 +123,59 @@ export class VideoStatusManager {
   }
 
   /**
-   * This function calls our secure backend endpoint to process the video.
+   * Handle video completion by downloading and storing the video
    */
-  private async handleVideoCompletionOnBackend(videoId: string, piapiVideoUrl: string, userId: string, taskId: string): Promise<void> {
+  private async handleVideoCompletion(videoId: string, piapiVideoUrl: string, userId: string, taskId: string): Promise<void> {
     try {
-      console.log(`[VideoStatusManager] Notifying backend to process video ${videoId}`);
+      console.log(`[VideoStatusManager] Processing completed video ${videoId}`);
       
-      const response = await fetch('/api/process-video', { // Your backend API route
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId, piapiVideoUrl, userId, taskId }),
-      });
+      // Update status to show we're processing the storage
+      await supabase
+        .from('video_generations')
+        .update({ 
+          status: 'processing',
+          progress: 90,
+          error_message: 'Saving video to library...'
+        })
+        .eq('id', videoId);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Backend processing failed');
+      // Generate filename for the video
+      const timestamp = Date.now();
+      const filename = `video-${taskId}-${timestamp}`;
+      
+      console.log(`[VideoStatusManager] Storing video in Supabase Storage...`);
+      
+      // Store the video in Supabase Storage
+      const storeResult = await storeVideoInSupabase(piapiVideoUrl, userId, filename);
+      
+      if (!storeResult.success) {
+        throw new Error(storeResult.error || 'Failed to store video');
       }
 
-      const result = await response.json();
-      console.log(`[VideoStatusManager] Backend successfully processed video ${videoId}:`, result);
-      toast.success('Video processing complete and saved to your library!');
-      // The frontend will update automatically via the realtime subscription.
+      console.log(`[VideoStatusManager] Video stored successfully:`, storeResult.publicUrl);
+
+      // Update the database with the final video URL and mark as completed
+      const { error: updateError } = await supabase
+        .from('video_generations')
+        .update({
+          video_url: storeResult.publicUrl,
+          storage_path: storeResult.storagePath,
+          status: 'completed',
+          progress: 100,
+          error_message: null
+        })
+        .eq('id', videoId);
+
+      if (updateError) {
+        throw new Error(`Database update failed: ${updateError.message}`);
+      }
+
+      console.log(`[VideoStatusManager] Successfully processed video ${videoId}`);
+      toast.success('Video generation completed and saved to library!');
 
     } catch (error: any) {
-      console.error(`[VideoStatusManager] Error notifying backend:`, error);
-      toast.error('Failed to save completed video to library.');
-      // Update the status to 'failed' in the DB so it doesn't get stuck
-      await this.handleVideoFailure(videoId, 'Failed to save to library: ' + error.message);
+      console.error(`[VideoStatusManager] Error processing completed video:`, error);
+      await this.handleVideoFailure(videoId, `Failed to save to library: ${error.message}`);
     }
   }
 
@@ -179,8 +206,7 @@ export class VideoStatusManager {
     // Reset error counter for manual checks
     this.consecutiveErrors.set(videoId, 0);
     
-    // This calls the same central processing function as the automatic poller,
-    // ensuring the backend route is always used for completed videos.
+    // This calls the same central processing function as the automatic poller
     await this.checkAndProcessVideoStatus(videoId, taskId, userId);
   }
 
