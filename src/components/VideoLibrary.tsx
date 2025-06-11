@@ -6,14 +6,12 @@ import {
   Video, Download, Trash2, Clock, Crown, Calendar, Search, Filter, 
   Grid3X3, List, AlertTriangle, Loader2, Cloud, ExternalLink, 
   RefreshCw, Play, Pause, CheckCircle, XCircle, RotateCcw, 
-  HardDrive, Wifi, WifiOff, Database, Shield
+  HardDrive, Wifi, WifiOff, Database, Shield, Eye, EyeOff
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '../lib/videoStorage';
 import { videoStatusManager } from '../lib/videoStatusManager';
-import { videoTracker, type VideoTrackingData, type StorageInfo } from '../lib/videoTracker';
-import { enhancedVideoStorage, type VideoDownloadProgress } from '../lib/enhancedVideoStorage';
 import toast from 'react-hot-toast';
 
 // This interface should match the structure of your 'video_generations' table
@@ -47,33 +45,13 @@ interface VideoCardProps {
 }
 
 const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDeleting, isRetrying }) => {
-  const [downloadProgress, setDownloadProgress] = useState<VideoDownloadProgress | null>(null);
-  const [trackingData, setTrackingData] = useState<VideoTrackingData | null>(null);
-
-  // Subscribe to video tracking updates
-  useEffect(() => {
-    const unsubscribe = videoTracker.subscribeToVideo(video.id, (data) => {
-      console.log('[VideoCard] Received tracking update:', data);
-      setTrackingData(data);
-    });
-
-    // Subscribe to download progress
-    const unsubscribeProgress = enhancedVideoStorage.subscribeToDownloadProgress(
-      video.id,
-      (progress) => {
-        console.log('[VideoCard] Download progress:', progress);
-        setDownloadProgress(progress);
-      }
-    );
-
-    return () => {
-      unsubscribe();
-      unsubscribeProgress();
-    };
-  }, [video.id]);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const previewTimeoutRef = useRef<NodeJS.Timeout>();
 
   const getStatusDisplay = () => {
-    const currentData = trackingData || video;
     const isRetryingThis = isRetrying;
     
     if (isRetryingThis) {
@@ -85,7 +63,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
       };
     }
     
-    switch (currentData.status) {
+    switch (video.status) {
       case 'pending': 
         return { 
           icon: <Clock className="h-4 w-4" />, 
@@ -99,21 +77,21 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
           icon: <Loader2 className="h-4 w-4 animate-spin" />, 
           color: 'text-blue-600', 
           bg: 'bg-blue-100', 
-          text: `Processing ${currentData.progress || 0}%` 
+          text: `Processing ${video.progress || 0}%` 
         };
       case 'downloading':
         return { 
           icon: <Download className="h-4 w-4 animate-pulse" />, 
           color: 'text-purple-600', 
           bg: 'bg-purple-100', 
-          text: `Downloading ${currentData.download_progress || 0}%` 
+          text: `Downloading ${video.download_progress || 0}%` 
         };
       case 'storing':
         return { 
           icon: <Database className="h-4 w-4 animate-pulse" />, 
           color: 'text-indigo-600', 
           bg: 'bg-indigo-100', 
-          text: `Storing ${currentData.storage_progress || 0}%` 
+          text: `Storing ${video.storage_progress || 0}%` 
         };
       case 'completed': 
         return { 
@@ -140,10 +118,9 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
   };
 
   const statusDisplay = getStatusDisplay();
-  const currentData = trackingData || video;
-  const isProcessing = ['pending', 'processing', 'running', 'downloading', 'storing'].includes(currentData.status || '');
-  const canDownload = currentData.status === 'completed' && currentData.video_url;
-  const hasIntegrityIssue = currentData.status === 'completed' && currentData.integrity_verified === false;
+  const isProcessing = ['pending', 'processing', 'running', 'downloading', 'storing'].includes(video.status || '');
+  const canDownload = video.status === 'completed' && video.video_url;
+  const hasIntegrityIssue = video.status === 'completed' && video.integrity_verified === false;
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size';
@@ -152,9 +129,66 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const formatSpeed = (bytesPerSecond: number) => {
-    const mbps = (bytesPerSecond * 8) / (1024 * 1024);
-    return `${mbps.toFixed(1)} Mbps`;
+  // Handle hover for video preview
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    if (canDownload && videoRef.current) {
+      previewTimeoutRef.current = setTimeout(() => {
+        setShowPreview(true);
+        if (videoRef.current) {
+          videoRef.current.currentTime = 0;
+          videoRef.current.play().catch(console.error);
+          setIsPlaying(true);
+        }
+      }, 500); // Start preview after 500ms hover
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setShowPreview(false);
+    setIsPlaying(false);
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+    }
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+  };
+
+  const handleVideoClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (canDownload && videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        videoRef.current.play().catch(console.error);
+        setIsPlaying(true);
+      }
+    }
+  };
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (canDownload) {
+      const filename = `video-${video.video_type}-${Date.now()}.mp4`;
+      downloadVideoFromSupabase(video.video_url, filename);
+      toast.success('Download started!');
+    }
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this video? This action cannot be undone.')) {
+      onDelete(video.id);
+    }
+  };
+
+  const handleRetry = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRetry(video);
   };
 
   return (
@@ -162,19 +196,65 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
       key={video.id}
       id={`video-${video.video_id}`}
       variants={{ hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } }}
-      className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg"
+      className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg group"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      <div className="relative aspect-video bg-gray-900">
+      <div className="relative aspect-video bg-gray-900 cursor-pointer" onClick={handleVideoClick}>
         {canDownload ? (
-          <video 
-            src={currentData.video_url} 
-            className="w-full h-full object-cover" 
-            muted 
-            loop 
-            playsInline 
-            controls
-            poster={video.logo_url}
-          />
+          <>
+            <video 
+              ref={videoRef}
+              src={video.video_url} 
+              className="w-full h-full object-cover" 
+              muted 
+              loop 
+              playsInline 
+              poster={video.logo_url}
+              style={{ display: showPreview ? 'block' : 'none' }}
+            />
+            {!showPreview && (
+              <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                <img
+                  src={video.logo_url || '/api/placeholder/400/225'}
+                  alt="Video thumbnail"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                  <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
+                    <Play className="h-6 w-6 text-gray-900 ml-1" />
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Video controls overlay */}
+            {showPreview && (
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleVideoClick}
+                      className="bg-white/90 rounded-full p-2 hover:bg-white transition-colors"
+                    >
+                      {isPlaying ? (
+                        <Pause className="h-4 w-4 text-gray-900" />
+                      ) : (
+                        <Play className="h-4 w-4 text-gray-900 ml-0.5" />
+                      )}
+                    </button>
+                    <span className="text-white text-sm font-medium">
+                      {isPlaying ? 'Playing' : 'Paused'}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Eye className="h-4 w-4 text-white" />
+                    <span className="text-white text-sm">Preview</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="w-full h-full bg-gray-800 flex items-center justify-center">
             <div className="text-center p-4">
@@ -190,36 +270,23 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${currentData.progress || 0}%` }}
+                      style={{ width: `${video.progress || 0}%` }}
                     />
                   </div>
                   
-                  {/* Download progress details */}
-                  {downloadProgress && (
-                    <div className="text-xs text-gray-300 space-y-1">
-                      <div className="flex justify-between">
-                        <span>{formatFileSize(downloadProgress.downloadedBytes)} / {formatFileSize(downloadProgress.totalBytes)}</span>
-                        <span>{formatSpeed(downloadProgress.speed)}</span>
-                      </div>
-                      {downloadProgress.estimatedTimeRemaining > 0 && (
-                        <div>ETA: {Math.ceil(downloadProgress.estimatedTimeRemaining)}s</div>
-                      )}
-                    </div>
-                  )}
-                  
                   {/* File size info */}
-                  {currentData.file_size && (
+                  {video.file_size && (
                     <div className="text-xs text-gray-300">
-                      Size: {formatFileSize(currentData.file_size)}
+                      Size: {formatFileSize(video.file_size)}
                     </div>
                   )}
                 </div>
               )}
               
               {/* Error message */}
-              {currentData.status === 'failed' && currentData.error_message && (
-                <p className="text-xs text-red-400 mt-1 max-w-xs truncate" title={currentData.error_message}>
-                  {currentData.error_message}
+              {video.status === 'failed' && video.error_message && (
+                <p className="text-xs text-red-400 mt-1 max-w-xs truncate" title={video.error_message}>
+                  {video.error_message}
                 </p>
               )}
             </div>
@@ -228,7 +295,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
 
         {/* Status badges */}
         <div className="absolute top-2 left-2 flex space-x-1">
-          {currentData.storage_path && (
+          {video.storage_path && (
             <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
               <Cloud className="h-3 w-3" />
               <span>Stored</span>
@@ -240,12 +307,55 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
               <span>Integrity Issue</span>
             </div>
           )}
-          {currentData.integrity_verified === true && (
+          {video.integrity_verified === true && (
             <div className="flex items-center space-x-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
               <Shield className="h-3 w-3" />
               <span>Verified</span>
             </div>
           )}
+        </div>
+
+        {/* Action buttons overlay */}
+        <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {canDownload && (
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handleDownload}
+              className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-lg"
+              title="Download video"
+            >
+              <Download className="h-4 w-4" />
+            </motion.button>
+          )}
+          
+          {isProcessing && (
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handleRetry}
+              disabled={isRetrying}
+              className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-lg disabled:opacity-50"
+              title="Re-check status"
+            >
+              <RotateCcw className={`h-4 w-4 ${isRetrying ? 'animate-spin' : ''}`} />
+            </motion.button>
+          )}
+          
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-lg disabled:opacity-50"
+            title="Delete video"
+          >
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </motion.button>
         </div>
       </div>
       
@@ -253,24 +363,29 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
         <p className="font-semibold text-gray-800 truncate" title={video.message}>
           {video.message}
         </p>
-        <p className="text-sm text-gray-500 mt-1">
-          {new Date(video.created_at).toLocaleDateString()} • {video.video_type}
-        </p>
+        <div className="flex items-center justify-between mt-1">
+          <p className="text-sm text-gray-500">
+            {new Date(video.created_at).toLocaleDateString()} • {video.video_type}
+          </p>
+          {video.file_size && (
+            <p className="text-xs text-gray-400">
+              {formatFileSize(video.file_size)}
+            </p>
+          )}
+        </div>
         
         {/* Enhanced status display */}
-        <div className="flex items-center justify-between mt-4">
-          <div className={`flex items-center space-x-2 text-sm px-2 py-1 rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+        <div className="flex items-center justify-between mt-3">
+          <div className={`flex items-center space-x-2 text-sm px-3 py-1 rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
             {statusDisplay.icon}
             <span>{statusDisplay.text}</span>
           </div>
           
-          <div className="flex items-center space-x-2">
+          {/* Quick action buttons for mobile */}
+          <div className="flex items-center space-x-2 md:hidden">
             {canDownload && (
               <button 
-                onClick={() => {
-                  const filename = `video-${video.video_type}-${Date.now()}.mp4`;
-                  downloadVideoFromSupabase(currentData.video_url!, filename);
-                }}
+                onClick={handleDownload}
                 className="p-2 text-gray-500 hover:text-green-600 rounded-full hover:bg-gray-100 transition-colors"
                 title="Download video"
               >
@@ -280,7 +395,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
             
             {isProcessing && (
               <button 
-                onClick={() => onRetry(video)} 
+                onClick={handleRetry} 
                 disabled={isRetrying} 
                 className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
                 title="Re-check status"
@@ -290,7 +405,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
             )}
             
             <button 
-              onClick={() => onDelete(video.id)} 
+              onClick={handleDelete} 
               disabled={isDeleting}
               className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
               title="Delete video"
@@ -318,12 +433,16 @@ export function VideoLibrary() {
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [deletingVideos, setDeletingVideos] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
-  const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
-  const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
+  const [storageInfo, setStorageInfo] = useState<{
+    used_space: number;
+    total_space: number;
+    video_count: number;
+  } | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline'>('online');
   
   const initialFetchDone = useRef(false);
+  const realtimeChannelRef = useRef<any>(null);
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
 
@@ -349,37 +468,51 @@ export function VideoLibrary() {
     try {
       console.log('[VideoLibrary] Fetching videos for user:', user.id);
       
-      // Use the enhanced video tracker to get videos
-      const trackingData = await videoTracker.getUserVideos(user.id);
-      console.log('[VideoLibrary] Fetched tracking data:', trackingData.length);
+      const { data, error } = await supabase
+        .from('video_generations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[VideoLibrary] Error fetching videos:', error);
+        toast.error('Failed to load video library.');
+        return;
+      }
       
-      // Transform tracking data to StoredVideo format for compatibility
-      const transformedVideos: StoredVideo[] = trackingData.map(data => ({
-        id: data.id,
-        user_id: data.user_id,
-        video_id: data.video_id,
-        video_type: 'marketing', // Default, should be in tracking data
-        message: data.message || '',
-        video_url: data.video_url || '',
-        created_at: data.created_at,
-        status: data.status,
-        progress: data.progress,
-        download_progress: data.download_progress,
-        storage_progress: data.storage_progress,
-        file_size: data.file_size,
-        storage_path: data.storage_path,
-        error_message: data.error_message,
-        integrity_verified: data.integrity_verified
-      }));
+      console.log('[VideoLibrary] Fetched videos:', data?.length || 0);
+      
+      const fetchedVideos = (data || []).map(video => {
+        // Normalize status - treat null/undefined as 'pending'
+        const validStatuses = ['pending', 'processing', 'running', 'downloading', 'storing', 'completed', 'failed'];
+        let currentStatus = video.status;
+        
+        if (!currentStatus || !validStatuses.includes(currentStatus)) {
+          currentStatus = 'pending';
+          console.log(`[VideoLibrary] Normalized status for video ${video.id}: ${video.status} -> pending`);
+        }
 
-      setVideos(transformedVideos);
+        return {
+            ...video,
+            status: currentStatus,
+            storage_path: video.video_url ? extractStoragePath(video.video_url) : undefined
+        };
+      });
 
-      // Get storage info
-      const storage = await videoTracker.getStorageInfo(user.id);
-      setStorageInfo(storage);
+      setVideos(fetchedVideos);
+
+      // Calculate storage info
+      const totalSize = fetchedVideos.reduce((sum, video) => sum + (video.file_size || 0), 0);
+      const completedCount = fetchedVideos.filter(v => v.status === 'completed').length;
+      
+      setStorageInfo({
+        used_space: totalSize,
+        total_space: 1024 * 1024 * 1024, // 1GB default
+        video_count: completedCount
+      });
 
       // Start monitoring for videos that are still processing
-      transformedVideos.forEach(video => {
+      fetchedVideos.forEach(video => {
         if (['pending', 'processing', 'running', 'downloading', 'storing'].includes(video.status || '')) {
           console.log(`[VideoLibrary] Starting monitoring for video ${video.id} with status ${video.status}`);
           videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
@@ -402,7 +535,7 @@ export function VideoLibrary() {
 
       // Set up real-time subscription for video updates
       console.log('[VideoLibrary] Setting up real-time subscription');
-      const channel = supabase.channel('video-library-changes')
+      realtimeChannelRef.current = supabase.channel('video-library-changes')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'video_generations', filter: `user_id=eq.${user.id}` },
@@ -418,13 +551,22 @@ export function VideoLibrary() {
       
       return () => {
         console.log('[VideoLibrary] Cleaning up subscription');
-        supabase.removeChannel(channel);
+        if (realtimeChannelRef.current) {
+          supabase.removeChannel(realtimeChannelRef.current);
+        }
         // Stop all monitoring when component unmounts
         videoStatusManager.stopAllMonitoring();
-        videoTracker.cleanup();
       };
     }
   }, [user, fetchAndMonitorVideos]);
+
+  const extractStoragePath = (url: string): string | undefined => {
+    if (!url || !url.includes('supabase.co/storage/v1/object/public/generated-videos/')) {
+      return undefined;
+    }
+    const parts = url.split('/generated-videos/');
+    return parts.length > 1 ? parts[1] : undefined;
+  };
 
   const handleManualRetry = async (video: StoredVideo) => {
     if (!user || checkingStatus.has(video.id)) return;
@@ -472,9 +614,13 @@ export function VideoLibrary() {
       setVideos(prev => prev.filter(v => v.id !== videoId));
       
       // Update storage info
-      if (user) {
-        const storage = await videoTracker.getStorageInfo(user.id);
-        setStorageInfo(storage);
+      const deletedVideo = videos.find(v => v.id === videoId);
+      if (deletedVideo && storageInfo) {
+        setStorageInfo(prev => prev ? {
+          ...prev,
+          used_space: prev.used_space - (deletedVideo.file_size || 0),
+          video_count: prev.video_count - 1
+        } : null);
       }
     } catch (error: any) {
       toast.error(`Failed to delete video: ${error.message}`);
