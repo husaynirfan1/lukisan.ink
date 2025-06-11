@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Images, Crown, Video } from 'lucide-react';
+import { Sparkles, Images, Crown, Video, FileVideo } from 'lucide-react';
 import { LogoGenerator } from '../components/LogoGenerator';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { VideoGenerator } from '../components/video/VideoGenerator';
+import { VideoLibrary } from '../components/video/VideoLibrary';
 import { SubscriptionCard } from '../components/SubscriptionCard';
 import { useAuth } from '../hooks/useAuth';
 
-type DashboardTab = 'generate' | 'library' | 'video';
+type DashboardTab = 'generate' | 'library' | 'video' | 'video-library';
 
 export const Dashboard: React.FC = () => {
   const { user, getUserTier } = useAuth();
@@ -54,7 +55,14 @@ export const Dashboard: React.FC = () => {
       id: 'library' as DashboardTab,
       name: 'Library',
       icon: Images,
-      description: 'View and manage your generated content',
+      description: 'View and manage your generated logos',
+    },
+    {
+      id: 'video-library' as DashboardTab,
+      name: 'Videos',
+      icon: FileVideo,
+      description: 'View and manage your generated videos',
+      proOnly: true,
     },
   ];
 
@@ -116,8 +124,6 @@ export const Dashboard: React.FC = () => {
                   }
                 </p>
               </div>
-              
-             
             </div>
 
             {/* Tab Navigation */}
@@ -178,6 +184,8 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'video' && <VideoGenerator />}
           
           {activeTab === 'library' && <ImageLibrary />}
+          
+          {activeTab === 'video-library' && <VideoLibrary />}
         </motion.div>
       </div>
     </div>

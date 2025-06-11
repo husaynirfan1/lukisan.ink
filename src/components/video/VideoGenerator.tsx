@@ -25,19 +25,18 @@ import {
   generateTextToVideo, 
   generateImageToVideo, 
   checkVideoStatus,
-  // downloadVideo, // This might be handled locally or differently
   isVideoGenerationAvailable,
   validateImageFile,
   formatDuration,
-  type TextToVideoRequest, // Updated import
-  type ImageToVideoRequest, // Updated import
-  // type VideoGenerationResponse, // Replaced by TaskStatusResponse
-  // type VideoGenerationJob // Will be simplified or removed for active task
-  type CreateTaskResponse, // New from piapi.ts
-  type TaskStatusResponse // New from piapi.ts
+  type TextToVideoRequest,
+  type ImageToVideoRequest,
+  type CreateTaskResponse,
+  type TaskStatusResponse,
+  AspectRatio
 } from '../../lib/piapi';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
+import { videoStatusManager } from '../../lib/videoStatusManager';
 import toast from 'react-hot-toast';
 
 type GenerationMode = 'text-to-video' | 'image-to-video';
@@ -45,22 +44,19 @@ type GenerationMode = 'text-to-video' | 'image-to-video';
 export const VideoGenerator: React.FC = () => {
   const { user, canGenerate, getRemainingGenerations, refetchUser, getUserTier } = useAuth();
   const [mode, setMode] = useState<GenerationMode>('text-to-video');
-  // const [isGenerating, setIsGenerating] = useState(false); // Replaced by status
-  // const [generatedVideos, setGeneratedVideos] = useState<VideoGenerationJob[]>([]); // To be refactored for single active task or new history
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [debugAllowVideoTabForFree, setDebugAllowVideoTabForFree] = useState(false);
 
   // New state variables for polling UI
   const [status, setStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [videoId, setVideoId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Text-to-video state
   const [textPrompt, setTextPrompt] = useState('');
-  const [selectedPreset, setSelectedPreset] = useState<keyof typeof videoStylePresets>('product-showcase');
   
   // Image-to-video state
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -68,25 +64,12 @@ export const VideoGenerator: React.FC = () => {
   const [imagePrompt, setImagePrompt] = useState('');
   
   // Generation settings
-  const [duration, setDuration] = useState(15);
-  const [resolution, setResolution] = useState<'720p' | '1080p'>('1080p');
-  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
-  const [style, setStyle] = useState<'cinematic' | 'animated' | 'realistic' | 'artistic'>('realistic');
-  const [motionStrength, setMotionStrength] = useState<'low' | 'medium' | 'high'>('medium');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>(AspectRatio.The169);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
   const isAvailable = isVideoGenerationAvailable();
-
-  // useEffect for polling cleanup
-  useEffect(() => {
-      return () => {
-          if (pollingIntervalRef.current) {
-              clearInterval(pollingIntervalRef.current);
-          }
-      };
-  }, []);
 
   // Listen for debug events to allow video generation for free users
   React.useEffect(() => {
@@ -106,15 +89,6 @@ export const VideoGenerator: React.FC = () => {
       window.removeEventListener('debugAllowVideoTabForFree', handleDebugEvent as EventListener);
     };
   }, []);
-
-  // Handle preset selection
-  const handlePresetSelect = (presetKey: keyof typeof videoStylePresets) => {
-    const preset = videoStylePresets[presetKey];
-    setSelectedPreset(presetKey);
-    setDuration(preset.duration);
-    setAspectRatio(preset.aspectRatio);
-    setStyle(preset.style);
-  };
 
   // Handle image upload
   const handleImageUpload = useCallback((file: File) => {
@@ -156,150 +130,164 @@ export const VideoGenerator: React.FC = () => {
   }, []);
 
   // Upload image to get URL
-// Place this inside your VideoGenerator component
-
-const uploadImageForVideo = async (file: File): Promise<string> => {
+  const uploadImageForVideo = async (file: File): Promise<string> => {
     if (!user) throw new Error("User not authenticated for image upload.");
 
     const fileName = `${user.id}/${Date.now()}-${file.name}`;
     
     // Upload file to Supabase Storage in the 'video-inputs' bucket
-    // Make sure you have created a bucket named 'video-inputs' in your Supabase project.
     const { data, error } = await supabase.storage
-        .from('video-inputs')
-        .upload(fileName, file);
+      .from('video-inputs')
+      .upload(fileName, file);
 
     if (error) {
-        console.error("Supabase storage error:", error);
-        throw new Error("Failed to upload image.");
+      console.error("Supabase storage error:", error);
+      throw new Error("Failed to upload image.");
     }
     
     // Get the public URL of the uploaded file
     const { data: { publicUrl } } = supabase.storage
-        .from('video-inputs')
-        .getPublicUrl(fileName);
+      .from('video-inputs')
+      .getPublicUrl(fileName);
 
     if (!publicUrl) {
-        throw new Error("Could not get public URL for the uploaded image.");
+      throw new Error("Could not get public URL for the uploaded image.");
     }
 
     return publicUrl;
-};
-
-  const startPolling = (currentTaskId: string) => {
-      if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-      }
-
-      pollingIntervalRef.current = setInterval(async () => {
-          try {
-              const statusResponse = await checkVideoStatus(currentTaskId); // from piapi.ts
-              setProgress(statusResponse.progress || 0);
-
-              if (statusResponse.status === 'completed') {
-                  if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-                  setStatus('completed');
-                  setFinalVideoUrl(statusResponse.video_url || null); // Ensure it handles undefined video_url
-                  toast.success('Video generation completed!');
-              } else if (statusResponse.status === 'failed') {
-                  if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-                  setStatus('failed');
-                  setErrorMessage(statusResponse.error || 'Video generation failed.');
-                  toast.error(statusResponse.error || 'Video generation failed.');
-              } else if (statusResponse.status === 'processing' || statusResponse.status === 'pending') {
-                  setStatus(statusResponse.status); // Update status if it changes e.g. from pending to processing
-              }
-              // If status is still 'pending' or 'processing', do nothing more, interval continues.
-
-          } catch (error: any) {
-              if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-              setStatus('failed');
-              setErrorMessage(error.message || 'Error while checking video status.');
-              toast.error(error.message || 'Error while checking video status.');
-          }
-      }, 5000); // Poll every 5 seconds
   };
 
-  // Place this inside your VideoGenerator component
-
-const handleGenerateSubmit = async () => {
+  const handleGenerateSubmit = async () => {
     if (status === 'pending' || status === 'processing') {
-        toast.warn('A video generation is already in progress.');
-        return;
+      toast.warn('A video generation is already in progress.');
+      return;
     }
 
-    // Pre-generation checks remain the same...
+    // Pre-generation checks
     if (!user) {
-        toast.error('Please sign in to generate videos');
-        return;
+      toast.error('Please sign in to generate videos');
+      return;
     }
     if (!isProUser && !debugAllowVideoTabForFree) {
-        toast.error('Video generation is available for Creator users only');
-        return;
+      toast.error('Video generation is available for Creator users only');
+      return;
     }
-    // ... other checks for credits, prompts, etc.
+    if (!canGenerate()) {
+      toast.error('No credits remaining');
+      return;
+    }
+    if (mode === 'text-to-video' && !textPrompt.trim()) {
+      toast.error('Please enter a text prompt');
+      return;
+    }
+    if (mode === 'image-to-video' && !selectedImage) {
+      toast.error('Please select an image');
+      return;
+    }
 
     // Reset state for a new job
     setStatus('pending');
     setTaskId(null);
+    setVideoId(null);
     setProgress(0);
     setFinalVideoUrl(null);
     setErrorMessage('');
-    if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-    }
 
     try {
-        let createTaskResponse: CreateTaskResponse;
+      let createTaskResponse: CreateTaskResponse;
+      let generatedVideoId: string;
 
-        if (mode === 'text-to-video') {
-            // Build the request using only the parameters our new API function uses
-            const request = {
-                prompt: textPrompt,
-                aspectRatio: aspectRatio,
-                // negativePrompt: // You can add a state for this if you want a negative prompt input
-            };
-            createTaskResponse = await generateTextToVideo(request);
-        } else { // image-to-video
-            if (!selectedImage) throw new Error("Image not selected for image-to-video");
-            
-            // Upload the image to get a real public URL
-            const imageUrl = await uploadImageForVideo(selectedImage);
+      if (mode === 'text-to-video') {
+        const request: TextToVideoRequest = {
+          prompt: textPrompt,
+          aspectRatio: aspectRatio,
+        };
+        createTaskResponse = await generateTextToVideo(request);
+        generatedVideoId = `txt2vid_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      } else {
+        if (!selectedImage) throw new Error("Image not selected for image-to-video");
+        
+        const imageUrl = await uploadImageForVideo(selectedImage);
+        const request: ImageToVideoRequest = {
+          imageUrl: imageUrl,
+          prompt: imagePrompt || undefined,
+          aspectRatio: aspectRatio,
+        };
+        createTaskResponse = await generateImageToVideo(request);
+        generatedVideoId = `img2vid_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
 
-            // Build the request using only the parameters our new API function uses
-            const request = {
-                imageUrl: imageUrl,
-                prompt: imagePrompt || undefined,
-                aspectRatio: aspectRatio,
-                // negativePrompt: // Add if you have a state for this
-            };
-            createTaskResponse = await generateImageToVideo(request);
+      setTaskId(createTaskResponse.task_id);
+      setVideoId(generatedVideoId);
+      setStatus('processing');
+
+      // Save to database
+      const { error: dbError } = await supabase
+        .from('video_generations')
+        .insert({
+          user_id: user.id,
+          video_type: mode === 'text-to-video' ? 'text-to-video' : 'image-to-video',
+          message: mode === 'text-to-video' ? textPrompt : (imagePrompt || 'Image animation'),
+          video_id: generatedVideoId,
+          task_id: createTaskResponse.task_id,
+          status: 'pending',
+          progress: 0
+        });
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        toast.error('Failed to save video generation record');
+      }
+
+      // Update user credits
+      if (!debugAllowVideoTabForFree) {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            credits_remaining: Math.max(0, user.credits_remaining - 1),
+          })
+          .eq('id', user.id);
+
+        if (updateError) {
+          console.error('Update error:', updateError);
+        } else {
+          refetchUser();
         }
+      }
 
-        setTaskId(createTaskResponse.task_id);
-        setStatus('processing'); // Task submitted, now processing
+      toast.success('Video generation started!');
 
-        // The rest of the function (database logic, credit deduction) is good and can remain.
-        // ... (Supabase insert, credit update, toasts, etc.)
+      // Start monitoring the video status
+      videoStatusManager.startMonitoring(generatedVideoId, createTaskResponse.task_id, user.id);
 
-        startPolling(createTaskResponse.task_id);
+      // Set up status update listener
+      videoStatusManager.onStatusUpdate((update) => {
+        if (update.videoId === generatedVideoId) {
+          setStatus(update.status);
+          setProgress(update.progress || 0);
+          if (update.videoUrl) {
+            setFinalVideoUrl(update.videoUrl);
+          }
+          if (update.error) {
+            setErrorMessage(update.error);
+          }
+        }
+      });
 
     } catch (error: any) {
-        setStatus('failed');
-        setErrorMessage(error.message || 'Failed to submit video generation task.');
-        toast.error(error.message || 'Failed to submit video generation task.');
+      setStatus('failed');
+      setErrorMessage(error.message || 'Failed to submit video generation task.');
+      toast.error(error.message || 'Failed to submit video generation task.');
     }
-};
+  };
 
-  // Download video (This function might need to be adapted or removed if piapi.ts changes)
-  // For now, assume it's a local helper if needed for the final video URL.
+  // Download video
   const handleDownloadLocal = async (videoUrl: string | null, filenamePrefix: string = 'video') => {
     if (!videoUrl) {
       toast.error('Video not available for download');
       return;
     }
     try {
-      // Use a generic download approach if piapi.ts downloadVideo is removed/changed
       const response = await fetch(videoUrl);
       if (!response.ok) throw new Error('Network response was not ok.');
       const blob = await response.blob();
@@ -309,28 +297,13 @@ const handleGenerateSubmit = async () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(link.href); // Clean up
+      URL.revokeObjectURL(link.href);
       toast.success('Video downloaded successfully!');
     } catch (error) {
       console.error('Download error:', error);
       toast.error('Failed to download video.');
     }
   };
-
-  // const handleDownload = async (job: VideoGenerationJob) => { // Old handleDownload
-  //    if (!job.videoUrl) {
-  //      toast.error('Video not available for download');
-  //      return;
-  //   }
-  //   try {
-  //     const filename = `video-${job.type}-${Date.now()}.mp4`;
-  //     await downloadVideo(job.videoUrl, filename); // This downloadVideo was from old piapi
-  //     toast.success('Video downloaded successfully!');
-  //   } catch (error) {
-  //     console.error('Download error:', error);
-  //     toast.error('Failed to download video');
-  //   }
-  // };
 
   if (!user) {
     return (
@@ -419,7 +392,6 @@ const handleGenerateSubmit = async () => {
                   <span className="font-medium text-sm">Debug Mode</span>
                 </div>
               )}
-             
             </div>
           </div>
         </div>
@@ -481,9 +453,6 @@ const handleGenerateSubmit = async () => {
               >
                 <h3 className="text-lg font-semibold text-gray-900">Text to Video Generation</h3>
                 
-                {/* Style Presets */}
-                
-
                 {/* Text Prompt */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -585,67 +554,16 @@ const handleGenerateSubmit = async () => {
                     </span>
                   </div>
                 </div>
-
-                {/* Motion Strength */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Motion Strength
-                  </label>
-                  
-                </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Advanced Settings */}
+        {/* Video Settings */}
         <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Video Settings</h3>
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900"
-            >
-              <Settings className="h-4 w-4" />
-              <span>{showAdvanced ? 'Hide' : 'Show'} Advanced</span>
-            </button>
-          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Video Settings</h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Duration */}
-           
-
-            {/* Resolution */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Resolution
-              </label>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setResolution('720p')}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-lg transition-colors ${
-                    resolution === '720p'
-                      ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
-                      : 'bg-white border border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <Monitor className="h-4 w-4" />
-                  <span>720p</span>
-                </button>
-                <button
-                  onClick={() => setResolution('1080p')}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-lg transition-colors ${
-                    resolution === '1080p'
-                      ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
-                      : 'bg-white border border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <Monitor className="h-4 w-4" />
-                  <span>1080p</span>
-                </button>
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Aspect Ratio */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -653,9 +571,9 @@ const handleGenerateSubmit = async () => {
               </label>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => setAspectRatio('16:9')}
+                  onClick={() => setAspectRatio(AspectRatio.The169)}
                   className={`flex-1 flex items-center justify-center space-x-1 py-2 px-2 rounded-lg transition-colors ${
-                    aspectRatio === '16:9'
+                    aspectRatio === AspectRatio.The169
                       ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
                       : 'bg-white border border-gray-300 hover:border-gray-400'
                   }`}
@@ -664,9 +582,9 @@ const handleGenerateSubmit = async () => {
                   <span className="text-xs">16:9</span>
                 </button>
                 <button
-                  onClick={() => setAspectRatio('9:16')}
+                  onClick={() => setAspectRatio(AspectRatio.The916)}
                   className={`flex-1 flex items-center justify-center space-x-1 py-2 px-2 rounded-lg transition-colors ${
-                    aspectRatio === '9:16'
+                    aspectRatio === AspectRatio.The916
                       ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
                       : 'bg-white border border-gray-300 hover:border-gray-400'
                   }`}
@@ -674,41 +592,9 @@ const handleGenerateSubmit = async () => {
                   <Smartphone className="h-3 w-3" />
                   <span className="text-xs">9:16</span>
                 </button>
-                <button
-                  onClick={() => setAspectRatio('1:1')}
-                  className={`flex-1 flex items-center justify-center space-x-1 py-2 px-2 rounded-lg transition-colors ${
-                    aspectRatio === '1:1'
-                      ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
-                      : 'bg-white border border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <Square className="h-3 w-3" />
-                  <span className="text-xs">1:1</span>
-                </button>
               </div>
             </div>
           </div>
-
-          {/* Advanced Settings */}
-          <AnimatePresence>
-            {showAdvanced && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-6 pt-6 border-t border-gray-200"
-              >
-                {mode === 'text-to-video' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Visual Style
-                    </label>
-                   
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* Generate Button and Status Display */}
@@ -784,12 +670,8 @@ const handleGenerateSubmit = async () => {
                   setStatus('idle');
                   setFinalVideoUrl(null);
                   setTaskId(null);
+                  setVideoId(null);
                   setProgress(0);
-                  // Optionally reset prompts
-                  // setTextPrompt('');
-                  // setImagePrompt('');
-                  // setSelectedImage(null);
-                  // setImagePreview(null);
                 }}
                 className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
               >
@@ -799,14 +681,6 @@ const handleGenerateSubmit = async () => {
             </div>
           </div>
         ) : null}
-
-        {/* Generated Videos History (Commented out for now to focus on active task) */}
-        {/* {generatedVideos.length > 0 && (
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Generated Videos</h3>
-            { ... existing map logic ... }
-          </div>
-        )} */}
       </div>
     </div>
   );
