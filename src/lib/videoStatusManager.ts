@@ -1,7 +1,6 @@
 import { supabase } from './supabase';
 import { checkVideoStatus, type TaskStatusResponse } from './piapi';
-import { enhancedVideoStorage } from './enhancedVideoStorage';
-import { videoTracker } from './videoTracker';
+import { storeVideoInSupabase } from './videoStorage';
 import toast from 'react-hot-toast';
 
 export interface VideoStatusUpdate {
@@ -66,24 +65,20 @@ export class VideoStatusManager {
       // Reset error counter on successful check
       this.consecutiveErrors.set(videoId, 0);
 
-      // Update the video tracker with current status
-      await videoTracker.updateVideoStatus(videoId, {
-        status: statusResponse.status,
-        progress: statusResponse.progress || 0,
-        error_message: statusResponse.error
-      });
+      // Update the database with the current status
+      await this.updateVideoStatus(videoId, statusResponse);
 
       if (statusResponse.status === 'completed' && statusResponse.video_url) {
         // Stop polling this task as it's completed
         this.stopMonitoring(videoId);
         console.log(`[VideoStatusManager] Video ${videoId} completed, processing video storage`);
         
-        // Process the completed video with enhanced storage
+        // Process the completed video
         await this.handleVideoCompletion(videoId, statusResponse.video_url, userId, taskId);
       } else if (statusResponse.status === 'failed') {
         this.stopMonitoring(videoId);
         console.log(`[VideoStatusManager] Video ${videoId} failed:`, statusResponse.error);
-        await videoTracker.markVideoFailed(videoId, statusResponse.error || 'Unknown error');
+        await this.handleVideoFailure(videoId, statusResponse.error || 'Unknown error');
       }
       // For other statuses (pending, processing), continue polling
 
@@ -96,44 +91,108 @@ export class VideoStatusManager {
       // If we've had too many consecutive errors, stop monitoring and mark as failed
       if (errorCount >= this.maxConsecutiveErrors) {
         this.stopMonitoring(videoId);
-        await videoTracker.markVideoFailed(videoId, `Status check failed after ${errorCount} attempts: ${error.message}`);
+        await this.handleVideoFailure(videoId, `Status check failed after ${errorCount} attempts: ${error.message}`);
         toast.error(`Video ${videoId} monitoring failed after multiple attempts`);
       }
       // Otherwise, continue polling - the error might be temporary
     }
   }
 
+  private async updateVideoStatus(videoId: string, statusResponse: TaskStatusResponse): Promise<void> {
+    try {
+      const updateData: any = {
+        status: statusResponse.status,
+        progress: statusResponse.progress || 0
+      };
+
+      if (statusResponse.error) {
+        updateData.error_message = statusResponse.error;
+      }
+
+      const { error } = await supabase
+        .from('video_generations')
+        .update(updateData)
+        .eq('id', videoId);
+
+      if (error) {
+        console.error(`[VideoStatusManager] Error updating video status:`, error);
+      }
+    } catch (error) {
+      console.error(`[VideoStatusManager] Error updating video status:`, error);
+    }
+  }
+
   /**
-   * Handle video completion using the enhanced storage system
+   * Handle video completion by downloading and storing the video
    */
   private async handleVideoCompletion(videoId: string, piapiVideoUrl: string, userId: string, taskId: string): Promise<void> {
     try {
-      console.log(`[VideoStatusManager] Processing completed video ${videoId} with enhanced storage`);
+      console.log(`[VideoStatusManager] Processing completed video ${videoId}`);
       
+      // Update status to show we're processing the storage
+      await supabase
+        .from('video_generations')
+        .update({ 
+          status: 'downloading',
+          progress: 90,
+          error_message: 'Downloading and saving video to library...'
+        })
+        .eq('id', videoId);
+
       // Generate filename for the video
       const timestamp = Date.now();
       const filename = `video-${taskId}-${timestamp}`;
       
-      console.log(`[VideoStatusManager] Starting enhanced video storage...`);
+      console.log(`[VideoStatusManager] Storing video in Supabase Storage...`);
       
-      // Use the enhanced video storage system with progress tracking
-      const storeResult = await enhancedVideoStorage.storeVideoWithTracking(
-        piapiVideoUrl,
-        userId,
-        filename,
-        videoId
-      );
+      // Store the video in Supabase Storage
+      const storeResult = await storeVideoInSupabase(piapiVideoUrl, userId, filename);
       
       if (!storeResult.success) {
         throw new Error(storeResult.error || 'Failed to store video');
       }
 
-      console.log(`[VideoStatusManager] Enhanced video storage completed successfully`);
+      console.log(`[VideoStatusManager] Video stored successfully:`, storeResult.publicUrl);
+
+      // Update the database with the final video URL and mark as completed
+      const { error: updateError } = await supabase
+        .from('video_generations')
+        .update({
+          video_url: storeResult.publicUrl,
+          storage_path: storeResult.storagePath,
+          status: 'completed',
+          progress: 100,
+          error_message: null
+        })
+        .eq('id', videoId);
+
+      if (updateError) {
+        throw new Error(`Database update failed: ${updateError.message}`);
+      }
+
+      console.log(`[VideoStatusManager] Successfully processed video ${videoId}`);
       toast.success('Video generation completed and saved to library!');
 
     } catch (error: any) {
       console.error(`[VideoStatusManager] Error processing completed video:`, error);
-      await videoTracker.markVideoFailed(videoId, `Failed to save to library: ${error.message}`);
+      await this.handleVideoFailure(videoId, `Failed to save to library: ${error.message}`);
+    }
+  }
+
+  private async handleVideoFailure(videoId: string, errorMessage: string): Promise<void> {
+    try {
+      await supabase
+        .from('video_generations')
+        .update({ 
+          status: 'failed', 
+          error_message: errorMessage,
+          progress: 0
+        })
+        .eq('id', videoId);
+        
+      toast.error(`Video generation failed: ${errorMessage}`);
+    } catch (error) {
+      console.error(`[VideoStatusManager] Error handling video failure:`, error);
     }
   }
 
