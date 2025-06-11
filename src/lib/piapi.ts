@@ -14,6 +14,7 @@ export enum TaskType {
 export enum AspectRatio {
     The169 = "16:9",
     The916 = "9:16",
+    The11 = "1:1",
 }
 
 // The main Input interface is now much cleaner.
@@ -35,7 +36,7 @@ export interface ApidogRequestPayload {
 // REFACTORED API SERVICE
 // =======================================================================
 
-const PIAPI_BASE_URL = 'https://api.piapi.ai'; // IMPORTANT: This might need to be updated.
+const PIAPI_BASE_URL = 'https://api.piapi.ai';
 const PIAPI_API_KEY = import.meta.env.VITE_PIAPI_API_KEY;
 
 if (!PIAPI_API_KEY) {
@@ -45,6 +46,7 @@ if (!PIAPI_API_KEY) {
 // Response from creating a task
 export interface CreateTaskResponse {
   task_id: string;
+  status?: string;
 }
 
 // Response from the status check call
@@ -68,7 +70,7 @@ const postToApi = async (payload: ApidogRequestPayload): Promise<CreateTaskRespo
     if (!PIAPI_API_KEY) {
         throw new Error('PiAPI key not configured');
     }
-    // IMPORTANT: Confirm this endpoint from the API documentation.
+    
     const endpoint = `${PIAPI_BASE_URL}/api/v1/task`;
 
     const response = await fetch(endpoint, {
@@ -103,7 +105,7 @@ export const generateTextToVideo = async (request: TextToVideoRequest): Promise<
         task_type: TaskType.Txt2Video,
         input: {
             prompt: request.prompt,
-            aspect_ratio: request.aspectRatio,
+            aspect_ratio: request.aspectRatio || AspectRatio.The169,
             negative_prompt: request.negativePrompt,
         }
     };
@@ -125,9 +127,9 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
         model: API_MODEL,
         task_type: TaskType.Img2Video,
         input: {
-            prompt: request.prompt || 'Animate this image',
+            prompt: request.prompt || 'Animate this image with natural motion',
             image: request.imageUrl,
-            aspect_ratio: request.aspectRatio,
+            aspect_ratio: request.aspectRatio || AspectRatio.The169,
             negative_prompt: request.negativePrompt,
         }
     };
@@ -136,16 +138,20 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
 };
 
 /**
- * CRITICAL: This function is a placeholder. Its endpoint URL must be found in the
- * API documentation and implemented. The UI update depends on this function.
+ * Check the status of a video generation task
  */
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
     if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
 
-    const endpoint = `${PIAPI_BASE_URL}/v2/query-task/${taskId}`; // GUESS - REPLACE WITH CORRECT ENDPOINT
+    const endpoint = `${PIAPI_BASE_URL}/v2/query-task/${taskId}`;
 
-    const response = await fetch(endpoint, { headers: { 'x-api-key': PIAPI_API_KEY } });
-    if (!response.ok) throw new Error(`Status check failed: ${response.statusText}`);
+    const response = await fetch(endpoint, { 
+        headers: { 'x-api-key': PIAPI_API_KEY } 
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Status check failed: ${response.statusText}`);
+    }
     
     const data = await response.json();
     return {
@@ -159,8 +165,23 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
 };
 
 // =======================================================================
-// UTILITY FUNCTIONS (Restored)
+// UTILITY FUNCTIONS
 // =======================================================================
+
+// Convert file to base64
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove the data:image/...;base64, prefix
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = error => reject(error);
+  });
+};
 
 // Download video
 export const downloadVideo = async (videoUrl: string, filename: string): Promise<void> => {
@@ -207,4 +228,47 @@ export const validateImageFile = (file: File): { valid: boolean; error?: string 
   }
 
   return { valid: true };
+};
+
+// Request notification permission
+export const requestNotificationPermission = async (): Promise<boolean> => {
+  if (!('Notification' in window)) {
+    console.warn('This browser does not support notifications');
+    return false;
+  }
+
+  if (Notification.permission === 'granted') {
+    return true;
+  }
+
+  if (Notification.permission === 'denied') {
+    return false;
+  }
+
+  const permission = await Notification.requestPermission();
+  return permission === 'granted';
+};
+
+// Show browser notification
+export const showVideoCompleteNotification = (videoTitle: string, onClick?: () => void) => {
+  if (Notification.permission === 'granted') {
+    const notification = new Notification('Your video is ready!', {
+      body: `${videoTitle} has been generated successfully.`,
+      icon: '/favicon.png',
+      badge: '/favicon.png',
+      tag: 'video-complete',
+      requireInteraction: true,
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      onClick?.();
+      notification.close();
+    };
+
+    // Auto-close after 10 seconds
+    setTimeout(() => {
+      notification.close();
+    }, 10000);
+  }
 };

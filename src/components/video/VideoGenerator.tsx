@@ -19,7 +19,9 @@ import {
   CheckCircle,
   RefreshCw,
   Wand2,
-  Crown
+  Crown,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import { 
   generateTextToVideo, 
@@ -28,6 +30,10 @@ import {
   isVideoGenerationAvailable,
   validateImageFile,
   formatDuration,
+  fileToBase64,
+  requestNotificationPermission,
+  showVideoCompleteNotification,
+  AspectRatio,
   type TextToVideoRequest,
   type ImageToVideoRequest,
   type CreateTaskResponse,
@@ -48,12 +54,14 @@ export const VideoGenerator: React.FC = () => {
   const [mode, setMode] = useState<GenerationMode>('text-to-video');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [debugAllowVideoTabForFree, setDebugAllowVideoTabForFree] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   // New state variables for polling UI
   const [status, setStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
+  const [finalThumbnailUrl, setFinalThumbnailUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -67,11 +75,8 @@ export const VideoGenerator: React.FC = () => {
   const [imagePrompt, setImagePrompt] = useState('');
   
   // Generation settings
-  const [duration, setDuration] = useState(15);
-  const [resolution, setResolution] = useState<'720p' | '1080p'>('1080p');
-  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
-  const [style, setStyle] = useState<'cinematic' | 'animated' | 'realistic' | 'artistic'>('realistic');
-  const [motionStrength, setMotionStrength] = useState<'low' | 'medium' | 'high'>('medium');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>(AspectRatio.The169);
+  const [negativePrompt, setNegativePrompt] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const userTier = getUserTier();
@@ -94,6 +99,13 @@ export const VideoGenerator: React.FC = () => {
               clearInterval(pollingIntervalRef.current);
           }
       };
+  }, []);
+
+  // Check notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationsEnabled(Notification.permission === 'granted');
+    }
   }, []);
 
   // Listen for debug events to allow video generation for free users
@@ -119,15 +131,6 @@ export const VideoGenerator: React.FC = () => {
   const handlePresetSelect = (preset: VideoPreset) => {
     setSelectedPreset(preset);
     setTextPrompt(preset.prompt);
-    setDuration(preset.duration);
-    // You can also set other parameters based on the preset
-    if (preset.category === 'product') {
-      setStyle('cinematic');
-    } else if (preset.category === 'explainer') {
-      setStyle('animated');
-    } else {
-      setStyle('realistic');
-    }
   };
 
   // Handle image upload
@@ -195,6 +198,23 @@ export const VideoGenerator: React.FC = () => {
     return publicUrl;
   };
 
+  // Handle notification permission request
+  const handleNotificationToggle = async () => {
+    if (notificationsEnabled) {
+      // Can't revoke permission programmatically, just update state
+      setNotificationsEnabled(false);
+      toast.info('Notifications disabled for this session');
+    } else {
+      const granted = await requestNotificationPermission();
+      setNotificationsEnabled(granted);
+      if (granted) {
+        toast.success('Notifications enabled! You\'ll be notified when your video is ready.');
+      } else {
+        toast.error('Notification permission denied. You can enable it in your browser settings.');
+      }
+    }
+  };
+
   const startPolling = (currentTaskId: string) => {
       if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
@@ -209,7 +229,27 @@ export const VideoGenerator: React.FC = () => {
                   if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
                   setStatus('completed');
                   setFinalVideoUrl(statusResponse.video_url || null);
+                  setFinalThumbnailUrl(statusResponse.thumbnail_url || null);
+                  
+                  // Update database with final video URL
+                  if (statusResponse.video_url) {
+                    await supabase
+                      .from('video_generations')
+                      .update({ video_url: statusResponse.video_url })
+                      .eq('video_id', currentTaskId);
+                  }
+                  
                   toast.success('Video generation completed!');
+                  
+                  // Show browser notification if enabled
+                  if (notificationsEnabled) {
+                    const videoTitle = mode === 'text-to-video' ? 'Text Video' : 'Image Animation';
+                    showVideoCompleteNotification(videoTitle, () => {
+                      // Navigate to library or focus on the video
+                      document.getElementById('completed-video')?.scrollIntoView({ behavior: 'smooth' });
+                    });
+                  }
+                  
               } else if (statusResponse.status === 'failed') {
                   if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
                   setStatus('failed');
@@ -263,11 +303,18 @@ export const VideoGenerator: React.FC = () => {
       return;
     }
 
+    // Request notification permission if not already granted
+    if (!notificationsEnabled && 'Notification' in window) {
+      const granted = await requestNotificationPermission();
+      setNotificationsEnabled(granted);
+    }
+
     // Reset state for a new job
     setStatus('pending');
     setTaskId(null);
     setProgress(0);
     setFinalVideoUrl(null);
+    setFinalThumbnailUrl(null);
     setErrorMessage('');
     if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
@@ -277,9 +324,10 @@ export const VideoGenerator: React.FC = () => {
         let createTaskResponse: CreateTaskResponse;
 
         if (mode === 'text-to-video') {
-            const request = {
+            const request: TextToVideoRequest = {
                 prompt: textPrompt,
                 aspectRatio: aspectRatio,
+                negativePrompt: negativePrompt || undefined,
             };
             createTaskResponse = await generateTextToVideo(request);
         } else {
@@ -287,10 +335,11 @@ export const VideoGenerator: React.FC = () => {
             
             const imageUrl = await uploadImageForVideo(selectedImage);
 
-            const request = {
+            const request: ImageToVideoRequest = {
                 imageUrl: imageUrl,
-                prompt: imagePrompt || undefined,
+                prompt: imagePrompt || 'Animate this image with natural motion',
                 aspectRatio: aspectRatio,
+                negativePrompt: negativePrompt || undefined,
             };
             createTaskResponse = await generateImageToVideo(request);
         }
@@ -298,7 +347,7 @@ export const VideoGenerator: React.FC = () => {
         setTaskId(createTaskResponse.task_id);
         setStatus('processing');
 
-        // Save to database
+        // Save to database with processing status
         const { error: dbError } = await supabase
           .from('video_generations')
           .insert({
@@ -475,6 +524,27 @@ export const VideoGenerator: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-2">
+              {/* Notification Toggle */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleNotificationToggle}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                  notificationsEnabled 
+                    ? 'bg-green-100 text-green-800 border border-green-300' 
+                    : 'bg-gray-100 text-gray-600 border border-gray-300'
+                }`}
+              >
+                {notificationsEnabled ? (
+                  <Bell className="h-4 w-4" />
+                ) : (
+                  <BellOff className="h-4 w-4" />
+                )}
+                <span className="text-sm font-medium">
+                  {notificationsEnabled ? 'Notifications On' : 'Enable Notifications'}
+                </span>
+              </motion.button>
+
               {debugAllowVideoTabForFree && (
                 <div className="flex items-center space-x-2 px-3 py-2 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
                   <span className="text-sm">🔓</span>
@@ -696,37 +766,6 @@ export const VideoGenerator: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Resolution */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Resolution
-              </label>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setResolution('720p')}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-lg transition-colors ${
-                    resolution === '720p'
-                      ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
-                      : 'bg-white border border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <Monitor className="h-4 w-4" />
-                  <span>720p</span>
-                </button>
-                <button
-                  onClick={() => setResolution('1080p')}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-lg transition-colors ${
-                    resolution === '1080p'
-                      ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
-                      : 'bg-white border border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <Monitor className="h-4 w-4" />
-                  <span>1080p</span>
-                </button>
-              </div>
-            </div>
-
             {/* Aspect Ratio */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -734,9 +773,9 @@ export const VideoGenerator: React.FC = () => {
               </label>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => setAspectRatio('16:9')}
+                  onClick={() => setAspectRatio(AspectRatio.The169)}
                   className={`flex-1 flex items-center justify-center space-x-1 py-2 px-2 rounded-lg transition-colors ${
-                    aspectRatio === '16:9'
+                    aspectRatio === AspectRatio.The169
                       ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
                       : 'bg-white border border-gray-300 hover:border-gray-400'
                   }`}
@@ -745,9 +784,9 @@ export const VideoGenerator: React.FC = () => {
                   <span className="text-xs">16:9</span>
                 </button>
                 <button
-                  onClick={() => setAspectRatio('9:16')}
+                  onClick={() => setAspectRatio(AspectRatio.The916)}
                   className={`flex-1 flex items-center justify-center space-x-1 py-2 px-2 rounded-lg transition-colors ${
-                    aspectRatio === '9:16'
+                    aspectRatio === AspectRatio.The916
                       ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
                       : 'bg-white border border-gray-300 hover:border-gray-400'
                   }`}
@@ -756,9 +795,9 @@ export const VideoGenerator: React.FC = () => {
                   <span className="text-xs">9:16</span>
                 </button>
                 <button
-                  onClick={() => setAspectRatio('1:1')}
+                  onClick={() => setAspectRatio(AspectRatio.The11)}
                   className={`flex-1 flex items-center justify-center space-x-1 py-2 px-2 rounded-lg transition-colors ${
-                    aspectRatio === '1:1'
+                    aspectRatio === AspectRatio.The11
                       ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-500'
                       : 'bg-white border border-gray-300 hover:border-gray-400'
                   }`}
@@ -768,24 +807,40 @@ export const VideoGenerator: React.FC = () => {
                 </button>
               </div>
             </div>
-
-            {/* Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Duration
-              </label>
-              <select
-                value={duration}
-                onChange={(e) => setDuration(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              >
-                <option value={15}>15 seconds</option>
-                <option value={30}>30 seconds</option>
-                <option value={45}>45 seconds</option>
-                <option value={60}>60 seconds</option>
-              </select>
-            </div>
           </div>
+
+          {/* Advanced Settings */}
+          <AnimatePresence>
+            {showAdvanced && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-6 pt-6 border-t border-gray-200"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Negative Prompt (Optional)
+                  </label>
+                  <textarea
+                    value={negativePrompt}
+                    onChange={(e) => setNegativePrompt(e.target.value)}
+                    placeholder="Describe what you don't want in the video (e.g., 'blurry, low quality, distorted')"
+                    className="w-full h-20 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                    maxLength={200}
+                  />
+                  <div className="flex justify-between items-center mt-2">
+                    <p className="text-sm text-gray-500">
+                      Help improve video quality by specifying what to avoid
+                    </p>
+                    <span className="text-sm text-gray-400">
+                      {negativePrompt.length}/200
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Generate Button and Status Display */}
@@ -845,13 +900,23 @@ export const VideoGenerator: React.FC = () => {
               ></div>
             </div>
             <p className="text-sm text-blue-700 mt-2">{progress}% complete</p>
+            {notificationsEnabled && (
+              <p className="text-xs text-blue-600 mt-2">
+                🔔 You'll be notified when your video is ready
+              </p>
+            )}
           </div>
         ) : status === 'completed' && finalVideoUrl ? (
-          <div className="text-center p-6 bg-green-50 rounded-xl border border-green-200">
+          <div id="completed-video" className="text-center p-6 bg-green-50 rounded-xl border border-green-200">
             <CheckCircle className="h-10 w-10 text-green-600 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-green-900 mb-4">Generation Complete!</h3>
-            <div className="aspect-video bg-gray-800 rounded-lg mb-4 overflow-hidden shadow-lg">
-              <video src={finalVideoUrl} controls className="w-full h-full object-contain" />
+            <div className="aspect-video bg-gray-800 rounded-lg mb-4 overflow-hidden shadow-lg max-w-2xl mx-auto">
+              <video 
+                src={finalVideoUrl} 
+                controls 
+                className="w-full h-full object-contain"
+                poster={finalThumbnailUrl}
+              />
             </div>
             <div className="flex space-x-3 justify-center">
               <motion.button
@@ -869,9 +934,14 @@ export const VideoGenerator: React.FC = () => {
                 onClick={() => {
                   setStatus('idle');
                   setFinalVideoUrl(null);
+                  setFinalThumbnailUrl(null);
                   setTaskId(null);
                   setProgress(0);
                   setSelectedPreset(null);
+                  setSelectedImage(null);
+                  setImagePreview(null);
+                  setTextPrompt('');
+                  setImagePrompt('');
                 }}
                 className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
               >
