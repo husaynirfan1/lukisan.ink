@@ -344,74 +344,100 @@ export const VideoGenerator: React.FC = () => {
             createTaskResponse = await generateImageToVideo(request);
         }
 
-        setTaskId(createTaskResponse.task_id);
+        // Validate that we received a valid task ID
+        if (!createTaskResponse || !createTaskResponse.task_id) {
+            throw new Error('Video generation service did not return a valid task ID. Please try again.');
+        }
+
+        // Additional validation to ensure task_id is not empty or just whitespace
+        if (typeof createTaskResponse.task_id !== 'string' || createTaskResponse.task_id.trim() === '') {
+            throw new Error('Invalid task ID received from video generation service. Please try again.');
+        }
+
+        const validTaskId = createTaskResponse.task_id.trim();
+        setTaskId(validTaskId);
         setStatus('processing');
 
-        // Save to database with processing status
-        const { error: dbError } = await supabase
-          .from('video_generations')
-          .insert({
-            user_id: user.id,
-            video_type: mode === 'text-to-video' ? 'marketing' : 'welcome',
-            message: mode === 'text-to-video' ? textPrompt : imagePrompt,
-            video_id: createTaskResponse.task_id,
-            video_url: '', // Will be updated when completed
-          });
+        // Save to database with processing status - only proceed if we have a valid task ID
+        try {
+            const { error: dbError } = await supabase
+              .from('video_generations')
+              .insert({
+                user_id: user.id,
+                video_type: mode === 'text-to-video' ? 'marketing' : 'welcome',
+                message: mode === 'text-to-video' ? textPrompt : imagePrompt,
+                video_id: validTaskId, // Use the validated task ID
+                video_url: '', // Will be updated when completed
+              });
 
-        if (dbError) {
-          console.error('Database error:', dbError);
+            if (dbError) {
+              console.error('Database error:', dbError);
+              // Don't throw here - the video generation can still proceed
+              toast.warn('Video generation started but could not be saved to history.');
+            }
+        } catch (dbError) {
+            console.error('Database insertion failed:', dbError);
+            // Don't throw here - the video generation can still proceed
+            toast.warn('Video generation started but could not be saved to history.');
         }
 
         // Update user credits - DEDUCT 3 CREDITS
-        if (isProUser) {
-          const { error: updateError } = await supabase
-            .from('users')
-            .update({
-              credits_remaining: Math.max(0, user.credits_remaining - CREDITS_PER_VIDEO),
-            })
-            .eq('id', user.id);
-
-          if (updateError) {
-            console.error('Update error:', updateError);
-          }
-        } else {
-          // For free users, update daily generations (if debug mode allows)
-          if (debugAllowVideoTabForFree) {
-            const today = new Date().toISOString();
-            const { data: userData, error: fetchError } = await supabase
-              .from('users')
-              .select('daily_generations, last_generation_date')
-              .eq('id', user.id)
-              .single();
-
-            if (!fetchError && userData) {
-              const todayDate = today.split('T')[0];
-              const lastGenDate = userData.last_generation_date?.split('T')[0];
-              
-              const newDailyCount = lastGenDate === todayDate 
-                ? userData.daily_generations + CREDITS_PER_VIDEO 
-                : CREDITS_PER_VIDEO;
-
+        try {
+            if (isProUser) {
               const { error: updateError } = await supabase
                 .from('users')
                 .update({
-                  daily_generations: newDailyCount,
-                  last_generation_date: today
+                  credits_remaining: Math.max(0, user.credits_remaining - CREDITS_PER_VIDEO),
                 })
                 .eq('id', user.id);
 
               if (updateError) {
-                console.error('Update error:', updateError);
+                console.error('Credits update error:', updateError);
+              }
+            } else {
+              // For free users, update daily generations (if debug mode allows)
+              if (debugAllowVideoTabForFree) {
+                const today = new Date().toISOString();
+                const { data: userData, error: fetchError } = await supabase
+                  .from('users')
+                  .select('daily_generations, last_generation_date')
+                  .eq('id', user.id)
+                  .single();
+
+                if (!fetchError && userData) {
+                  const todayDate = today.split('T')[0];
+                  const lastGenDate = userData.last_generation_date?.split('T')[0];
+                  
+                  const newDailyCount = lastGenDate === todayDate 
+                    ? userData.daily_generations + CREDITS_PER_VIDEO 
+                    : CREDITS_PER_VIDEO;
+
+                  const { error: updateError } = await supabase
+                    .from('users')
+                    .update({
+                      daily_generations: newDailyCount,
+                      last_generation_date: today
+                    })
+                    .eq('id', user.id);
+
+                  if (updateError) {
+                    console.error('Daily generations update error:', updateError);
+                  }
+                }
               }
             }
-          }
+
+            refetchUser();
+        } catch (creditError) {
+            console.error('Credit update failed:', creditError);
+            // Don't throw here - the video generation can still proceed
         }
 
-        refetchUser();
         toast.success(`Video generation started! (${CREDITS_PER_VIDEO} credits used)`);
-        startPolling(createTaskResponse.task_id);
+        startPolling(validTaskId);
 
     } catch (error: any) {
+        console.error('Video generation error:', error);
         setStatus('failed');
         setErrorMessage(error.message || 'Failed to submit video generation task.');
         toast.error(error.message || 'Failed to submit video generation task.');
