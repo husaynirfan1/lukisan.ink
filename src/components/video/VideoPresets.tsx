@@ -13,10 +13,11 @@ export interface VideoPreset {
   id: string;
   title: string;
   description: string;
-  icon: React.ComponentType<any>;
-  prompt: string;
+  icon: Icon;
+  category: string;
   duration: number;
-  category: 'product' | 'marketing' | 'explainer' | 'brand' | 'testimonial';
+  prompt: string;
+  negative_prompt: string; // Added negative prompt for better control
 }
 
 export const videoPresets: VideoPreset[] = [
@@ -27,7 +28,8 @@ export const videoPresets: VideoPreset[] = [
     icon: Package,
     category: 'product',
     duration: 30,
-    prompt: 'A minimalist and modern 30-second product showcase video for [Your Product Name]. Use slow, sweeping camera movements and close-up shots to highlight key features. The background should be a solid, neutral color with professional studio lighting that creates subtle shadows and highlights. Include clean, sans-serif text overlays to list 3 main benefits with smooth fade-in animations. The camera work includes 360-degree product rotation, macro detail shots, and elegant transitions. The overall aesthetic is premium and sophisticated with a contemporary feel. The soundtrack is an upbeat, royalty-free electronic or lofi hip-hop track that complements the visual rhythm.'
+    prompt: 'Minimalist 3D product render of [Your Product Name], studio lighting, dark background, subtle reflections, 8K, hyper-detailed. A slow, sweeping camera orbit reveals the product. Clean sans-serif text overlays fade in smoothly to list key benefits. The overall aesthetic is premium and sophisticated.',
+    negative_prompt: 'Blurry, grainy, low-resolution, distorted, warped, cluttered background, amateurish, ugly, bad lighting.'
   },
   {
     id: 'high-energy-teaser',
@@ -36,7 +38,8 @@ export const videoPresets: VideoPreset[] = [
     icon: Zap,
     category: 'marketing',
     duration: 15,
-    prompt: 'A high-energy, 15-second teaser video with explosive visual impact. Use rapid cuts every 1-2 seconds, energetic transitions including whip pans, glitch effects, and dynamic zoom-ins. The mood is exciting and mysterious with a sense of urgency. The color palette features bold and vibrant neon colors with high contrast. Include kinetic typography with text that scales, rotates, and pulses with the beat. Add particle effects and light flares for extra visual punch. End with a strong call-to-action and the dramatic reveal of [Your Product/Event Name] with a powerful logo animation. Music is a driving electronic track with heavy bass drops and a strong 120+ BPM beat.'
+    prompt: 'Dynamic, high-energy teaser. Fast cuts, energetic transitions, whip pans, glitch effects, strobing lights. Kinetic typography with text that scales and pulses to the beat. Bold, vibrant neon colors, high contrast. Particle effects and lens flares. Dramatic reveal of [Your Product/Event Name] with a powerful logo animation.',
+    negative_prompt: 'Slow, calm, boring, static, blurry, out of focus, flat colors, peaceful.'
   },
   {
     id: 'animated-explainer',
@@ -45,7 +48,8 @@ export const videoPresets: VideoPreset[] = [
     icon: PlayCircle,
     category: 'explainer',
     duration: 60,
-    prompt: 'A 60-second animated explainer video in a clean, 2D vector illustration style. The video explains how [Your Service/Concept] works in three clear, sequential steps with smooth transitions between each section. Use friendly character animations with expressive faces and gestures, engaging iconography that supports the narrative, and infographic-style elements. The animation style is flat design with subtle depth through shadows and gradients. Include animated charts, progress bars, and visual metaphors that make complex concepts easy to understand. The color scheme should be bright and approachable with your brand colors as accents. A clear, professional voiceover narrates the script with perfect timing to match the animations. Background music is light, optimistic, and instrumental with a modern corporate feel.'
+    prompt: '2D animated explainer video, flat design style, friendly characters with expressive gestures, smooth motion graphics. Infographic elements like animated charts and progress bars. The scene shows [Your Service/Concept] in action. Subtle background element movement, characters have slight breathing motion. Bright and approachable brand colors.',
+    negative_prompt: 'Photorealistic, 3D, complex textures, shaky, hand-drawn, blurry, mismatched colors.'
   },
   {
     id: 'cinematic-brand-story',
@@ -54,7 +58,8 @@ export const videoPresets: VideoPreset[] = [
     icon: Heart,
     category: 'brand',
     duration: 60,
-    prompt: 'A cinematic, 60-second brand story video with emotional depth and authentic storytelling. The visual style is heartfelt and genuine, using soft, natural lighting with a warm color grade that evokes feelings of trust and connection. Show carefully composed scenes of real moments: the founder working passionately, the team collaborating and laughing, customers genuinely enjoying the product, and behind-the-scenes glimpses of your company culture. Use slow-motion shots strategically to create emotional impact and allow viewers to connect with the human elements. Include beautiful establishing shots and intimate close-ups that tell a complete narrative arc. The cinematography features smooth camera movements, shallow depth of field, and cinematic framing. The video is accompanied by an inspiring piano score that builds emotionally throughout, paired with a genuine, narrative voiceover that feels conversational and authentic.'
+    prompt: 'Cinematic, emotional, and authentic brand story. A beautifully composed scene showing [Your Brand\'s Story Moment]. Soft, natural golden hour lighting, warm color grade, shallow depth of field, beautiful bokeh. A slow-motion shot captures the key emotional moment. Gentle camera drift, subtle wind in hair, dust motes floating in the air.',
+    negative_prompt: 'Corporate, sterile, harsh lighting, flat, oversaturated, fast cuts, shaky camera, uninspired.'
   },
   {
     id: 'customer-testimonial',
@@ -63,7 +68,8 @@ export const videoPresets: VideoPreset[] = [
     icon: MessageSquare,
     category: 'testimonial',
     duration: 45,
-    prompt: 'A 45-second customer testimonial video with a clean, professional, and trustworthy aesthetic. The main shot is a medium close-up of a genuine customer speaking directly to the camera in a well-lit, natural environment like a modern office, cozy home, or relevant workplace setting. Use professional three-point lighting to ensure the subject is perfectly lit with soft, flattering illumination. Intersperse carefully selected B-roll footage showing the customer authentically using [Your Product Name] in their daily routine, demonstrating real value and satisfaction. Include smooth transitions between talking head shots and B-roll sequences. Display the customer\'s name, title, and company with a clean, animated lower-third graphic that matches your brand style. The audio is crystal clear with professional microphone quality and subtle background music that doesn\'t compete with the testimonial. The overall tone is genuine, relatable, and builds trust through authentic storytelling.'
+    prompt: 'Professional customer testimonial. A medium close-up shot of a genuine customer speaking. The background is a well-lit, modern office with soft focus. The person shows subtle, natural motion like blinking and slight head movements. Clean, animated lower-third graphic with the customer\'s name. Crystal clear audio quality (visual representation).',
+    negative_prompt: 'Dark, underexposed, shaky camera, distracting background, out of focus, amateur, cluttered, bad audio sync (visual representation).'
   }
 ];
 
