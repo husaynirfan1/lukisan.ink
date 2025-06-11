@@ -16,22 +16,30 @@ export const storeVideoInSupabase = async (
   filename: string
 ): Promise<VideoStorageResult> => {
   try {
-    console.log('Downloading video from:', videoUrl);
+    console.log('[VideoStorage] Downloading video from:', videoUrl);
     
-    // Download the video
+    // Download the video with proper error handling
     const response = await fetch(videoUrl, {
       mode: 'cors',
       headers: {
         'Accept': 'video/*',
+        'User-Agent': 'Mozilla/5.0 (compatible; VideoDownloader/1.0)'
       },
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch video: ${response.statusText}`);
+      throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`);
     }
 
+    const contentType = response.headers.get('content-type');
+    console.log('[VideoStorage] Content type:', contentType);
+
     const blob = await response.blob();
-    console.log('Video downloaded, size:', blob.size, 'bytes');
+    console.log('[VideoStorage] Video downloaded, size:', blob.size, 'bytes');
+
+    if (blob.size === 0) {
+      throw new Error('Downloaded video file is empty');
+    }
 
     // Generate a unique filename
     const timestamp = Date.now();
@@ -39,23 +47,51 @@ export const storeVideoInSupabase = async (
     const fileExtension = 'mp4'; // PiAPI generates MP4 videos
     const storagePath = `videos/${userId}/${timestamp}-${randomId}-${filename}.${fileExtension}`;
 
-    console.log('Uploading to Supabase Storage:', storagePath);
+    console.log('[VideoStorage] Uploading to Supabase Storage:', storagePath);
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('generated-videos')
-      .upload(storagePath, blob, {
-        contentType: 'video/mp4',
-        cacheControl: '3600', // Cache for 1 hour
-        upsert: false
-      });
+    // Upload to Supabase Storage with retry logic
+    let uploadError: any = null;
+    let uploadData: any = null;
+    
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { data, error } = await supabase.storage
+          .from('generated-videos')
+          .upload(storagePath, blob, {
+            contentType: contentType || 'video/mp4',
+            cacheControl: '3600', // Cache for 1 hour
+            upsert: false
+          });
 
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      throw new Error(`Failed to upload video: ${uploadError.message}`);
+        if (error) {
+          uploadError = error;
+          console.error(`[VideoStorage] Upload attempt ${attempt} failed:`, error);
+          
+          if (attempt < 3) {
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+        } else {
+          uploadData = data;
+          uploadError = null;
+          break;
+        }
+      } catch (error) {
+        uploadError = error;
+        console.error(`[VideoStorage] Upload attempt ${attempt} exception:`, error);
+        
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
     }
 
-    console.log('Upload successful:', uploadData);
+    if (uploadError) {
+      throw new Error(`Failed to upload video after 3 attempts: ${uploadError.message}`);
+    }
+
+    console.log('[VideoStorage] Upload successful:', uploadData);
 
     // Get the public URL
     const { data: urlData } = supabase.storage
@@ -66,7 +102,7 @@ export const storeVideoInSupabase = async (
       throw new Error('Failed to get public URL');
     }
 
-    console.log('Public URL generated:', urlData.publicUrl);
+    console.log('[VideoStorage] Public URL generated:', urlData.publicUrl);
 
     return {
       success: true,
@@ -74,11 +110,11 @@ export const storeVideoInSupabase = async (
       storagePath: storagePath
     };
 
-  } catch (error)  {
-    console.error('Error storing video in Supabase:', error);
+  } catch (error: any) {
+    console.error('[VideoStorage] Error storing video in Supabase:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: error.message || 'Unknown error occurred while storing video'
     };
   }
 };
@@ -91,7 +127,7 @@ export const downloadVideoFromSupabase = async (
   filename: string
 ): Promise<void> => {
   try {
-    console.log('Downloading from Supabase Storage:', publicUrl);
+    console.log('[VideoStorage] Downloading from Supabase Storage:', publicUrl);
 
     const response = await fetch(publicUrl, {
       mode: 'cors',
@@ -121,7 +157,7 @@ export const downloadVideoFromSupabase = async (
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     
   } catch (error) {
-    console.error('Error downloading video from Supabase:', error);
+    console.error('[VideoStorage] Error downloading video from Supabase:', error);
     throw error;
   }
 };
@@ -136,13 +172,13 @@ export const deleteVideoFromSupabase = async (path: string): Promise<void> => {
       .remove([path]);
 
     if (error) {
-      console.error('Delete error:', error);
+      console.error('[VideoStorage] Delete error:', error);
       throw new Error(`Failed to delete video: ${error.message}`);
     }
 
-    console.log('Video deleted successfully:', path);
+    console.log('[VideoStorage] Video deleted successfully:', path);
   } catch (error) {
-    console.error('Error deleting video from Supabase:', error);
+    console.error('[VideoStorage] Error deleting video from Supabase:', error);
     throw error;
   }
 };
@@ -164,7 +200,7 @@ export const getVideoInfo = async (path: string) => {
 
     return data?.[0] || null;
   } catch (error) {
-    console.error('Error getting video info:', error);
+    console.error('[VideoStorage] Error getting video info:', error);
     return null;
   }
 };
@@ -189,13 +225,13 @@ export const updateVideoUrlInDatabase = async (
       .eq('video_id', videoId);
 
     if (error) {
-      console.error('Error updating video URL in database:', error);
+      console.error('[VideoStorage] Error updating video URL in database:', error);
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error('Error updating video URL:', error);
+    console.error('[VideoStorage] Error updating video URL:', error);
     return false;
   }
 };
@@ -213,13 +249,13 @@ export const getPendingVideos = async (userId: string): Promise<any[]> => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching pending videos:', error);
+      console.error('[VideoStorage] Error fetching pending videos:', error);
       return [];
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error getting pending videos:', error);
+    console.error('[VideoStorage] Error getting pending videos:', error);
     return [];
   }
 };
