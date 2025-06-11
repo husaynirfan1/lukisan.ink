@@ -67,13 +67,13 @@ export class VideoStatusManager {
   }
 
   /**
-   * NEW: This function calls our secure backend endpoint to process the video.
+   * This function calls our secure backend endpoint to process the video.
    */
   private async handleVideoCompletionOnBackend(videoId: string, piapiVideoUrl: string, userId: string, taskId: string): Promise<void> {
     try {
       console.log(`[VideoStatusManager] Notifying backend to process video ${videoId}`);
       
-      const response = await fetch('/api/process-video', { // Your new backend API route
+      const response = await fetch('/api/process-video', { // Your backend API route
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoId, piapiVideoUrl, userId, taskId }),
@@ -86,7 +86,7 @@ export class VideoStatusManager {
 
       console.log(`[VideoStatusManager] Backend successfully processed video ${videoId}`);
       toast.success('Video processing complete and saved to your library!');
-      // The frontend will update automatically on the next refresh or via realtime subscription.
+      // The frontend will update automatically via the realtime subscription.
 
     } catch (error) {
       console.error(`[VideoStatusManager] Error notifying backend:`, error);
@@ -108,7 +108,18 @@ export class VideoStatusManager {
       console.error(`[VideoStatusManager] Error handling video failure:`, error);
     }
   }
+
+  /**
+   * --- ADDED THIS METHOD TO FIX THE ERROR ---
+   * Manually triggers a status check for a specific video.
+   * This function is called by the "Re-check Status" button in the UI.
+   */
+  async manualStatusCheck(videoId: string, taskId: string, userId: string): Promise<void> {
+    console.log(`[VideoStatusManager] Manual status check triggered for video ${videoId}`);
+    // This calls the same central processing function as the automatic poller,
+    // ensuring the backend route is always used for completed videos.
+    await this.checkAndProcessVideoStatus(videoId, taskId, userId);
+  }
 }
 
 export const videoStatusManager = VideoStatusManager.getInstance();
-
