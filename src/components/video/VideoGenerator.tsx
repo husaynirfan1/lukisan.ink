@@ -506,6 +506,9 @@ export const VideoGenerator: React.FC = () => {
           <p className="text-gray-600 max-w-2xl mx-auto">
             Create stunning marketing videos from text prompts or transform your images into dynamic video content.
           </p>
+          <div className="mt-4 text-sm text-gray-500">
+            <span className="font-medium">Resolution:</span> 480p • <span className="font-medium">Frames:</span> 85 frames
+          </div>
         </div>
 
         {/* Credits Display */}
@@ -765,7 +768,7 @@ export const VideoGenerator: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Aspect Ratio */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -825,7 +828,7 @@ export const VideoGenerator: React.FC = () => {
                   <textarea
                     value={negativePrompt}
                     onChange={(e) => setNegativePrompt(e.target.value)}
-                    placeholder="Describe what you don't want in the video (e.g., 'blurry, low quality, distorted')"
+                    placeholder="Describe what you don't want in the video (e.g., 'blurry, low quality, distorted, shaky camera, poor lighting')"
                     className="w-full h-20 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
                     maxLength={200}
                   />
