@@ -7,10 +7,10 @@ import {
   Grid3X3, List, AlertTriangle, Loader2, Cloud, ExternalLink, 
   RefreshCw, Play, Pause, CheckCircle, XCircle, RotateCcw 
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../lib/supabase';
-import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '../lib/videoStorage';
-import { videoStatusManager } from '../lib/videoStatusManager';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '@/lib/videoStorage';
+import { videoStatusManager } from '@/lib/videoStatusManager';
 import toast from 'react-hot-toast';
 
 // This interface should match the structure of your 'video_generations' table
@@ -31,7 +31,8 @@ interface StoredVideo {
   error_message?: string;
 }
 
-export default function VideoLibrary() { // Changed to a default export for Next.js pages
+// --- FIX: Changed 'export default' back to 'export' to match the import statement ---
+export function VideoLibrary() {
   const { user, getUserTier } = useAuth();
   const [videos, setVideos] = useState<StoredVideo[]>([]);
   const [loading, setLoading] = useState(true);
