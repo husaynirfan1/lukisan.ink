@@ -117,13 +117,21 @@ const postToApi = async (payload: ApidogRequestPayload): Promise<CreateTaskRespo
         throw new Error('Empty response from PiAPI service');
     }
 
+    // Extract task_id from nested data object if present
+    const taskId = responseData.data?.task_id || responseData.task_id;
+    
     // Check for task_id in the response - it should be present according to PiAPI docs
-    if (!responseData.task_id || typeof responseData.task_id !== 'string' || responseData.task_id.trim() === '') {
+    if (!taskId || typeof taskId !== 'string' || taskId.trim() === '') {
         console.error('Invalid task_id in response:', responseData);
         throw new Error('PiAPI service returned an invalid or missing task_id. Response: ' + JSON.stringify(responseData));
     }
 
-    return responseData;
+    // Return the response in the expected format
+    return {
+        task_id: taskId,
+        status: responseData.data?.status || responseData.status,
+        message: responseData.message
+    };
 };
 
 // --- Simplified Public Functions ---
