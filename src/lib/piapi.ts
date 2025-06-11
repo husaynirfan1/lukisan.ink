@@ -57,6 +57,11 @@ export interface TaskStatusResponse {
     thumbnail_url?: string;
     progress?: number;
     error?: string;
+    output?: {
+        video_url?: string;
+        thumbnail_url?: string;
+        error?: string;
+    };
 }
 
 // Check if the API is available
@@ -139,28 +144,39 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
 
 /**
  * Check the status of a video generation task
+ * This function polls the PiAPI status endpoint to get real-time updates
  */
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
     if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
 
-    const endpoint = `${PIAPI_BASE_URL}/v2/query-task/${taskId}`;
+    const endpoint = `${PIAPI_BASE_URL}/v1/task/${taskId}`;
 
     const response = await fetch(endpoint, { 
-        headers: { 'x-api-key': PIAPI_API_KEY } 
+        method: 'GET',
+        headers: { 
+            'x-api-key': PIAPI_API_KEY,
+            'Content-Type': 'application/json'
+        } 
     });
     
     if (!response.ok) {
-        throw new Error(`Status check failed: ${response.statusText}`);
+        throw new Error(`Status check failed: ${response.status} ${response.statusText}`);
     }
     
     const data = await response.json();
+    
+    // Handle different response formats from PiAPI
+    const status = data.status || 'processing';
+    const output = data.output || {};
+    
     return {
-        task_id: data.task_id,
-        status: data.status || 'processing',
-        video_url: data.video_url,
-        thumbnail_url: data.thumbnail_url,
-        progress: data.progress || 0,
-        error: data.error,
+        task_id: data.task_id || taskId,
+        status: status,
+        video_url: output.video_url || data.video_url,
+        thumbnail_url: output.thumbnail_url || data.thumbnail_url,
+        progress: data.progress || (status === 'completed' ? 100 : status === 'failed' ? 0 : 50),
+        error: output.error || data.error,
+        output: output
     };
 };
 
@@ -272,3 +288,69 @@ export const showVideoCompleteNotification = (videoTitle: string, onClick?: () =
     }, 10000);
   }
 };
+
+// Polling utility for video status
+export class VideoStatusPoller {
+  private intervalId: NodeJS.Timeout | null = null;
+  private isPolling = false;
+
+  constructor(
+    private taskId: string,
+    private onStatusUpdate: (status: TaskStatusResponse) => void,
+    private onComplete: (status: TaskStatusResponse) => void,
+    private onError: (error: string) => void,
+    private pollInterval: number = 5000 // 5 seconds default
+  ) {}
+
+  start(): void {
+    if (this.isPolling) {
+      console.warn('Polling already started for task:', this.taskId);
+      return;
+    }
+
+    this.isPolling = true;
+    console.log('Starting status polling for task:', this.taskId);
+
+    // Initial check
+    this.checkStatus();
+
+    // Set up interval
+    this.intervalId = setInterval(() => {
+      this.checkStatus();
+    }, this.pollInterval);
+  }
+
+  stop(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.isPolling = false;
+    console.log('Stopped status polling for task:', this.taskId);
+  }
+
+  private async checkStatus(): Promise<void> {
+    try {
+      const status = await checkVideoStatus(this.taskId);
+      
+      // Call the status update callback
+      this.onStatusUpdate(status);
+
+      // Check if task is complete
+      if (status.status === 'completed') {
+        this.stop();
+        this.onComplete(status);
+      } else if (status.status === 'failed') {
+        this.stop();
+        this.onError(status.error || 'Video generation failed');
+      }
+    } catch (error: any) {
+      console.error('Error checking video status:', error);
+      this.onError(error.message || 'Failed to check video status');
+    }
+  }
+
+  isActive(): boolean {
+    return this.isPolling;
+  }
+}

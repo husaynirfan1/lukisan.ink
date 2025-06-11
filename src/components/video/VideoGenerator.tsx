@@ -34,6 +34,7 @@ import {
   requestNotificationPermission,
   showVideoCompleteNotification,
   AspectRatio,
+  VideoStatusPoller,
   type TextToVideoRequest,
   type ImageToVideoRequest,
   type CreateTaskResponse,
@@ -56,14 +57,14 @@ export const VideoGenerator: React.FC = () => {
   const [debugAllowVideoTabForFree, setDebugAllowVideoTabForFree] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
-  // New state variables for polling UI
+  // Status polling state
   const [status, setStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [finalThumbnailUrl, setFinalThumbnailUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollerRef = useRef<VideoStatusPoller | null>(null);
   
   // Text-to-video state
   const [textPrompt, setTextPrompt] = useState('');
@@ -92,13 +93,13 @@ export const VideoGenerator: React.FC = () => {
     return remainingCredits >= CREDITS_PER_VIDEO;
   };
 
-  // useEffect for polling cleanup
+  // Cleanup poller on unmount
   useEffect(() => {
-      return () => {
-          if (pollingIntervalRef.current) {
-              clearInterval(pollingIntervalRef.current);
-          }
-      };
+    return () => {
+      if (pollerRef.current) {
+        pollerRef.current.stop();
+      }
+    };
   }, []);
 
   // Check notification permission on mount
@@ -215,57 +216,75 @@ export const VideoGenerator: React.FC = () => {
     }
   };
 
-  const startPolling = (currentTaskId: string) => {
-      if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
+  // Update database with video URL when completed
+  const updateDatabaseWithVideoUrl = async (taskId: string, videoUrl: string) => {
+    try {
+      const { error } = await supabase
+        .from('video_generations')
+        .update({ video_url: videoUrl })
+        .eq('video_id', taskId);
+
+      if (error) {
+        console.error('Failed to update database with video URL:', error);
+      } else {
+        console.log('Successfully updated database with video URL');
       }
+    } catch (error) {
+      console.error('Error updating database:', error);
+    }
+  };
 
-      pollingIntervalRef.current = setInterval(async () => {
-          try {
-              const statusResponse = await checkVideoStatus(currentTaskId);
-              setProgress(statusResponse.progress || 0);
+  // Start status polling using the VideoStatusPoller class
+  const startStatusPolling = (taskId: string) => {
+    // Stop any existing poller
+    if (pollerRef.current) {
+      pollerRef.current.stop();
+    }
 
-              if (statusResponse.status === 'completed') {
-                  if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-                  setStatus('completed');
-                  setFinalVideoUrl(statusResponse.video_url || null);
-                  setFinalThumbnailUrl(statusResponse.thumbnail_url || null);
-                  
-                  // Update database with final video URL
-                  if (statusResponse.video_url) {
-                    await supabase
-                      .from('video_generations')
-                      .update({ video_url: statusResponse.video_url })
-                      .eq('video_id', currentTaskId);
-                  }
-                  
-                  toast.success('Video generation completed!');
-                  
-                  // Show browser notification if enabled
-                  if (notificationsEnabled) {
-                    const videoTitle = mode === 'text-to-video' ? 'Text Video' : 'Image Animation';
-                    showVideoCompleteNotification(videoTitle, () => {
-                      // Navigate to library or focus on the video
-                      document.getElementById('completed-video')?.scrollIntoView({ behavior: 'smooth' });
-                    });
-                  }
-                  
-              } else if (statusResponse.status === 'failed') {
-                  if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-                  setStatus('failed');
-                  setErrorMessage(statusResponse.error || 'Video generation failed.');
-                  toast.error(statusResponse.error || 'Video generation failed.');
-              } else if (statusResponse.status === 'processing' || statusResponse.status === 'pending') {
-                  setStatus(statusResponse.status);
-              }
+    // Create new poller
+    pollerRef.current = new VideoStatusPoller(
+      taskId,
+      // onStatusUpdate
+      (statusResponse: TaskStatusResponse) => {
+        console.log('Status update:', statusResponse);
+        setProgress(statusResponse.progress || 0);
+        setStatus(statusResponse.status);
+      },
+      // onComplete
+      async (statusResponse: TaskStatusResponse) => {
+        console.log('Video generation completed:', statusResponse);
+        setStatus('completed');
+        setFinalVideoUrl(statusResponse.video_url || null);
+        setFinalThumbnailUrl(statusResponse.thumbnail_url || null);
+        
+        // Update database with final video URL
+        if (statusResponse.video_url) {
+          await updateDatabaseWithVideoUrl(taskId, statusResponse.video_url);
+        }
+        
+        toast.success('Video generation completed!');
+        
+        // Show browser notification if enabled
+        if (notificationsEnabled) {
+          const videoTitle = mode === 'text-to-video' ? 'Text Video' : 'Image Animation';
+          showVideoCompleteNotification(videoTitle, () => {
+            // Navigate to library or focus on the video
+            document.getElementById('completed-video')?.scrollIntoView({ behavior: 'smooth' });
+          });
+        }
+      },
+      // onError
+      (error: string) => {
+        console.error('Video generation failed:', error);
+        setStatus('failed');
+        setErrorMessage(error);
+        toast.error(error || 'Video generation failed');
+      },
+      5000 // Poll every 5 seconds
+    );
 
-          } catch (error: any) {
-              if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-              setStatus('failed');
-              setErrorMessage(error.message || 'Error while checking video status.');
-              toast.error(error.message || 'Error while checking video status.');
-          }
-      }, 5000);
+    // Start polling
+    pollerRef.current.start();
   };
 
   const handleGenerateSubmit = async () => {
@@ -316,8 +335,10 @@ export const VideoGenerator: React.FC = () => {
     setFinalVideoUrl(null);
     setFinalThumbnailUrl(null);
     setErrorMessage('');
-    if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
+    
+    // Stop any existing poller
+    if (pollerRef.current) {
+      pollerRef.current.stop();
     }
 
     try {
@@ -434,7 +455,9 @@ export const VideoGenerator: React.FC = () => {
         }
 
         toast.success(`Video generation started! (${CREDITS_PER_VIDEO} credits used)`);
-        startPolling(validTaskId);
+        
+        // Start status polling
+        startStatusPolling(validTaskId);
 
     } catch (error: any) {
         console.error('Video generation error:', error);
