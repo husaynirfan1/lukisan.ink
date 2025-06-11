@@ -67,6 +67,19 @@ export const checkSupabaseConnectivity = async (): Promise<boolean> => {
 export const handleSupabaseError = (error: any, operation: string) => {
   console.error(`Supabase ${operation} error:`, error);
   
+  // Check for session-related errors first
+  if (error.message?.includes('session_not_found') || 
+      error.message?.includes('Session from session_id claim in JWT does not exist') ||
+      (error.status === 403 && error.message?.includes('session'))) {
+    return {
+      isNetworkError: false,
+      isSessionError: true,
+      userMessage: 'Your session has expired or is invalid. Please sign out and sign back in.',
+      shouldRetry: false,
+      suggestion: 'Click "Sign Out" to clear your session and try signing in again.'
+    };
+  }
+  
   // Check for network-related errors
   if (error.message?.includes('Failed to fetch') || 
       error.message?.includes('NetworkError') ||
@@ -77,6 +90,7 @@ export const handleSupabaseError = (error: any, operation: string) => {
       !navigator.onLine) {
     return {
       isNetworkError: true,
+      isSessionError: false,
       userMessage: 'Unable to connect to the server. Please check your internet connection and try again.',
       shouldRetry: true,
       suggestion: 'Check that your Supabase project URL is correct and that https://localhost:5173 is added to your allowed origins.'
@@ -89,6 +103,7 @@ export const handleSupabaseError = (error: any, operation: string) => {
       (error.status === 0 && error.statusText === '')) {
     return {
       isNetworkError: true,
+      isSessionError: false,
       userMessage: 'Connection blocked by browser security. Please check your Supabase configuration.',
       shouldRetry: true,
       suggestion: 'Add https://localhost:5173 to your Supabase project\'s allowed origins in Authentication settings.'
@@ -101,6 +116,7 @@ export const handleSupabaseError = (error: any, operation: string) => {
       error.status === 401) {
     return {
       isNetworkError: false,
+      isSessionError: true,
       userMessage: 'Authentication session expired. Please sign in again.',
       shouldRetry: false,
       suggestion: 'Try refreshing the page or signing out and back in.'
@@ -111,6 +127,7 @@ export const handleSupabaseError = (error: any, operation: string) => {
   if (error.code === '23502' || error.message?.includes('not-null constraint')) {
     return {
       isNetworkError: false,
+      isSessionError: false,
       userMessage: 'Invalid data provided. Please check your input and try again.',
       shouldRetry: false,
       suggestion: 'Ensure all required fields are filled out correctly.'
@@ -119,6 +136,7 @@ export const handleSupabaseError = (error: any, operation: string) => {
   
   return {
     isNetworkError: false,
+    isSessionError: false,
     userMessage: error.message || 'An unexpected error occurred.',
     shouldRetry: false,
     suggestion: 'If the problem persists, please try refreshing the page.'

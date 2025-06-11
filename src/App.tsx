@@ -10,7 +10,7 @@ import { useAuth } from './hooks/useAuth';
 
 function App() {
   // Use the existing useAuth hook (now enhanced with email verification)
-  const { user, loading, error, authStep, authInitialized } = useAuth();
+  const { user, loading, error, authStep, authInitialized, signOut } = useAuth();
 
   // Handle authentication-based redirects
   useEffect(() => {
@@ -85,7 +85,8 @@ function App() {
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
             <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
               <h2 className="text-xl font-semibold text-red-800 mb-2">
-                {authStep === 'network_error' ? 'Connection Error' : 'Authentication Error'}
+                {authStep === 'network_error' ? 'Connection Error' : 
+                 error.includes('session') ? 'Session Error' : 'Authentication Error'}
               </h2>
               <p className="text-red-600 mb-4">{error}</p>
               <div className="space-x-3">
@@ -95,6 +96,26 @@ function App() {
                 >
                   Refresh Page
                 </button>
+                {/* Show Sign Out button for session errors */}
+                {error.includes('session') && signOut && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await signOut();
+                        window.location.href = '/';
+                      } catch (err) {
+                        console.error('Sign out error:', err);
+                        // Force clear local storage and redirect
+                        localStorage.clear();
+                        sessionStorage.clear();
+                        window.location.href = '/';
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Sign Out
+                  </button>
+                )}
                 {authStep === 'network_error' && (
                   <button
                     onClick={() => {
