@@ -54,6 +54,8 @@ export function VideoLibrary() {
     else setRefreshing(true);
 
     try {
+      console.log('[VideoLibrary] Fetching videos for user:', user.id);
+      
       const { data, error } = await supabase
         .from('video_generations')
         .select('*')
@@ -61,34 +63,42 @@ export function VideoLibrary() {
         .order('created_at', { ascending: false });
 
       if (error) {
+        console.error('[VideoLibrary] Error fetching videos:', error);
         toast.error('Failed to load video library.');
         return;
       }
       
+      console.log('[VideoLibrary] Fetched videos:', data?.length || 0);
+      
       const fetchedVideos = (data || []).map(video => {
-        // --- FIX 1: Treat null/undefined status as 'pending' ---
-        // If the status is not one of the known values, default it to 'pending'.
+        // Normalize status - treat null/undefined as 'pending'
         const validStatuses = ['pending', 'processing', 'running', 'completed', 'failed'];
-        const currentStatus = validStatuses.includes(video.status) ? video.status : 'pending';
+        let currentStatus = video.status;
+        
+        if (!currentStatus || !validStatuses.includes(currentStatus)) {
+          currentStatus = 'pending';
+          console.log(`[VideoLibrary] Normalized status for video ${video.id}: ${video.status} -> pending`);
+        }
 
         return {
             ...video,
-            status: currentStatus, // Ensure status is always valid
+            status: currentStatus,
             storage_path: video.video_url ? extractStoragePath(video.video_url) : undefined
         };
       });
 
       setVideos(fetchedVideos);
 
-      // --- FIX 2: Reliably start monitoring ---
-      // This loop will now correctly identify videos with a 'pending' status.
+      // Start monitoring for videos that are still processing
       fetchedVideos.forEach(video => {
         if (['pending', 'processing', 'running'].includes(video.status || '')) {
+          console.log(`[VideoLibrary] Starting monitoring for video ${video.id} with status ${video.status}`);
           videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
         }
       });
 
     } catch (error) {
+      console.error('[VideoLibrary] Unexpected error:', error);
       toast.error('An unexpected error occurred while loading videos.');
     } finally {
       setLoading(false);
@@ -101,19 +111,27 @@ export function VideoLibrary() {
       initialFetchDone.current = true;
       fetchAndMonitorVideos();
 
+      // Set up real-time subscription for video updates
+      console.log('[VideoLibrary] Setting up real-time subscription');
       const channel = supabase.channel('video-library-changes')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'video_generations', filter: `user_id=eq.${user.id}` },
           (payload) => {
-            console.log('[Realtime] Change detected, re-fetching videos.', payload);
+            console.log('[VideoLibrary] Real-time change detected:', payload);
+            // Re-fetch videos when changes are detected
             fetchAndMonitorVideos(false); 
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('[VideoLibrary] Subscription status:', status);
+        });
       
       return () => {
+        console.log('[VideoLibrary] Cleaning up subscription');
         supabase.removeChannel(channel);
+        // Stop all monitoring when component unmounts
+        videoStatusManager.stopAllMonitoring();
       };
     }
   }, [user, fetchAndMonitorVideos]);
@@ -128,12 +146,16 @@ export function VideoLibrary() {
 
   const handleManualRetry = async (video: StoredVideo) => {
     if (!user || checkingStatus.has(video.id)) return;
+    
+    console.log(`[VideoLibrary] Manual retry for video ${video.id}`);
     toast.loading('Re-checking video status...', { id: video.id });
     setCheckingStatus(prev => new Set(prev).add(video.id));
     
     try {
       await videoStatusManager.manualStatusCheck(video.id, video.video_id, user.id);
+      toast.success('Status check completed', { id: video.id });
     } catch (error: any) {
+      console.error(`[VideoLibrary] Manual retry failed:`, error);
       toast.error(`Failed to re-check status: ${error.message}`, { id: video.id });
     } finally {
        setTimeout(() => {
@@ -152,6 +174,9 @@ export function VideoLibrary() {
 
     setDeletingVideos(prev => new Set(prev).add(videoId));
     try {
+      // Stop monitoring if it's active
+      videoStatusManager.stopMonitoring(videoId);
+      
       if (video.storage_path) {
         await deleteVideoFromSupabase(video.storage_path);
       }
@@ -192,15 +217,29 @@ export function VideoLibrary() {
     const isChecking = checkingStatus.has(video.id);
     if (isChecking) return { icon: <Loader2 className="h-4 w-4 animate-spin" />, color: 'text-blue-600', bg: 'bg-blue-100', text: 'Checking...' };
     
-    // The default case is now removed, as the status is normalized during fetch.
     switch (video.status) {
-      case 'pending': return { icon: <Clock className="h-4 w-4" />, color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Pending' };
+      case 'pending': 
+        return { icon: <Clock className="h-4 w-4" />, color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Pending' };
       case 'processing':
       case 'running':
-        return { icon: <Loader2 className="h-4 w-4 animate-spin" />, color: 'text-blue-600', bg: 'bg-blue-100', text: `Processing ${video.progress || 0}%` };
-      case 'completed': return { icon: <CheckCircle className="h-4 w-4" />, color: 'text-green-600', bg: 'bg-green-100', text: 'Ready' };
-      case 'failed': return { icon: <XCircle className="h-4 w-4" />, color: 'text-red-600', bg: 'bg-red-100', text: 'Failed' };
-      default: return { icon: <Clock className="h-4 w-4" />, color: 'text-gray-500', bg: 'bg-gray-100', text: 'Pending' }; // Default to pending
+        return { 
+          icon: <Loader2 className="h-4 w-4 animate-spin" />, 
+          color: 'text-blue-600', 
+          bg: 'bg-blue-100', 
+          text: `Processing ${video.progress || 0}%` 
+        };
+      case 'completed': 
+        return { icon: <CheckCircle className="h-4 w-4" />, color: 'text-green-600', bg: 'bg-green-100', text: 'Ready' };
+      case 'failed': 
+        return { 
+          icon: <XCircle className="h-4 w-4" />, 
+          color: 'text-red-600', 
+          bg: 'bg-red-100', 
+          text: 'Failed' 
+        };
+      default: 
+        // Fallback for any unrecognized status
+        return { icon: <Clock className="h-4 w-4" />, color: 'text-gray-500', bg: 'bg-gray-100', text: 'Unknown' };
     }
   };
 
@@ -218,18 +257,50 @@ export function VideoLibrary() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Video Library</h1>
         <p className="text-gray-600">Track and manage your generated videos.</p>
+        
+        {/* Debug info in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-2 text-xs text-gray-500 bg-gray-100 p-2 rounded">
+            Active monitoring: {videoStatusManager.getMonitoringStatus().activeVideos.length} videos
+          </div>
+        )}
       </div>
       
       <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-gray-200/50 mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search videos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
+        <div className="flex items-center justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search videos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
+          
+          <div className="flex items-center space-x-4 ml-4">
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              {videoTypes.map(type => (
+                <option key={type} value={type}>
+                  {type === 'all' ? 'All Types' : type.charAt(0).toUpperCase() + type.slice(1)}
+                </option>
+              ))}
+            </select>
+            
+            <button
+              onClick={() => fetchAndMonitorVideos(false)}
+              disabled={refreshing}
+              className="flex items-center space-x-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -250,23 +321,35 @@ export function VideoLibrary() {
         <AnimatePresence>
           <motion.div 
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-            initial="hidden" animate="visible" variants={{
+            initial="hidden" 
+            animate="visible" 
+            variants={{
               visible: { transition: { staggerChildren: 0.05 } }
-            }}>
+            }}
+          >
             {filteredVideos.map((video) => {
               const statusDisplay = getStatusDisplay(video);
               const isProcessing = ['pending', 'processing', 'running'].includes(video.status || '');
-              const canDownload = video.status === 'completed';
+              const canDownload = video.status === 'completed' && video.video_url;
               
               return (
                 <motion.div
                   key={video.id}
+                  id={`video-${video.video_id}`} // For direct linking
                   variants={{ hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } }}
                   className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg"
                 >
                   <div className="relative aspect-video bg-gray-900">
-                    {canDownload && video.video_url ? (
-                      <video src={video.video_url} className="w-full h-full object-cover" muted loop playsInline autoPlay />
+                    {canDownload ? (
+                      <video 
+                        src={video.video_url} 
+                        className="w-full h-full object-cover" 
+                        muted 
+                        loop 
+                        playsInline 
+                        controls
+                        poster={video.logo_url}
+                      />
                     ) : (
                       <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                         <div className="text-center p-4">
@@ -274,27 +357,74 @@ export function VideoLibrary() {
                             {statusDisplay.icon}
                           </div>
                           <p className={`mt-2 font-medium ${statusDisplay.color}`}>{statusDisplay.text}</p>
-                          {video.status === 'failed' && <p className="text-xs text-red-500 mt-1 max-w-xs truncate">{video.error_message}</p>}
+                          {video.status === 'failed' && video.error_message && (
+                            <p className="text-xs text-red-500 mt-1 max-w-xs truncate" title={video.error_message}>
+                              {video.error_message}
+                            </p>
+                          )}
+                          {video.progress !== undefined && video.progress > 0 && (
+                            <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${video.progress}%` }}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
                   </div>
+                  
                   <div className="p-4">
-                    <p className="font-semibold text-gray-800 truncate" title={video.message}>{video.message}</p>
-                    <p className="text-sm text-gray-500">{new Date(video.created_at).toLocaleDateString()}</p>
+                    <p className="font-semibold text-gray-800 truncate" title={video.message}>
+                      {video.message}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {new Date(video.created_at).toLocaleDateString()} • {video.video_type}
+                    </p>
+                    
                     <div className="flex items-center justify-between mt-4">
-                       <div className={`flex items-center space-x-2 text-sm px-2 py-1 rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
-                          {statusDisplay.icon}
-                          <span>{statusDisplay.text}</span>
-                        </div>
+                      <div className={`flex items-center space-x-2 text-sm px-2 py-1 rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+                        {statusDisplay.icon}
+                        <span>{statusDisplay.text}</span>
+                      </div>
+                      
                       <div className="flex items-center space-x-2">
+                        {canDownload && (
+                          <button 
+                            onClick={() => {
+                              const filename = `video-${video.video_type}-${Date.now()}.mp4`;
+                              downloadVideoFromSupabase(video.video_url, filename);
+                            }}
+                            className="p-2 text-gray-500 hover:text-green-600 rounded-full hover:bg-gray-100 transition-colors"
+                            title="Download video"
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
+                        )}
+                        
                         {isProcessing && (
-                          <button onClick={() => handleManualRetry(video)} disabled={checkingStatus.has(video.id)} className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100 transition-colors">
+                          <button 
+                            onClick={() => handleManualRetry(video)} 
+                            disabled={checkingStatus.has(video.id)} 
+                            className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+                            title="Re-check status"
+                          >
                             <RotateCcw className={`h-4 w-4 ${checkingStatus.has(video.id) ? 'animate-spin' : ''}`} />
                           </button>
                         )}
-                        <button onClick={() => handleDelete(video.id)} className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors">
-                          <Trash2 className="h-4 w-4" />
+                        
+                        <button 
+                          onClick={() => handleDelete(video.id)} 
+                          disabled={deletingVideos.has(video.id)}
+                          className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+                          title="Delete video"
+                        >
+                          {deletingVideos.has(video.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </button>
                       </div>
                     </div>
