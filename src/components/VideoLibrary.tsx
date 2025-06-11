@@ -20,17 +20,17 @@ import {
   Pause,
   CheckCircle,
   XCircle,
-  RotateCcw
+  RotateCcw,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { 
   downloadVideoFromSupabase, 
-  deleteVideoFromSupabase, 
-  updateVideoUrlInDatabase,
-  getPendingVideos
+  deleteVideoFromSupabase
 } from '../lib/videoStorage';
-import { checkVideoStatus, type TaskStatusResponse } from '../lib/piapi';
+import { videoStatusManager, type VideoStatusUpdate } from '../lib/videoStatusManager';
+import { showVideoCompleteNotification, requestNotificationPermission } from '../lib/piapi';
 import toast from 'react-hot-toast';
 
 interface StoredVideo {
@@ -62,22 +62,49 @@ export const VideoLibrary: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
-  const statusCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const hasInitializedRef = useRef(false);
 
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
 
+  // Check notification permission on mount
   useEffect(() => {
-    if (user) {
-      fetchVideos();
+    if ('Notification' in window) {
+      setNotificationsEnabled(Notification.permission === 'granted');
+    }
+  }, []);
+
+  // Initialize video status monitoring
+  useEffect(() => {
+    if (user && !hasInitializedRef.current) {
+      hasInitializedRef.current = true;
       
-      // Set up periodic status checking for pending/processing videos
-      statusCheckIntervalRef.current = setInterval(checkPendingVideos, 10000); // Check every 10 seconds
+      // Fetch videos first
+      fetchVideos().then(() => {
+        // Then start monitoring pending videos
+        videoStatusManager.monitorPendingVideos(user.id);
+      });
       
+      // Set up status update handler
+      const handleStatusUpdate = (update: VideoStatusUpdate) => {
+        setVideos(prev => prev.map(video => {
+          if (video.id === update.id) {
+            return {
+              ...video,
+              status: update.status,
+              progress: update.progress,
+              video_url: update.video_url || video.video_url,
+              error: update.error
+            };
+          }
+          return video;
+        }));
+      };
+      
+      // Clean up on unmount
       return () => {
-        if (statusCheckIntervalRef.current) {
-          clearInterval(statusCheckIntervalRef.current);
-        }
+        videoStatusManager.stopAllMonitoring();
       };
     }
   }, [user]);
@@ -112,33 +139,73 @@ export const VideoLibrary: React.FC = () => {
       const videosWithStatus = (data || []).map(video => {
         const storagePath = extractStoragePath(video.video_url);
         let status: 'pending' | 'processing' | 'completed' | 'failed' = 'completed';
+        let progress = 0;
         
         // If video_url is empty or just a task ID, it's still processing
         if (!video.video_url || video.video_url === video.video_id || video.video_url === '') {
           status = 'processing';
+        } else if (video.video_url === 'failed' || (video.storage_path && video.storage_path.startsWith('error:'))) {
+          status = 'failed';
         } else if (video.video_url.startsWith('http')) {
           status = 'completed';
+          progress = 100;
+        }
+
+        // Extract progress from storage_path if available
+        if (video.storage_path && video.storage_path.startsWith('progress:')) {
+          const progressMatch = video.storage_path.match(/progress: (\d+)%/);
+          if (progressMatch && progressMatch[1]) {
+            progress = parseInt(progressMatch[1], 10);
+          }
+        }
+
+        // Extract error message if available
+        let error;
+        if (video.storage_path && video.storage_path.startsWith('error:')) {
+          error = video.storage_path.substring(7);
         }
 
         return {
           ...video,
           storage_path: storagePath,
           status,
-          progress: status === 'completed' ? 100 : 0
+          progress,
+          error
         };
       });
 
       setVideos(videosWithStatus);
       console.log('Updated local state with videos:', videosWithStatus.length);
       
-      // Check for pending videos immediately
+      // Start monitoring pending videos
       const pendingVideos = videosWithStatus.filter(v => 
         v.status === 'pending' || v.status === 'processing'
       );
       
       if (pendingVideos.length > 0) {
-        console.log(`Found ${pendingVideos.length} pending videos, checking status...`);
-        setTimeout(() => checkPendingVideos(), 1000);
+        console.log(`Found ${pendingVideos.length} pending videos, starting monitoring...`);
+        pendingVideos.forEach(video => {
+          videoStatusManager.startMonitoring(
+            video.id, 
+            video.video_id, 
+            user.id,
+            (update) => {
+              // Update the video in state when status changes
+              setVideos(prev => prev.map(v => {
+                if (v.id === update.id) {
+                  return {
+                    ...v,
+                    status: update.status,
+                    progress: update.progress || v.progress,
+                    video_url: update.video_url || v.video_url,
+                    error: update.error
+                  };
+                }
+                return v;
+              }));
+            }
+          );
+        });
       }
       
     } catch (error) {
@@ -147,96 +214,6 @@ export const VideoLibrary: React.FC = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  // Check status of pending/processing videos
-  const checkPendingVideos = async () => {
-    if (!user) return;
-    
-    const pendingVideos = videos.filter(video => 
-      (video.status === 'pending' || video.status === 'processing') && 
-      video.video_id && 
-      !checkingStatus.has(video.id)
-    );
-
-    if (pendingVideos.length === 0) return;
-
-    console.log(`Checking status for ${pendingVideos.length} pending videos`);
-
-    for (const video of pendingVideos) {
-      if (checkingStatus.has(video.id)) continue; // Skip if already checking
-
-      try {
-        setCheckingStatus(prev => new Set([...prev, video.id]));
-        
-        const statusResponse = await checkVideoStatus(video.video_id);
-        console.log(`Status for video ${video.id} (task ${video.video_id}):`, statusResponse);
-        
-        // Update video status in state
-        setVideos(prev => prev.map(v => {
-          if (v.id === video.id) {
-            return {
-              ...v,
-              status: statusResponse.status,
-              progress: statusResponse.progress || 0,
-              error: statusResponse.error
-            };
-          }
-          return v;
-        }));
-
-        // If completed, update database with video URL
-        if (statusResponse.status === 'completed' && statusResponse.video_url) {
-          const videoUrl = statusResponse.video_url;
-          
-          // Update database
-          const updated = await updateVideoUrlInDatabase(video.video_id, videoUrl);
-          
-          if (updated) {
-            console.log(`Updated video ${video.id} with URL: ${videoUrl}`);
-            
-            // Update local state
-            setVideos(prev => prev.map(v => {
-              if (v.id === video.id) {
-                return {
-                  ...v,
-                  video_url: videoUrl,
-                  status: 'completed',
-                  progress: 100
-                };
-              }
-              return v;
-            }));
-            
-            // Show notification
-            toast.success(`Video "${video.message.substring(0, 30)}..." is ready for download!`, {
-              duration: 5000,
-              icon: '🎬'
-            });
-          }
-        } else if (statusResponse.status === 'failed') {
-          toast.error(`Video generation failed: ${statusResponse.error || 'Unknown error'}`);
-          
-          // Update database to mark as failed
-          await supabase
-            .from('video_generations')
-            .update({ 
-              video_url: 'failed',
-              storage_path: `error: ${statusResponse.error || 'Unknown error'}`
-            })
-            .eq('id', video.id);
-        }
-
-      } catch (error) {
-        console.error(`Error checking status for video ${video.id}:`, error);
-      } finally {
-        setCheckingStatus(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(video.id);
-          return newSet;
-        });
-      }
     }
   };
 
@@ -309,6 +286,9 @@ export const VideoLibrary: React.FC = () => {
     setDeletingVideos(prev => new Set([...prev, videoId]));
 
     try {
+      // Stop monitoring if active
+      videoStatusManager.stopMonitoring(videoId);
+
       // Step 1: Delete from storage if it's a Supabase URL
       if (video.storage_path) {
         console.log('Deleting from storage:', video.storage_path);
@@ -442,12 +422,38 @@ export const VideoLibrary: React.FC = () => {
   const handleRefresh = () => {
     console.log('Manual refresh triggered');
     fetchVideos(false);
-    checkPendingVideos();
+    
+    // Check for pending videos
+    const pendingVideos = videos.filter(v => 
+      v.status === 'pending' || v.status === 'processing'
+    );
+    
+    if (pendingVideos.length > 0 && user) {
+      videoStatusManager.monitorPendingVideos(user.id);
+    }
+    
     toast.success('Library refreshed');
   };
 
   const toggleVideoPlay = (videoId: string) => {
     setPlayingVideo(prev => prev === videoId ? null : videoId);
+  };
+
+  // Handle notification permission request
+  const handleNotificationToggle = async () => {
+    if (notificationsEnabled) {
+      // Can't revoke permission programmatically, just update state
+      setNotificationsEnabled(false);
+      toast.info('Notifications disabled for this session');
+    } else {
+      const granted = await requestNotificationPermission();
+      setNotificationsEnabled(granted);
+      if (granted) {
+        toast.success('Notifications enabled! You\'ll be notified when your videos are ready.');
+      } else {
+        toast.error('Notification permission denied. You can enable it in your browser settings.');
+      }
+    }
   };
 
   // Manual status check for a specific video
@@ -461,51 +467,41 @@ export const VideoLibrary: React.FC = () => {
         id: `status-check-${video.id}`
       });
       
-      const statusResponse = await checkVideoStatus(video.video_id);
+      const statusResponse = await videoStatusManager.manualStatusCheck(
+        video.id, 
+        video.video_id, 
+        user.id
+      );
       
-      // Update video status
+      // Update video status in state
       setVideos(prev => prev.map(v => {
         if (v.id === video.id) {
           return {
             ...v,
             status: statusResponse.status,
             progress: statusResponse.progress || 0,
+            video_url: statusResponse.video_url || v.video_url,
             error: statusResponse.error
           };
         }
         return v;
       }));
 
-      // If completed, update database
-      if (statusResponse.status === 'completed' && statusResponse.video_url) {
-        const videoUrl = statusResponse.video_url;
+      // Show appropriate toast based on status
+      if (statusResponse.status === 'completed') {
+        toast.success('Video is now ready for download!', {
+          id: `status-check-${video.id}`
+        });
         
-        // Update database
-        const updated = await updateVideoUrlInDatabase(video.video_id, videoUrl);
-        
-        if (updated) {
-          console.log(`Updated video ${video.id} with URL: ${videoUrl}`);
-          
-          // Update local state
-          setVideos(prev => prev.map(v => {
-            if (v.id === video.id) {
-              return {
-                ...v,
-                video_url: videoUrl,
-                status: 'completed',
-                progress: 100
-              };
+        // Show browser notification if enabled
+        if (notificationsEnabled) {
+          showVideoCompleteNotification(
+            video.message.substring(0, 30) || 'Your video', 
+            () => {
+              // Scroll to the video element
+              document.getElementById(`video-${video.video_id}`)?.scrollIntoView({ behavior: 'smooth' });
             }
-            return v;
-          }));
-          
-          toast.success('Video is now ready for download!', {
-            id: `status-check-${video.id}`
-          });
-        } else {
-          toast.error('Failed to update video status in database', {
-            id: `status-check-${video.id}`
-          });
+          );
         }
       } else if (statusResponse.status === 'failed') {
         toast.error(`Video generation failed: ${statusResponse.error || 'Unknown error'}`, {
@@ -621,6 +617,23 @@ export const VideoLibrary: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-2">
+            {/* Notification Toggle */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleNotificationToggle}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                notificationsEnabled 
+                  ? 'bg-green-100 text-green-800 border border-green-300' 
+                  : 'bg-gray-100 text-gray-600 border border-gray-300'
+              }`}
+            >
+              <Bell className="h-4 w-4" />
+              <span className="text-sm font-medium">
+                {notificationsEnabled ? 'Notifications On' : 'Enable Notifications'}
+              </span>
+            </motion.button>
+            
             {/* Refresh button */}
             <motion.button
               whileHover={{ scale: 1.05 }}
