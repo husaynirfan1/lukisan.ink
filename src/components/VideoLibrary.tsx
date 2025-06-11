@@ -1,33 +1,19 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+'use client';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Video, 
-  Download, 
-  Trash2, 
-  Clock, 
-  Crown, 
-  Calendar,
-  Search,
-  Filter,
-  Grid3X3,
-  List,
-  AlertTriangle,
-  Loader2,
-  Cloud,
-  ExternalLink,
-  RefreshCw,
-  Play,
-  Pause,
-  CheckCircle,
-  XCircle,
-  RotateCcw
+  Video, Download, Trash2, Clock, Crown, Calendar, Search, Filter, 
+  Grid3X3, List, AlertTriangle, Loader2, Cloud, ExternalLink, 
+  RefreshCw, Play, Pause, CheckCircle, XCircle, RotateCcw 
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../lib/supabase';
-import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '../lib/videoStorage';
-import { checkVideoStatus, type TaskStatusResponse, showVideoCompleteNotification, requestNotificationPermission } from '../lib/piapi';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '@/lib/videoStorage';
+import { videoStatusManager } from '@/lib/videoStatusManager';
 import toast from 'react-hot-toast';
 
+// This interface should match the structure of your 'video_generations' table
 interface StoredVideo {
   id: string;
   user_id: string;
@@ -42,9 +28,10 @@ interface StoredVideo {
   storage_path?: string;
   status?: 'pending' | 'processing' | 'running' | 'completed' | 'failed';
   progress?: number;
+  error_message?: string;
 }
 
-export const VideoLibrary: React.FC = () => {
+export default function VideoLibrary() { // Changed to a default export for Next.js pages
   const { user, getUserTier } = useAuth();
   const [videos, setVideos] = useState<StoredVideo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,21 +44,14 @@ export const VideoLibrary: React.FC = () => {
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
   
-  // Use a ref to prevent multiple polling intervals
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
+  const initialFetchDone = useRef(false);
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
 
-  // Memoize fetchVideos to prevent re-creation on every render
-  const fetchVideos = useCallback(async (showLoading = true) => {
+  const fetchAndMonitorVideos = useCallback(async (showLoading = true) => {
     if (!user) return;
-
-    if (showLoading) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
+    if (showLoading) setLoading(true);
+    else setRefreshing(true);
 
     try {
       const { data, error } = await supabase
@@ -81,138 +61,113 @@ export const VideoLibrary: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        toast.error('Failed to load video library');
+        toast.error('Failed to load video library.');
+        setLoading(false);
+        setRefreshing(false);
         return;
       }
       
-      const videosWithPaths = (data || []).map(video => ({
+      const fetchedVideos = (data || []).map(video => ({
         ...video,
         storage_path: video.video_url ? extractStoragePath(video.video_url) : undefined
       }));
 
-      setVideos(videosWithPaths);
+      setVideos(fetchedVideos);
+
+      fetchedVideos.forEach(video => {
+        if (['pending', 'processing', 'running'].includes(video.status || '')) {
+          videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
+        }
+      });
+
     } catch (error) {
-      toast.error('Failed to load video library');
+      toast.error('An unexpected error occurred while loading videos.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [user]);
 
-  // --- THE FIX ---
-  // The database update now includes the 'status' field.
-  const updateVideoInDatabase = useCallback(async (videoId: string, videoUrl: string, status: 'completed' | 'failed', errorMsg?: string) => {
-    try {
-      const { error } = await supabase
-        .from('video_generations')
-        .update({ 
-            video_url: videoUrl, 
-            status: status, // Update the status field as well
-            // Optionally clear the error message on success
-            error_message: status === 'completed' ? null : errorMsg 
-        })
-        .eq('id', videoId);
-
-      if (error) {
-        console.error('Failed to update video in database:', error);
-      } else {
-         // Force a refresh of the specific video in the local state to ensure consistency
-        setVideos(prev => prev.map(v => 
-            v.id === videoId 
-            ? { ...v, video_url: videoUrl, status, progress: 100 } 
-            : v
-        ));
-      }
-    } catch (error) {
-      console.error('Error updating video URL:', error);
-    }
-  }, []);
-
-  // Check status of pending/processing videos
-  const checkPendingVideos = useCallback(async () => {
-    // This is a snapshot of videos that need checking right now.
-    const videosToCheck = videos.filter(video => 
-        (video.status === 'pending' || video.status === 'processing' || video.status === 'running') &&
-        !checkingStatus.has(video.id) // Don't check if already in flight
-    );
-
-    if (videosToCheck.length === 0) return;
-
-    // Use Promise.all to check statuses in parallel for efficiency
-    await Promise.all(videosToCheck.map(async (video) => {
-      // Mark as checking
-      setCheckingStatus(prev => new Set(prev).add(video.id));
-      
-      try {
-        const statusResponse = await checkVideoStatus(video.video_id);
-        
-        // Update local state immediately for better UX
-        setVideos(prev => prev.map(v => 
-          v.id === video.id 
-            ? { ...v, status: statusResponse.status, progress: statusResponse.progress } 
-            : v
-        ));
-
-        // If completed or failed, update the database
-        if (statusResponse.status === 'completed' && statusResponse.video_url) {
-            await updateVideoInDatabase(video.id, statusResponse.video_url, 'completed');
-            
-            // Request permission and show notification
-            const permissionGranted = await requestNotificationPermission();
-            if(permissionGranted) {
-                showVideoCompleteNotification(`Video "${video.message.substring(0, 30)}..."`);
-            } else {
-                toast.success(`Video "${video.message.substring(0, 30)}..." is ready!`);
-            }
-        } else if (statusResponse.status === 'failed') {
-            await updateVideoInDatabase(video.id, video.video_url, 'failed', statusResponse.error);
-            toast.error(`Video generation failed: ${statusResponse.error || 'Unknown error'}`);
-        }
-      } catch (error) {
-        console.error(`Error checking status for video ${video.id}:`, error);
-      } finally {
-        // Unmark as checking
-        setCheckingStatus(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(video.id);
-          return newSet;
-        });
-      }
-    }));
-  }, [videos, checkingStatus, updateVideoInDatabase]);
-
   useEffect(() => {
-    if (user) {
-      fetchVideos();
-      
-      // Clear any existing interval before setting a new one
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-      
-      // Set up periodic status checking
-      pollingIntervalRef.current = setInterval(checkPendingVideos, 10000); // Check every 10 seconds
+    if (user && !initialFetchDone.current) {
+      initialFetchDone.current = true;
+      fetchAndMonitorVideos();
 
-      // Cleanup on unmount
+      const channel = supabase.channel('video-library-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'video_generations', filter: `user_id=eq.${user.id}` },
+          (payload) => {
+            console.log('[Realtime] Change detected, re-fetching videos.', payload);
+            fetchAndMonitorVideos(false); 
+          }
+        )
+        .subscribe();
+      
       return () => {
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-        }
+        supabase.removeChannel(channel);
       };
     }
-  }, [user, fetchVideos, checkPendingVideos]);
+  }, [user, fetchAndMonitorVideos]);
 
-
-  // Extract storage path from Supabase URL
   const extractStoragePath = (url: string): string | undefined => {
     if (!url || !url.includes('supabase.co/storage/v1/object/public/generated-videos/')) {
       return undefined;
     }
     const parts = url.split('/generated-videos/');
-    return parts[1];
+    return parts.length > 1 ? parts[1] : undefined;
   };
 
-  // Filter videos based on search and type
+  const handleManualRetry = async (video: StoredVideo) => {
+    if (!user || checkingStatus.has(video.id)) return;
+    toast.loading('Re-checking video status...', { id: video.id });
+    setCheckingStatus(prev => new Set(prev).add(video.id));
+    
+    try {
+      await videoStatusManager.manualStatusCheck(video.id, video.video_id, user.id);
+      // Realtime subscription will handle the UI update.
+    } catch (error: any) {
+      toast.error(`Failed to re-check status: ${error.message}`, { id: video.id });
+    } finally {
+       setTimeout(() => {
+         setCheckingStatus(prev => {
+           const newSet = new Set(prev);
+           newSet.delete(video.id);
+           return newSet;
+         });
+       }, 2000);
+    }
+  };
+  
+  const handleDelete = async (videoId: string) => {
+    const video = videos.find(v => v.id === videoId);
+    if (!video || !user) return;
+
+    setDeletingVideos(prev => new Set(prev).add(videoId));
+    try {
+      if (video.storage_path) {
+        await deleteVideoFromSupabase(video.storage_path);
+      }
+      const { error: dbError } = await supabase
+        .from('video_generations')
+        .delete()
+        .eq('id', videoId)
+        .eq('user_id', user.id);
+      if (dbError) throw new Error(dbError.message);
+      toast.success('Video deleted successfully');
+      // Realtime will update the list, but we can do it optimistically too
+      setVideos(prev => prev.filter(v => v.id !== videoId));
+    } catch (error: any) {
+      toast.error(`Failed to delete video: ${error.message}`);
+    } finally {
+      setDeletingVideos(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(videoId);
+        return newSet;
+      });
+    }
+  };
+
   const filteredVideos = videos.filter(video => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = 
@@ -227,73 +182,123 @@ export const VideoLibrary: React.FC = () => {
 
   const videoTypes = ['all', ...Array.from(new Set(videos.map(video => video.video_type)))];
 
-  const handleDelete = async (videoId: string) => {
-    const video = videos.find(v => v.id === videoId);
-    if (!video || !user) return;
-
-    setDeletingVideos(prev => new Set(prev).add(videoId));
-
-    try {
-        if (video.storage_path) {
-            await deleteVideoFromSupabase(video.storage_path);
-        }
-        const { error: dbError } = await supabase
-            .from('video_generations')
-            .delete()
-            .eq('id', videoId)
-            .eq('user_id', user.id);
-
-        if (dbError) throw new Error(dbError.message);
-
-        setVideos(prev => prev.filter(v => v.id !== videoId));
-        setSelectedVideos(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(videoId);
-            return newSet;
-        });
-        toast.success('Video deleted successfully');
-    } catch (error: any) {
-        toast.error(`Failed to delete video: ${error.message}`);
-        // Force refresh on error to maintain consistency
-        fetchVideos(false);
-    } finally {
-        setDeletingVideos(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(videoId);
-            return newSet;
-        });
+  const getStatusDisplay = (video: StoredVideo) => {
+    const isChecking = checkingStatus.has(video.id);
+    if (isChecking) return { icon: <Loader2 className="h-4 w-4 animate-spin" />, color: 'text-blue-600', bg: 'bg-blue-100', text: 'Checking...' };
+    switch (video.status) {
+      case 'pending': return { icon: <Clock className="h-4 w-4" />, color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Pending' };
+      case 'processing':
+      case 'running':
+        return { icon: <Loader2 className="h-4 w-4 animate-spin" />, color: 'text-blue-600', bg: 'bg-blue-100', text: `Processing ${video.progress || 0}%` };
+      case 'completed': return { icon: <CheckCircle className="h-4 w-4" />, color: 'text-green-600', bg: 'bg-green-100', text: 'Ready' };
+      case 'failed': return { icon: <XCircle className="h-4 w-4" />, color: 'text-red-600', bg: 'bg-red-100', text: 'Failed' };
+      default: return { icon: <CheckCircle className="h-4 w-4" />, color: 'text-gray-500', bg: 'bg-gray-100', text: 'Unknown' };
     }
   };
-  
-  // Omitted other handlers for brevity (handleDownload, handleBulkDelete, etc.)
-  // They would remain the same as your original code.
-  
-  const getStatusDisplay = (video: StoredVideo) => {
-    // ... same as your original getStatusDisplay function
-    // This function is well-written and doesn't need changes.
-  };
 
-  if (!user) {
-    return <div>Please sign in to view your library.</div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+        <span className="ml-3 text-gray-600 text-lg">Loading your video library...</span>
+      </div>
+    );
   }
-  
+
   return (
-    <div>
-      {/* Omitted the JSX for brevity as the logic was the main focus */}
-      {/* The existing JSX structure is great and doesn't need changes. */}
-      <h1>Video Library</h1>
-      {loading ? (
-        <p>Loading...</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* --- Header and Stats sections can be pasted back here from your original file --- */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Video Library</h1>
+        <p className="text-gray-600">Track and manage your generated videos.</p>
+      </div>
+      
+      {/* --- Controls section can be pasted back here from your original file --- */}
+      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-gray-200/50 mb-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search videos..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+
+      {/* --- Content Grid / List --- */}
+      {filteredVideos.length === 0 ? (
+        <div className="text-center py-12">
+          <Video className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            {videos.length === 0 ? 'No videos yet' : 'No videos match your search'}
+          </h3>
+          <p className="text-gray-600 mb-6">
+            {videos.length === 0 
+              ? 'Generate your first video to see it here' 
+              : 'Try adjusting your search terms or filters'
+            }
+          </p>
+        </div>
       ) : (
-        <ul>
-          {filteredVideos.map(video => (
-            <li key={video.id}>
-              {video.message} - <strong>{video.status}</strong>
-              {video.status === 'processing' && ` (${video.progress || 0}%)`}
-              <button onClick={() => handleDelete(video.id)}>Delete</button>
-            </li>
-          ))}
-        </ul>
+        <AnimatePresence>
+          <motion.div 
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+            initial="hidden" animate="visible" variants={{
+              visible: { transition: { staggerChildren: 0.05 } }
+            }}>
+            {filteredVideos.map((video) => {
+              const statusDisplay = getStatusDisplay(video);
+              const isProcessing = ['pending', 'processing', 'running'].includes(video.status || '');
+              const canDownload = video.status === 'completed';
+              
+              return (
+                <motion.div
+                  key={video.id}
+                  variants={{ hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } }}
+                  className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg"
+                >
+                  <div className="relative aspect-video bg-gray-900">
+                    {canDownload && video.video_url ? (
+                      <video src={video.video_url} className="w-full h-full object-cover" muted loop playsInline autoPlay />
+                    ) : (
+                      <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                        <div className="text-center p-4">
+                          <div className={`mx-auto w-12 h-12 flex items-center justify-center rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+                            {statusDisplay.icon}
+                          </div>
+                          <p className={`mt-2 font-medium ${statusDisplay.color}`}>{statusDisplay.text}</p>
+                          {video.status === 'failed' && <p className="text-xs text-red-500 mt-1 max-w-xs truncate">{video.error_message}</p>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <p className="font-semibold text-gray-800 truncate" title={video.message}>{video.message}</p>
+                    <p className="text-sm text-gray-500">{new Date(video.created_at).toLocaleDateString()}</p>
+                    <div className="flex items-center justify-between mt-4">
+                       <div className={`flex items-center space-x-2 text-sm px-2 py-1 rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+                          {statusDisplay.icon}
+                          <span>{statusDisplay.text}</span>
+                        </div>
+                      <div className="flex items-center space-x-2">
+                        {isProcessing && (
+                          <button onClick={() => handleManualRetry(video)} disabled={checkingStatus.has(video.id)} className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100 transition-colors">
+                            <RotateCcw className={`h-4 w-4 ${checkingStatus.has(video.id) ? 'animate-spin' : ''}`} />
+                          </button>
+                        )}
+                        <button onClick={() => handleDelete(video.id)} className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </AnimatePresence>
       )}
     </div>
   );
