@@ -18,6 +18,18 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: {
     headers: {
       'X-Client-Info': 'lukisan-app'
+    },
+    fetch: (url, options = {}) => {
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      return fetch(url, {
+        ...options,
+        signal: controller.signal,
+      }).finally(() => {
+        clearTimeout(timeoutId);
+      });
     }
   },
   // Add retry configuration for network resilience
@@ -31,13 +43,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Network connectivity checker
 export const checkSupabaseConnectivity = async (): Promise<boolean> => {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
     const response = await fetch(`${supabaseUrl}/rest/v1/`, {
       method: 'HEAD',
       headers: {
         'apikey': supabaseAnonKey,
         'Authorization': `Bearer ${supabaseAnonKey}`
-      }
+      },
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     return response.ok;
   } catch (error) {
     console.error('Supabase connectivity check failed:', error);
@@ -53,13 +71,15 @@ export const handleSupabaseError = (error: any, operation: string) => {
   if (error.message?.includes('Failed to fetch') || 
       error.message?.includes('NetworkError') ||
       error.message?.includes('fetch') ||
+      error.message?.includes('aborted') ||
       error.name === 'TypeError' ||
+      error.name === 'AbortError' ||
       !navigator.onLine) {
     return {
       isNetworkError: true,
       userMessage: 'Unable to connect to the server. Please check your internet connection and try again.',
       shouldRetry: true,
-      suggestion: 'Check that your Supabase project URL is correct and that localhost:5173 is added to your allowed origins.'
+      suggestion: 'Check that your Supabase project URL is correct and that https://localhost:5173 is added to your allowed origins.'
     };
   }
   
@@ -155,13 +175,19 @@ export const testSupabaseConnection = async (): Promise<{
   try {
     // Test basic URL reachability
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const response = await fetch(`${supabaseUrl}/rest/v1/`, {
         method: 'HEAD',
         headers: {
           'apikey': supabaseAnonKey,
           'Authorization': `Bearer ${supabaseAnonKey}`
-        }
+        },
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       diagnostics.urlReachable = true;
       diagnostics.restEndpoint = response.ok;
     } catch (error: any) {

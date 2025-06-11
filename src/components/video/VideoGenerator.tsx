@@ -365,21 +365,12 @@ export const VideoGenerator: React.FC = () => {
             createTaskResponse = await generateImageToVideo(request);
         }
 
-        // Validate that we received a valid task ID
-        if (!createTaskResponse || !createTaskResponse.task_id) {
-            throw new Error('Video generation service did not return a valid task ID. Please try again.');
-        }
-
-        // Additional validation to ensure task_id is not empty or just whitespace
-        if (typeof createTaskResponse.task_id !== 'string' || createTaskResponse.task_id.trim() === '') {
-            throw new Error('Invalid task ID received from video generation service. Please try again.');
-        }
-
+        // The enhanced PiAPI service now validates the task_id, so we can trust it's valid
         const validTaskId = createTaskResponse.task_id.trim();
         setTaskId(validTaskId);
         setStatus('processing');
 
-        // Save to database with processing status - only proceed if we have a valid task ID
+        // Save to database with processing status
         try {
             const { error: dbError } = await supabase
               .from('video_generations')
@@ -387,7 +378,7 @@ export const VideoGenerator: React.FC = () => {
                 user_id: user.id,
                 video_type: mode === 'text-to-video' ? 'marketing' : 'welcome',
                 message: mode === 'text-to-video' ? textPrompt : imagePrompt,
-                video_id: validTaskId, // Use the validated task ID
+                video_id: validTaskId,
                 video_url: '', // Will be updated when completed
               });
 

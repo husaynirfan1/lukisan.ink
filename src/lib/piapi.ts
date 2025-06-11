@@ -43,10 +43,11 @@ if (!PIAPI_API_KEY) {
   console.warn('PiAPI key not found. Video generation features will be disabled.');
 }
 
-// Response from creating a task
+// Response from creating a task - Updated based on PiAPI docs
 export interface CreateTaskResponse {
   task_id: string;
   status?: string;
+  message?: string;
 }
 
 // Response from the status check call
@@ -78,6 +79,11 @@ const postToApi = async (payload: ApidogRequestPayload): Promise<CreateTaskRespo
     
     const endpoint = `${PIAPI_BASE_URL}/api/v1/task`;
 
+    console.log('Sending request to PiAPI:', {
+        endpoint,
+        payload: JSON.stringify(payload, null, 2)
+    });
+
     const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -87,11 +93,37 @@ const postToApi = async (payload: ApidogRequestPayload): Promise<CreateTaskRespo
         body: JSON.stringify(payload),
     });
 
+    console.log('PiAPI response status:', response.status, response.statusText);
+
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorText = await response.text();
+        console.error('PiAPI error response:', errorText);
+        
+        let errorData;
+        try {
+            errorData = JSON.parse(errorText);
+        } catch {
+            errorData = { message: errorText };
+        }
+        
         throw new Error(errorData.message || `API error: ${response.status} ${response.statusText}`);
     }
-    return response.json();
+
+    const responseData = await response.json();
+    console.log('PiAPI response data:', responseData);
+
+    // Validate the response structure based on PiAPI docs
+    if (!responseData) {
+        throw new Error('Empty response from PiAPI service');
+    }
+
+    // Check for task_id in the response - it should be present according to PiAPI docs
+    if (!responseData.task_id || typeof responseData.task_id !== 'string' || responseData.task_id.trim() === '') {
+        console.error('Invalid task_id in response:', responseData);
+        throw new Error('PiAPI service returned an invalid or missing task_id. Response: ' + JSON.stringify(responseData));
+    }
+
+    return responseData;
 };
 
 // --- Simplified Public Functions ---
