@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Video, 
@@ -15,7 +15,7 @@ import {
   Monitor,
   Smartphone,
   Square,
-  AlertCircle,
+  AlertTriangle,
   CheckCircle,
   RefreshCw,
   Wand2,
@@ -40,6 +40,7 @@ import {
   type CreateTaskResponse,
   type TaskStatusResponse
 } from '../../lib/piapi';
+import { storeVideoInSupabase } from '../../lib/videoStorage';
 import { VideoPresets, VideoPreset } from './VideoPresets';
 import { AIPromptRefiner } from './AIPromptRefiner';
 import { useAuth } from '../../hooks/useAuth';
@@ -132,6 +133,7 @@ export const VideoGenerator: React.FC = () => {
   const handlePresetSelect = (preset: VideoPreset) => {
     setSelectedPreset(preset);
     setTextPrompt(preset.prompt);
+    setNegativePrompt(preset.negative_prompt);
   };
 
   // Handle image upload
@@ -234,6 +236,36 @@ export const VideoGenerator: React.FC = () => {
     }
   };
 
+  // Store video in Supabase Storage
+  const storeVideoInLibrary = async (videoUrl: string, taskId: string) => {
+    if (!user) return;
+
+    try {
+      console.log('Storing video in Supabase Storage...');
+      const filename = `video-${mode}-${taskId}`;
+      
+      const storeResult = await storeVideoInSupabase(videoUrl, user.id, filename);
+      
+      if (storeResult.success && storeResult.publicUrl) {
+        console.log('Video stored successfully in Supabase Storage');
+        
+        // Update database with the stored video URL
+        await updateDatabaseWithVideoUrl(taskId, storeResult.publicUrl);
+        
+        toast.success('Video saved to your library!');
+        return storeResult.publicUrl;
+      } else {
+        console.warn('Failed to store video in Supabase Storage:', storeResult.error);
+        toast.warn('Video generated but could not be saved to library');
+        return videoUrl; // Return original URL as fallback
+      }
+    } catch (error) {
+      console.error('Error storing video in library:', error);
+      toast.warn('Video generated but could not be saved to library');
+      return videoUrl; // Return original URL as fallback
+    }
+  };
+
   // Start status polling using the VideoStatusPoller class
   const startStatusPolling = (taskId: string) => {
     // Stop any existing poller
@@ -254,15 +286,19 @@ export const VideoGenerator: React.FC = () => {
       async (statusResponse: TaskStatusResponse) => {
         console.log('Video generation completed:', statusResponse);
         setStatus('completed');
-        setFinalVideoUrl(statusResponse.video_url || null);
+        
+        let finalVideoUrl = statusResponse.video_url || null;
         setFinalThumbnailUrl(statusResponse.thumbnail_url || null);
         
-        // Update database with final video URL
-        if (statusResponse.video_url) {
-          await updateDatabaseWithVideoUrl(taskId, statusResponse.video_url);
+        // Store video in library and get the stored URL
+        if (finalVideoUrl) {
+          const storedUrl = await storeVideoInLibrary(finalVideoUrl, taskId);
+          finalVideoUrl = storedUrl;
         }
         
-        toast.success('Video generation completed!');
+        setFinalVideoUrl(finalVideoUrl);
+        
+        toast.success('Video generation completed and saved to library!');
         
         // Show browser notification if enabled
         if (notificationsEnabled) {
@@ -519,7 +555,7 @@ export const VideoGenerator: React.FC = () => {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center">
-          <AlertCircle className="h-16 w-16 text-orange-500 mx-auto mb-4" />
+          <AlertTriangle className="h-16 w-16 text-orange-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Service Not Available</h2>
           <p className="text-gray-600 mb-4">
             Video generation requires a PiAPI key to be configured.
@@ -916,7 +952,7 @@ export const VideoGenerator: React.FC = () => {
             {status === 'failed' && errorMessage && (
               <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
                 <div className="flex items-center space-x-2">
-                  <AlertCircle className="h-5 w-5" />
+                  <AlertTriangle className="h-5 w-5" />
                   <p>Error: {errorMessage}</p>
                 </div>
                 <button

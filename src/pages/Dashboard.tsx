@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Images, Crown, Video } from 'lucide-react';
 import { LogoGenerator } from '../components/LogoGenerator';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { VideoGenerator } from '../components/video/VideoGenerator';
+import { VideoLibrary } from '../components/VideoLibrary';
 import { SubscriptionCard } from '../components/SubscriptionCard';
 import { useAuth } from '../hooks/useAuth';
 
-type DashboardTab = 'generate' | 'library' | 'video';
+type DashboardTab = 'generate' | 'library' | 'video' | 'video-library';
 
 export const Dashboard: React.FC = () => {
   const { user, getUserTier } = useAuth();
@@ -39,22 +40,29 @@ export const Dashboard: React.FC = () => {
   const tabs = [
     {
       id: 'generate' as DashboardTab,
-      name: 'Generate',
+      name: 'Generate Logos',
       icon: Sparkles,
       description: 'Create new AI-powered logos',
     },
     {
       id: 'video' as DashboardTab,
-      name: 'Video',
+      name: 'Create Videos',
       icon: Video,
       description: 'Generate AI-powered marketing videos',
       proOnly: true,
     },
     {
       id: 'library' as DashboardTab,
-      name: 'Library',
+      name: 'Logo Library',
       icon: Images,
-      description: 'View and manage your generated content',
+      description: 'View and manage your generated logos',
+    },
+    {
+      id: 'video-library' as DashboardTab,
+      name: 'Video Library',
+      icon: Video,
+      description: 'View and manage your generated videos',
+      proOnly: true,
     },
   ];
 
@@ -83,6 +91,32 @@ export const Dashboard: React.FC = () => {
     }
 
     return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Check for task_id in URL query params for direct video status viewing
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const taskId = params.get('task_id');
+    
+    if (taskId) {
+      // If there's a task_id, switch to video tab
+      setActiveTab('video-library');
+      
+      // Remove the query parameter after processing
+      window.history.replaceState(
+        { tab: 'video-library' }, 
+        '', 
+        window.location.pathname
+      );
+      
+      // Scroll to the video with this task_id if it exists
+      setTimeout(() => {
+        const videoElement = document.getElementById(`video-${taskId}`);
+        if (videoElement) {
+          videoElement.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 1000);
+    }
   }, []);
 
   if (!user) {
@@ -119,7 +153,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
+            <div className="flex flex-wrap space-x-1 bg-gray-100 rounded-lg p-1">
               {tabs.map((tab) => {
                 const IconComponent = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -176,6 +210,8 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'video' && <VideoGenerator />}
           
           {activeTab === 'library' && <ImageLibrary />}
+
+          {activeTab === 'video-library' && <VideoLibrary />}
         </motion.div>
       </div>
     </div>
