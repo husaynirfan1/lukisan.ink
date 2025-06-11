@@ -22,7 +22,9 @@ import {
   Crown,
   Bell,
   BellOff,
-  ExternalLink
+  ExternalLink,
+  Database,
+  Shield
 } from 'lucide-react';
 import { 
   generateTextToVideo, 
@@ -41,8 +43,8 @@ import {
   type CreateTaskResponse,
   type TaskStatusResponse
 } from '../../lib/piapi';
-import { storeVideoInSupabase } from '../../lib/videoStorage';
-import { videoStatusManager } from '../../lib/videoStatusManager';
+import { videoTracker } from '../../lib/videoTracker';
+import { enhancedVideoStorage } from '../../lib/enhancedVideoStorage';
 import { VideoPresets, VideoPreset } from './VideoPresets';
 import { AIPromptRefiner } from './AIPromptRefiner';
 import { useAuth } from '../../hooks/useAuth';
@@ -61,8 +63,9 @@ export const VideoGenerator: React.FC = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   // Status polling state
-  const [status, setStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
+  const [status, setStatus] = useState<'idle' | 'pending' | 'processing' | 'downloading' | 'storing' | 'completed' | 'failed'>('idle');
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [videoId, setVideoId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
   const [finalThumbnailUrl, setFinalThumbnailUrl] = useState<string | null>(null);
@@ -220,123 +223,6 @@ export const VideoGenerator: React.FC = () => {
     }
   };
 
-  // Start status polling using the VideoStatusPoller class
-  const startStatusPolling = (taskId: string) => {
-    // Stop any existing poller
-    if (pollerRef.current) {
-      pollerRef.current.stop();
-    }
-
-    // Create new poller
-    pollerRef.current = new VideoStatusPoller(
-      taskId,
-      // onStatusUpdate
-      (statusResponse: TaskStatusResponse) => {
-        console.log('Status update:', statusResponse);
-        setProgress(statusResponse.progress || 0);
-        setStatus(statusResponse.status);
-      },
-      // onComplete
-      async (statusResponse: TaskStatusResponse) => {
-        console.log('Video generation completed:', statusResponse);
-        setStatus('completed');
-        
-        let finalVideoUrl = statusResponse.video_url || null;
-        setFinalThumbnailUrl(statusResponse.thumbnail_url || null);
-        
-        // Store video in library and get the stored URL
-        if (finalVideoUrl && user) {
-          try {
-            console.log('Storing video in Supabase Storage...');
-            const filename = `video-${mode}-${taskId}`;
-            
-            const storeResult = await storeVideoInSupabase(finalVideoUrl, user.id, filename);
-            
-            if (storeResult.success && storeResult.publicUrl) {
-              console.log('Video stored successfully in Supabase Storage');
-              finalVideoUrl = storeResult.publicUrl;
-              
-              // Update database with the stored video URL and storage path
-              const updateData: any = { 
-                video_url: storeResult.publicUrl 
-              };
-              
-              if (storeResult.storagePath) {
-                updateData.storage_path = storeResult.storagePath;
-              }
-              
-              const { error } = await supabase
-                .from('video_generations')
-                .update(updateData)
-                .eq('video_id', taskId);
-              
-              if (error) {
-                console.error('Failed to update database with video URL:', error);
-              } else {
-                console.log('Successfully updated database with video URL');
-              }
-            } else {
-              console.warn('Failed to store video in Supabase Storage:', storeResult.error);
-              
-              // Update database with original video URL
-              const { error } = await supabase
-                .from('video_generations')
-                .update({ video_url: finalVideoUrl })
-                .eq('video_id', taskId);
-              
-              if (error) {
-                console.error('Failed to update database with original video URL:', error);
-              }
-            }
-          } catch (error) {
-            console.error('Error storing video in library:', error);
-            // Still set the final URL even if storage fails
-          }
-        }
-        
-        setFinalVideoUrl(finalVideoUrl);
-        
-        toast.success('Video generation completed and saved to library!');
-        
-        // Show browser notification if enabled
-        if (notificationsEnabled) {
-          const videoTitle = mode === 'text-to-video' ? 'Text Video' : 'Image Animation';
-          showVideoCompleteNotification(videoTitle, () => {
-            // Navigate to library or focus on the video
-            document.getElementById('completed-video')?.scrollIntoView({ behavior: 'smooth' });
-          });
-        }
-      },
-      // onError
-      (error: string) => {
-        console.error('Video generation failed:', error);
-        setStatus('failed');
-        setErrorMessage(error);
-        toast.error(error || 'Video generation failed');
-        
-        // Update database with error
-        if (user && taskId) {
-          supabase
-            .from('video_generations')
-            .update({ 
-              video_url: 'failed',
-              storage_path: `error: ${error}`
-            })
-            .eq('video_id', taskId)
-            .then(({ error: dbError }) => {
-              if (dbError) {
-                console.error('Failed to update database with error:', dbError);
-              }
-            });
-        }
-      },
-      5000 // Poll every 5 seconds
-    );
-
-    // Start polling
-    pollerRef.current.start();
-  };
-
   const handleGenerateSubmit = async () => {
     if (status === 'pending' || status === 'processing') {
         toast.warn('A video generation is already in progress.');
@@ -381,6 +267,7 @@ export const VideoGenerator: React.FC = () => {
     // Reset state for a new job
     setStatus('pending');
     setTaskId(null);
+    setVideoId(null);
     setProgress(0);
     setFinalVideoUrl(null);
     setFinalThumbnailUrl(null);
@@ -420,33 +307,19 @@ export const VideoGenerator: React.FC = () => {
         setTaskId(validTaskId);
         setStatus('processing');
 
-        // Save to database with processing status
+        // Start tracking with the video tracker
         try {
-            const { data, error: dbError } = await supabase
-              .from('video_generations')
-              .insert({
-                user_id: user.id,
+            const generatedVideoId = await videoTracker.trackVideoGeneration(user.id, validTaskId, {
                 video_type: mode === 'text-to-video' ? 'marketing' : 'welcome',
-                message: mode === 'text-to-video' ? textPrompt : imagePrompt,
-                video_id: validTaskId,
-                video_url: '', // Will be updated when completed
-                storage_path: 'progress: 0%' // Track progress
-              })
-              .select('id')
-              .single();
-
-            if (dbError) {
-              console.error('Database error:', dbError);
-              // Don't throw here - the video generation can still proceed
-              toast.warn('Video generation started but could not be saved to history.');
-            } else if (data) {
-              // Start monitoring with the VideoStatusManager
-              videoStatusManager.startMonitoring(data.id, validTaskId, user.id);
-            }
-        } catch (dbError) {
-            console.error('Database insertion failed:', dbError);
+                message: mode === 'text-to-video' ? textPrompt : imagePrompt
+            });
+            
+            setVideoId(generatedVideoId);
+            console.log(`[VideoGenerator] Started tracking video: ${generatedVideoId}`);
+        } catch (trackingError) {
+            console.error('Video tracking failed:', trackingError);
             // Don't throw here - the video generation can still proceed
-            toast.warn('Video generation started but could not be saved to history.');
+            toast.warn('Video generation started but tracking may be limited.');
         }
 
         // Update user credits - DEDUCT 3 CREDITS
@@ -502,9 +375,6 @@ export const VideoGenerator: React.FC = () => {
         }
 
         toast.success(`Video generation started! (${CREDITS_PER_VIDEO} credits used)`);
-        
-        // Start status polling
-        startStatusPolling(validTaskId);
         
         // Redirect to video library after a delay
         setTimeout(() => {
@@ -1021,14 +891,28 @@ export const VideoGenerator: React.FC = () => {
               </div>
             )}
           </div>
-        ) : status === 'pending' || status === 'processing' ? (
+        ) : (
           <div className="text-center p-6 bg-blue-50 rounded-xl border border-blue-200">
-            <Loader2 className="h-10 w-10 text-blue-600 mx-auto mb-3 animate-spin" />
-            <h3 className="text-lg font-semibold text-blue-900 mb-2">
-              {status === 'pending' ? 'Initializing Video Generation...' : 'Your video is being created...'}
-            </h3>
-            <p className="text-sm text-blue-700 mb-1">Status: <span className="font-medium">{status}</span></p>
+            <div className="flex items-center justify-center space-x-2 mb-3">
+              {status === 'downloading' ? (
+                <Download className="h-6 w-6 text-blue-600 animate-pulse" />
+              ) : status === 'storing' ? (
+                <Database className="h-6 w-6 text-indigo-600 animate-pulse" />
+              ) : (
+                <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
+              )}
+              <h3 className="text-lg font-semibold text-blue-900">
+                {status === 'pending' ? 'Initializing Video Generation...' : 
+                 status === 'downloading' ? 'Downloading Your Video...' :
+                 status === 'storing' ? 'Saving to Your Library...' :
+                 'Your video is being created...'}
+              </h3>
+            </div>
+            
+            <p className="text-sm text-blue-700 mb-1">Status: <span className="font-medium capitalize">{status}</span></p>
             {taskId && <p className="text-xs text-blue-600 mb-3">Task ID: {taskId}</p>}
+            {videoId && <p className="text-xs text-blue-600 mb-3">Video ID: {videoId}</p>}
+            
             <div className="w-full bg-blue-200 rounded-full h-2.5">
               <div
                 className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
@@ -1036,57 +920,14 @@ export const VideoGenerator: React.FC = () => {
               ></div>
             </div>
             <p className="text-sm text-blue-700 mt-2">{progress}% complete</p>
+            
             {notificationsEnabled && (
               <p className="text-xs text-blue-600 mt-2">
                 🔔 You'll be notified when your video is ready
               </p>
             )}
           </div>
-        ) : status === 'completed' && finalVideoUrl ? (
-          <div id="completed-video" className="text-center p-6 bg-green-50 rounded-xl border border-green-200">
-            <CheckCircle className="h-10 w-10 text-green-600 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-green-900 mb-4">Generation Complete!</h3>
-            <div className="aspect-video bg-gray-800 rounded-lg mb-4 overflow-hidden shadow-lg max-w-2xl mx-auto">
-              <video 
-                src={finalVideoUrl} 
-                controls 
-                className="w-full h-full object-contain"
-                poster={finalThumbnailUrl}
-              />
-            </div>
-            <div className="flex space-x-3 justify-center">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleDownloadLocal(finalVideoUrl, mode === 'text-to-video' ? textPrompt.substring(0,20) : 'image-video')}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
-              >
-                <Download className="h-5 w-5" />
-                <span>Download Video</span>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  setStatus('idle');
-                  setFinalVideoUrl(null);
-                  setFinalThumbnailUrl(null);
-                  setTaskId(null);
-                  setProgress(0);
-                  setSelectedPreset(null);
-                  setSelectedImage(null);
-                  setImagePreview(null);
-                  setTextPrompt('');
-                  setImagePrompt('');
-                }}
-                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
-              >
-                <RefreshCw className="h-5 w-5" />
-                <span>Start New Video</span>
-              </motion.button>
-            </div>
-          </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
