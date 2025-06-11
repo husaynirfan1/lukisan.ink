@@ -5,12 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Video, Download, Trash2, Clock, Crown, Calendar, Search, Filter, 
   Grid3X3, List, AlertTriangle, Loader2, Cloud, ExternalLink, 
-  RefreshCw, Play, Pause, CheckCircle, XCircle, RotateCcw 
+  RefreshCw, Play, Pause, CheckCircle, XCircle, RotateCcw, 
+  HardDrive, Wifi, WifiOff, Database, Shield
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '../lib/videoStorage';
 import { videoStatusManager } from '../lib/videoStatusManager';
+import { videoTracker, type VideoTrackingData, type StorageInfo } from '../lib/videoTracker';
+import { enhancedVideoStorage, type VideoDownloadProgress } from '../lib/enhancedVideoStorage';
 import toast from 'react-hot-toast';
 
 // This interface should match the structure of your 'video_generations' table
@@ -26,10 +29,284 @@ interface StoredVideo {
   logo_url?: string;
   created_at: string;
   storage_path?: string;
-  status?: 'pending' | 'processing' | 'running' | 'completed' | 'failed';
+  status?: 'pending' | 'processing' | 'running' | 'downloading' | 'storing' | 'completed' | 'failed';
   progress?: number;
+  download_progress?: number;
+  storage_progress?: number;
+  file_size?: number;
   error_message?: string;
+  integrity_verified?: boolean;
 }
+
+interface VideoCardProps {
+  video: StoredVideo;
+  onDelete: (videoId: string) => void;
+  onRetry: (video: StoredVideo) => void;
+  isDeleting: boolean;
+  isRetrying: boolean;
+}
+
+const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDeleting, isRetrying }) => {
+  const [downloadProgress, setDownloadProgress] = useState<VideoDownloadProgress | null>(null);
+  const [trackingData, setTrackingData] = useState<VideoTrackingData | null>(null);
+
+  // Subscribe to video tracking updates
+  useEffect(() => {
+    const unsubscribe = videoTracker.subscribeToVideo(video.id, (data) => {
+      console.log('[VideoCard] Received tracking update:', data);
+      setTrackingData(data);
+    });
+
+    // Subscribe to download progress
+    const unsubscribeProgress = enhancedVideoStorage.subscribeToDownloadProgress(
+      video.id,
+      (progress) => {
+        console.log('[VideoCard] Download progress:', progress);
+        setDownloadProgress(progress);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      unsubscribeProgress();
+    };
+  }, [video.id]);
+
+  const getStatusDisplay = () => {
+    const currentData = trackingData || video;
+    const isRetryingThis = isRetrying;
+    
+    if (isRetryingThis) {
+      return { 
+        icon: <Loader2 className="h-4 w-4 animate-spin" />, 
+        color: 'text-blue-600', 
+        bg: 'bg-blue-100', 
+        text: 'Checking...' 
+      };
+    }
+    
+    switch (currentData.status) {
+      case 'pending': 
+        return { 
+          icon: <Clock className="h-4 w-4" />, 
+          color: 'text-yellow-600', 
+          bg: 'bg-yellow-100', 
+          text: 'Pending' 
+        };
+      case 'processing':
+      case 'running':
+        return { 
+          icon: <Loader2 className="h-4 w-4 animate-spin" />, 
+          color: 'text-blue-600', 
+          bg: 'bg-blue-100', 
+          text: `Processing ${currentData.progress || 0}%` 
+        };
+      case 'downloading':
+        return { 
+          icon: <Download className="h-4 w-4 animate-pulse" />, 
+          color: 'text-purple-600', 
+          bg: 'bg-purple-100', 
+          text: `Downloading ${currentData.download_progress || 0}%` 
+        };
+      case 'storing':
+        return { 
+          icon: <Database className="h-4 w-4 animate-pulse" />, 
+          color: 'text-indigo-600', 
+          bg: 'bg-indigo-100', 
+          text: `Storing ${currentData.storage_progress || 0}%` 
+        };
+      case 'completed': 
+        return { 
+          icon: <CheckCircle className="h-4 w-4" />, 
+          color: 'text-green-600', 
+          bg: 'bg-green-100', 
+          text: 'Ready' 
+        };
+      case 'failed': 
+        return { 
+          icon: <XCircle className="h-4 w-4" />, 
+          color: 'text-red-600', 
+          bg: 'bg-red-100', 
+          text: 'Failed' 
+        };
+      default: 
+        return { 
+          icon: <Clock className="h-4 w-4" />, 
+          color: 'text-gray-500', 
+          bg: 'bg-gray-100', 
+          text: 'Unknown' 
+        };
+    }
+  };
+
+  const statusDisplay = getStatusDisplay();
+  const currentData = trackingData || video;
+  const isProcessing = ['pending', 'processing', 'running', 'downloading', 'storing'].includes(currentData.status || '');
+  const canDownload = currentData.status === 'completed' && currentData.video_url;
+  const hasIntegrityIssue = currentData.status === 'completed' && currentData.integrity_verified === false;
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return 'Unknown size';
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const formatSpeed = (bytesPerSecond: number) => {
+    const mbps = (bytesPerSecond * 8) / (1024 * 1024);
+    return `${mbps.toFixed(1)} Mbps`;
+  };
+
+  return (
+    <motion.div
+      key={video.id}
+      id={`video-${video.video_id}`}
+      variants={{ hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } }}
+      className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg"
+    >
+      <div className="relative aspect-video bg-gray-900">
+        {canDownload ? (
+          <video 
+            src={currentData.video_url} 
+            className="w-full h-full object-cover" 
+            muted 
+            loop 
+            playsInline 
+            controls
+            poster={video.logo_url}
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+            <div className="text-center p-4">
+              <div className={`mx-auto w-12 h-12 flex items-center justify-center rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+                {statusDisplay.icon}
+              </div>
+              <p className={`mt-2 font-medium ${statusDisplay.color}`}>{statusDisplay.text}</p>
+              
+              {/* Enhanced progress display */}
+              {isProcessing && (
+                <div className="mt-3 space-y-2">
+                  {/* Overall progress */}
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${currentData.progress || 0}%` }}
+                    />
+                  </div>
+                  
+                  {/* Download progress details */}
+                  {downloadProgress && (
+                    <div className="text-xs text-gray-300 space-y-1">
+                      <div className="flex justify-between">
+                        <span>{formatFileSize(downloadProgress.downloadedBytes)} / {formatFileSize(downloadProgress.totalBytes)}</span>
+                        <span>{formatSpeed(downloadProgress.speed)}</span>
+                      </div>
+                      {downloadProgress.estimatedTimeRemaining > 0 && (
+                        <div>ETA: {Math.ceil(downloadProgress.estimatedTimeRemaining)}s</div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* File size info */}
+                  {currentData.file_size && (
+                    <div className="text-xs text-gray-300">
+                      Size: {formatFileSize(currentData.file_size)}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Error message */}
+              {currentData.status === 'failed' && currentData.error_message && (
+                <p className="text-xs text-red-400 mt-1 max-w-xs truncate" title={currentData.error_message}>
+                  {currentData.error_message}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Status badges */}
+        <div className="absolute top-2 left-2 flex space-x-1">
+          {currentData.storage_path && (
+            <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+              <Cloud className="h-3 w-3" />
+              <span>Stored</span>
+            </div>
+          )}
+          {hasIntegrityIssue && (
+            <div className="flex items-center space-x-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
+              <AlertTriangle className="h-3 w-3" />
+              <span>Integrity Issue</span>
+            </div>
+          )}
+          {currentData.integrity_verified === true && (
+            <div className="flex items-center space-x-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+              <Shield className="h-3 w-3" />
+              <span>Verified</span>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="p-4">
+        <p className="font-semibold text-gray-800 truncate" title={video.message}>
+          {video.message}
+        </p>
+        <p className="text-sm text-gray-500 mt-1">
+          {new Date(video.created_at).toLocaleDateString()} • {video.video_type}
+        </p>
+        
+        {/* Enhanced status display */}
+        <div className="flex items-center justify-between mt-4">
+          <div className={`flex items-center space-x-2 text-sm px-2 py-1 rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+            {statusDisplay.icon}
+            <span>{statusDisplay.text}</span>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            {canDownload && (
+              <button 
+                onClick={() => {
+                  const filename = `video-${video.video_type}-${Date.now()}.mp4`;
+                  downloadVideoFromSupabase(currentData.video_url!, filename);
+                }}
+                className="p-2 text-gray-500 hover:text-green-600 rounded-full hover:bg-gray-100 transition-colors"
+                title="Download video"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            )}
+            
+            {isProcessing && (
+              <button 
+                onClick={() => onRetry(video)} 
+                disabled={isRetrying} 
+                className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+                title="Re-check status"
+              >
+                <RotateCcw className={`h-4 w-4 ${isRetrying ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+            
+            <button 
+              onClick={() => onDelete(video.id)} 
+              disabled={isDeleting}
+              className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+              title="Delete video"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
 
 export function VideoLibrary() {
   const { user, getUserTier } = useAuth();
@@ -43,10 +320,26 @@ export function VideoLibrary() {
   const [refreshing, setRefreshing] = useState(false);
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
+  const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline'>('online');
   
   const initialFetchDone = useRef(false);
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
+
+  // Monitor connection status
+  useEffect(() => {
+    const handleOnline = () => setConnectionStatus('online');
+    const handleOffline = () => setConnectionStatus('offline');
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const fetchAndMonitorVideos = useCallback(async (showLoading = true) => {
     if (!user) return;
@@ -56,42 +349,38 @@ export function VideoLibrary() {
     try {
       console.log('[VideoLibrary] Fetching videos for user:', user.id);
       
-      const { data, error } = await supabase
-        .from('video_generations')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('[VideoLibrary] Error fetching videos:', error);
-        toast.error('Failed to load video library.');
-        return;
-      }
+      // Use the enhanced video tracker to get videos
+      const trackingData = await videoTracker.getUserVideos(user.id);
+      console.log('[VideoLibrary] Fetched tracking data:', trackingData.length);
       
-      console.log('[VideoLibrary] Fetched videos:', data?.length || 0);
-      
-      const fetchedVideos = (data || []).map(video => {
-        // Normalize status - treat null/undefined as 'pending'
-        const validStatuses = ['pending', 'processing', 'running', 'completed', 'failed'];
-        let currentStatus = video.status;
-        
-        if (!currentStatus || !validStatuses.includes(currentStatus)) {
-          currentStatus = 'pending';
-          console.log(`[VideoLibrary] Normalized status for video ${video.id}: ${video.status} -> pending`);
-        }
+      // Transform tracking data to StoredVideo format for compatibility
+      const transformedVideos: StoredVideo[] = trackingData.map(data => ({
+        id: data.id,
+        user_id: data.user_id,
+        video_id: data.video_id,
+        video_type: 'marketing', // Default, should be in tracking data
+        message: data.message || '',
+        video_url: data.video_url || '',
+        created_at: data.created_at,
+        status: data.status,
+        progress: data.progress,
+        download_progress: data.download_progress,
+        storage_progress: data.storage_progress,
+        file_size: data.file_size,
+        storage_path: data.storage_path,
+        error_message: data.error_message,
+        integrity_verified: data.integrity_verified
+      }));
 
-        return {
-            ...video,
-            status: currentStatus,
-            storage_path: video.video_url ? extractStoragePath(video.video_url) : undefined
-        };
-      });
+      setVideos(transformedVideos);
 
-      setVideos(fetchedVideos);
+      // Get storage info
+      const storage = await videoTracker.getStorageInfo(user.id);
+      setStorageInfo(storage);
 
       // Start monitoring for videos that are still processing
-      fetchedVideos.forEach(video => {
-        if (['pending', 'processing', 'running'].includes(video.status || '')) {
+      transformedVideos.forEach(video => {
+        if (['pending', 'processing', 'running', 'downloading', 'storing'].includes(video.status || '')) {
           console.log(`[VideoLibrary] Starting monitoring for video ${video.id} with status ${video.status}`);
           videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
         }
@@ -132,17 +421,10 @@ export function VideoLibrary() {
         supabase.removeChannel(channel);
         // Stop all monitoring when component unmounts
         videoStatusManager.stopAllMonitoring();
+        videoTracker.cleanup();
       };
     }
   }, [user, fetchAndMonitorVideos]);
-
-  const extractStoragePath = (url: string): string | undefined => {
-    if (!url || !url.includes('supabase.co/storage/v1/object/public/generated-videos/')) {
-      return undefined;
-    }
-    const parts = url.split('/generated-videos/');
-    return parts.length > 1 ? parts[1] : undefined;
-  };
 
   const handleManualRetry = async (video: StoredVideo) => {
     if (!user || checkingStatus.has(video.id)) return;
@@ -188,6 +470,12 @@ export function VideoLibrary() {
       if (dbError) throw new Error(dbError.message);
       toast.success('Video deleted successfully');
       setVideos(prev => prev.filter(v => v.id !== videoId));
+      
+      // Update storage info
+      if (user) {
+        const storage = await videoTracker.getStorageInfo(user.id);
+        setStorageInfo(storage);
+      }
     } catch (error: any) {
       toast.error(`Failed to delete video: ${error.message}`);
     } finally {
@@ -213,34 +501,11 @@ export function VideoLibrary() {
 
   const videoTypes = ['all', ...Array.from(new Set(videos.map(video => video.video_type)))];
 
-  const getStatusDisplay = (video: StoredVideo) => {
-    const isChecking = checkingStatus.has(video.id);
-    if (isChecking) return { icon: <Loader2 className="h-4 w-4 animate-spin" />, color: 'text-blue-600', bg: 'bg-blue-100', text: 'Checking...' };
-    
-    switch (video.status) {
-      case 'pending': 
-        return { icon: <Clock className="h-4 w-4" />, color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Pending' };
-      case 'processing':
-      case 'running':
-        return { 
-          icon: <Loader2 className="h-4 w-4 animate-spin" />, 
-          color: 'text-blue-600', 
-          bg: 'bg-blue-100', 
-          text: `Processing ${video.progress || 0}%` 
-        };
-      case 'completed': 
-        return { icon: <CheckCircle className="h-4 w-4" />, color: 'text-green-600', bg: 'bg-green-100', text: 'Ready' };
-      case 'failed': 
-        return { 
-          icon: <XCircle className="h-4 w-4" />, 
-          color: 'text-red-600', 
-          bg: 'bg-red-100', 
-          text: 'Failed' 
-        };
-      default: 
-        // Fallback for any unrecognized status
-        return { icon: <Clock className="h-4 w-4" />, color: 'text-gray-500', bg: 'bg-gray-100', text: 'Unknown' };
-    }
+  const formatBytes = (bytes: number) => {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    if (bytes === 0) return '0 Bytes';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
   if (loading) {
@@ -255,8 +520,54 @@ export function VideoLibrary() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Video Library</h1>
-        <p className="text-gray-600">Track and manage your generated videos.</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Video Library</h1>
+            <p className="text-gray-600">Track and manage your generated videos.</p>
+          </div>
+          
+          {/* Connection status indicator */}
+          <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
+            connectionStatus === 'online' 
+              ? 'bg-green-100 text-green-800' 
+              : 'bg-red-100 text-red-800'
+          }`}>
+            {connectionStatus === 'online' ? (
+              <Wifi className="h-4 w-4" />
+            ) : (
+              <WifiOff className="h-4 w-4" />
+            )}
+            <span>{connectionStatus === 'online' ? 'Online' : 'Offline'}</span>
+          </div>
+        </div>
+        
+        {/* Storage info */}
+        {storageInfo && (
+          <div className="mt-4 bg-white/60 backdrop-blur-sm rounded-lg p-4 border border-gray-200/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <HardDrive className="h-5 w-5 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-900">Storage Usage</span>
+                </div>
+                <div className="text-sm text-gray-600">
+                  {formatBytes(storageInfo.used_space)} / {formatBytes(storageInfo.total_space)} used
+                </div>
+                <div className="text-sm text-gray-600">
+                  {storageInfo.video_count} videos
+                </div>
+              </div>
+              <div className="w-32 bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ 
+                    width: `${Math.min(100, (storageInfo.used_space / storageInfo.total_space) * 100)}%` 
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Debug info in development */}
         {process.env.NODE_ENV === 'development' && (
@@ -327,111 +638,16 @@ export function VideoLibrary() {
               visible: { transition: { staggerChildren: 0.05 } }
             }}
           >
-            {filteredVideos.map((video) => {
-              const statusDisplay = getStatusDisplay(video);
-              const isProcessing = ['pending', 'processing', 'running'].includes(video.status || '');
-              const canDownload = video.status === 'completed' && video.video_url;
-              
-              return (
-                <motion.div
-                  key={video.id}
-                  id={`video-${video.video_id}`} // For direct linking
-                  variants={{ hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } }}
-                  className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg"
-                >
-                  <div className="relative aspect-video bg-gray-900">
-                    {canDownload ? (
-                      <video 
-                        src={video.video_url} 
-                        className="w-full h-full object-cover" 
-                        muted 
-                        loop 
-                        playsInline 
-                        controls
-                        poster={video.logo_url}
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                        <div className="text-center p-4">
-                          <div className={`mx-auto w-12 h-12 flex items-center justify-center rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
-                            {statusDisplay.icon}
-                          </div>
-                          <p className={`mt-2 font-medium ${statusDisplay.color}`}>{statusDisplay.text}</p>
-                          {video.status === 'failed' && video.error_message && (
-                            <p className="text-xs text-red-500 mt-1 max-w-xs truncate" title={video.error_message}>
-                              {video.error_message}
-                            </p>
-                          )}
-                          {video.progress !== undefined && video.progress > 0 && (
-                            <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${video.progress}%` }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="p-4">
-                    <p className="font-semibold text-gray-800 truncate" title={video.message}>
-                      {video.message}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {new Date(video.created_at).toLocaleDateString()} • {video.video_type}
-                    </p>
-                    
-                    <div className="flex items-center justify-between mt-4">
-                      <div className={`flex items-center space-x-2 text-sm px-2 py-1 rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
-                        {statusDisplay.icon}
-                        <span>{statusDisplay.text}</span>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        {canDownload && (
-                          <button 
-                            onClick={() => {
-                              const filename = `video-${video.video_type}-${Date.now()}.mp4`;
-                              downloadVideoFromSupabase(video.video_url, filename);
-                            }}
-                            className="p-2 text-gray-500 hover:text-green-600 rounded-full hover:bg-gray-100 transition-colors"
-                            title="Download video"
-                          >
-                            <Download className="h-4 w-4" />
-                          </button>
-                        )}
-                        
-                        {isProcessing && (
-                          <button 
-                            onClick={() => handleManualRetry(video)} 
-                            disabled={checkingStatus.has(video.id)} 
-                            className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
-                            title="Re-check status"
-                          >
-                            <RotateCcw className={`h-4 w-4 ${checkingStatus.has(video.id) ? 'animate-spin' : ''}`} />
-                          </button>
-                        )}
-                        
-                        <button 
-                          onClick={() => handleDelete(video.id)} 
-                          disabled={deletingVideos.has(video.id)}
-                          className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
-                          title="Delete video"
-                        >
-                          {deletingVideos.has(video.id) ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+            {filteredVideos.map((video) => (
+              <VideoCard
+                key={video.id}
+                video={video}
+                onDelete={handleDelete}
+                onRetry={handleManualRetry}
+                isDeleting={deletingVideos.has(video.id)}
+                isRetrying={checkingStatus.has(video.id)}
+              />
+            ))}
           </motion.div>
         </AnimatePresence>
       )}
