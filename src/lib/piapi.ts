@@ -36,7 +36,6 @@ export interface ApidogRequestPayload {
 // REFACTORED API SERVICE
 // =======================================================================
 
-// --- FIX: The base URL should not include the /api path segment ---
 const PIAPI_BASE_URL = 'https://api.piapi.ai'; 
 const PIAPI_API_KEY = import.meta.env.VITE_PIAPI_API_KEY;
 
@@ -78,7 +77,6 @@ const postToApi = async (payload: ApidogRequestPayload): Promise<CreateTaskRespo
         throw new Error('PiAPI key not configured');
     }
     
-    // --- FIX: Correct endpoint for creating a task ---
     const endpoint = `${PIAPI_BASE_URL}/v1/task`;
 
     console.log('Sending request to PiAPI:', {
@@ -186,7 +184,6 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
     if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
 
-    // --- FIX: Correct endpoint for checking a task's status ---
     const endpoint = `${PIAPI_BASE_URL}/v1/task/${taskId}`;
 
     const response = await fetch(endpoint, { 
@@ -198,7 +195,6 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
     });
     
     if (!response.ok) {
-        // Provide a more detailed error message
         const errorText = await response.text();
         console.error(`Status check failed for task ${taskId}:`, errorText);
         throw new Error(`Status check failed: ${response.status} ${response.statusText}`);
@@ -206,10 +202,8 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
     
     const data = await response.json();
 
-    // The PiAPI response wraps the actual data in a `data` object
     const responseData = data.data || data;
     
-    // Handle different response formats from PiAPI
     const status = responseData.status || 'processing';
     const output = responseData.output || {};
     
@@ -224,4 +218,133 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
     };
 };
 
-// ... (Rest of the utility functions can remain the same)
+// =======================================================================
+// UTILITY FUNCTIONS (ADDED BACK)
+// =======================================================================
+
+// Convert file to base64
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      // The PiAPI might expect the full data URI, but if not, this part can be adjusted.
+      resolve(result);
+    };
+    reader.onerror = error => reject(error);
+  });
+};
+
+// Download video
+export const downloadVideo = async (videoUrl: string, filename: string): Promise<void> => {
+  try {
+    const response = await fetch(videoUrl, { mode: 'cors' });
+    if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Video download error:', error);
+    throw error;
+  }
+};
+
+// Request notification permission
+export const requestNotificationPermission = async (): Promise<boolean> => {
+  if (!('Notification' in window)) {
+    console.warn('This browser does not support notifications');
+    return false;
+  }
+  if (Notification.permission === 'granted') {
+    return true;
+  }
+  if (Notification.permission === 'denied') {
+    return false;
+  }
+  const permission = await Notification.requestPermission();
+  return permission === 'granted';
+};
+
+// Show browser notification
+export const showVideoCompleteNotification = (videoTitle: string, onClick?: () => void) => {
+  if (Notification.permission === 'granted') {
+    const notification = new Notification('Your video is ready!', {
+      body: `${videoTitle} has been generated successfully.`,
+      icon: '/favicon.png', // Ensure this icon exists in your /public folder
+      badge: '/favicon.png',
+      tag: 'video-complete',
+      requireInteraction: true,
+    });
+    notification.onclick = () => {
+      window.focus();
+      onClick?.();
+      notification.close();
+    };
+    setTimeout(() => {
+      notification.close();
+    }, 10000);
+  }
+};
+
+// --- FIX: Added VideoStatusPoller class back into this file ---
+export class VideoStatusPoller {
+  private intervalId: NodeJS.Timeout | null = null;
+  private isPolling = false;
+
+  constructor(
+    private taskId: string,
+    private onStatusUpdate: (status: TaskStatusResponse) => void,
+    private onComplete: (status: TaskStatusResponse) => void,
+    private onError: (error: string) => void,
+    private pollInterval: number = 8000 // Polling every 8 seconds
+  ) {}
+
+  start(): void {
+    if (this.isPolling) {
+      console.warn('Polling already started for task:', this.taskId);
+      return;
+    }
+    this.isPolling = true;
+    console.log('Starting status polling for task:', this.taskId);
+    this.checkStatus(); // Initial check
+    this.intervalId = setInterval(() => this.checkStatus(), this.pollInterval);
+  }
+
+  stop(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.isPolling = false;
+    console.log('Stopped status polling for task:', this.taskId);
+  }
+
+  private async checkStatus(): Promise<void> {
+    try {
+      const status = await checkVideoStatus(this.taskId);
+      this.onStatusUpdate(status);
+      if (status.status === 'completed') {
+        this.stop();
+        this.onComplete(status);
+      } else if (status.status === 'failed') {
+        this.stop();
+        this.onError(status.error || 'Video generation failed');
+      }
+    } catch (error: any) {
+      console.error('Error checking video status:', error);
+      this.onError(error.message || 'Failed to check video status');
+      this.stop(); // Stop polling on error to prevent loops
+    }
+  }
+
+  isActive(): boolean {
+    return this.isPolling;
+  }
+}
