@@ -6,8 +6,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 // These environment variables must be set in your Vercel/deployment environment.
 // They should NOT have the NEXT_PUBLIC_ prefix, as they are for server-side use only.
-const SUPABASE_URL = process.env.VITE_SUPABASE_SERVICE_KEY!;
-const SUPABASE_SERVICE_KEY = process.env.VITE_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL!;
+const SUPABASE_SERVICE_KEY = process.env.VITE_SUPABASE_SERVICE_KEY!;
 
 // Initialize the Supabase client with the service_role key for admin privileges on the server.
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
