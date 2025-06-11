@@ -7,7 +7,7 @@ import {
   Grid3X3, List, AlertTriangle, Loader2, Cloud, ExternalLink, 
   RefreshCw, Play, Pause, CheckCircle, XCircle, RotateCcw 
 } from 'lucide-react';
-import { useAuth } from './hooks/useAuth';
+import { useAuth } from '../hooks/useAuth';
 import { supabase } from './lib/supabase';
 import { downloadVideoFromSupabase, deleteVideoFromSupabase } from './lib/videoStorage';
 import { videoStatusManager } from './lib/videoStatusManager';
