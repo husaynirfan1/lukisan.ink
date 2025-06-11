@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Video, 
@@ -17,11 +17,20 @@ import {
   ExternalLink,
   RefreshCw,
   Play,
-  Pause
+  Pause,
+  CheckCircle,
+  XCircle,
+  RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
-import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '../lib/videoStorage';
+import { 
+  downloadVideoFromSupabase, 
+  deleteVideoFromSupabase, 
+  updateVideoUrlInDatabase,
+  getPendingVideos
+} from '../lib/videoStorage';
+import { checkVideoStatus, type TaskStatusResponse } from '../lib/piapi';
 import toast from 'react-hot-toast';
 
 interface StoredVideo {
@@ -36,6 +45,9 @@ interface StoredVideo {
   logo_url?: string;
   created_at: string;
   storage_path?: string;
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  progress?: number;
+  error?: string;
 }
 
 export const VideoLibrary: React.FC = () => {
@@ -49,6 +61,8 @@ export const VideoLibrary: React.FC = () => {
   const [deletingVideos, setDeletingVideos] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
+  const statusCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
@@ -56,6 +70,15 @@ export const VideoLibrary: React.FC = () => {
   useEffect(() => {
     if (user) {
       fetchVideos();
+      
+      // Set up periodic status checking for pending/processing videos
+      statusCheckIntervalRef.current = setInterval(checkPendingVideos, 10000); // Check every 10 seconds
+      
+      return () => {
+        if (statusCheckIntervalRef.current) {
+          clearInterval(statusCheckIntervalRef.current);
+        }
+      };
     }
   }, [user]);
 
@@ -85,14 +108,39 @@ export const VideoLibrary: React.FC = () => {
 
       console.log('Fetched videos from database:', data?.length || 0);
 
-      // Add storage path extraction for videos stored in Supabase
-      const videosWithStoragePath = (data || []).map(video => ({
-        ...video,
-        storage_path: extractStoragePath(video.video_url)
-      }));
+      // Add storage path extraction and determine status
+      const videosWithStatus = (data || []).map(video => {
+        const storagePath = extractStoragePath(video.video_url);
+        let status: 'pending' | 'processing' | 'completed' | 'failed' = 'completed';
+        
+        // If video_url is empty or just a task ID, it's still processing
+        if (!video.video_url || video.video_url === video.video_id || video.video_url === '') {
+          status = 'processing';
+        } else if (video.video_url.startsWith('http')) {
+          status = 'completed';
+        }
 
-      setVideos(videosWithStoragePath);
-      console.log('Updated local state with videos:', videosWithStoragePath.length);
+        return {
+          ...video,
+          storage_path: storagePath,
+          status,
+          progress: status === 'completed' ? 100 : 0
+        };
+      });
+
+      setVideos(videosWithStatus);
+      console.log('Updated local state with videos:', videosWithStatus.length);
+      
+      // Check for pending videos immediately
+      const pendingVideos = videosWithStatus.filter(v => 
+        v.status === 'pending' || v.status === 'processing'
+      );
+      
+      if (pendingVideos.length > 0) {
+        console.log(`Found ${pendingVideos.length} pending videos, checking status...`);
+        setTimeout(() => checkPendingVideos(), 1000);
+      }
+      
     } catch (error) {
       console.error('Error fetching videos:', error);
       toast.error('Failed to load video library');
@@ -102,9 +150,99 @@ export const VideoLibrary: React.FC = () => {
     }
   };
 
+  // Check status of pending/processing videos
+  const checkPendingVideos = async () => {
+    if (!user) return;
+    
+    const pendingVideos = videos.filter(video => 
+      (video.status === 'pending' || video.status === 'processing') && 
+      video.video_id && 
+      !checkingStatus.has(video.id)
+    );
+
+    if (pendingVideos.length === 0) return;
+
+    console.log(`Checking status for ${pendingVideos.length} pending videos`);
+
+    for (const video of pendingVideos) {
+      if (checkingStatus.has(video.id)) continue; // Skip if already checking
+
+      try {
+        setCheckingStatus(prev => new Set([...prev, video.id]));
+        
+        const statusResponse = await checkVideoStatus(video.video_id);
+        console.log(`Status for video ${video.id} (task ${video.video_id}):`, statusResponse);
+        
+        // Update video status in state
+        setVideos(prev => prev.map(v => {
+          if (v.id === video.id) {
+            return {
+              ...v,
+              status: statusResponse.status,
+              progress: statusResponse.progress || 0,
+              error: statusResponse.error
+            };
+          }
+          return v;
+        }));
+
+        // If completed, update database with video URL
+        if (statusResponse.status === 'completed' && statusResponse.video_url) {
+          const videoUrl = statusResponse.video_url;
+          
+          // Update database
+          const updated = await updateVideoUrlInDatabase(video.video_id, videoUrl);
+          
+          if (updated) {
+            console.log(`Updated video ${video.id} with URL: ${videoUrl}`);
+            
+            // Update local state
+            setVideos(prev => prev.map(v => {
+              if (v.id === video.id) {
+                return {
+                  ...v,
+                  video_url: videoUrl,
+                  status: 'completed',
+                  progress: 100
+                };
+              }
+              return v;
+            }));
+            
+            // Show notification
+            toast.success(`Video "${video.message.substring(0, 30)}..." is ready for download!`, {
+              duration: 5000,
+              icon: '🎬'
+            });
+          }
+        } else if (statusResponse.status === 'failed') {
+          toast.error(`Video generation failed: ${statusResponse.error || 'Unknown error'}`);
+          
+          // Update database to mark as failed
+          await supabase
+            .from('video_generations')
+            .update({ 
+              video_url: 'failed',
+              storage_path: `error: ${statusResponse.error || 'Unknown error'}`
+            })
+            .eq('id', video.id);
+        }
+
+      } catch (error) {
+        console.error(`Error checking status for video ${video.id}:`, error);
+      } finally {
+        setCheckingStatus(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(video.id);
+          return newSet;
+        });
+      }
+    }
+  };
+
   // Extract storage path from Supabase URL
   const extractStoragePath = (url: string): string | undefined => {
-    if (!url.includes('supabase.co/storage/v1/object/public/generated-videos/')) {
+    if (!url || !url.includes('supabase.co/storage/v1/object/public/generated-videos/')) {
       return undefined;
     }
     
@@ -127,6 +265,11 @@ export const VideoLibrary: React.FC = () => {
   const videoTypes = ['all', ...Array.from(new Set(videos.map(video => video.video_type)))];
 
   const handleDownload = async (video: StoredVideo) => {
+    if (video.status !== 'completed' || !video.video_url || video.video_url === video.video_id || video.video_url === '') {
+      toast.error('Video is not ready for download yet');
+      return;
+    }
+
     try {
       const filename = `video-${video.video_type}-${Date.now()}.mp4`;
       
@@ -299,11 +442,153 @@ export const VideoLibrary: React.FC = () => {
   const handleRefresh = () => {
     console.log('Manual refresh triggered');
     fetchVideos(false);
+    checkPendingVideos();
     toast.success('Library refreshed');
   };
 
   const toggleVideoPlay = (videoId: string) => {
     setPlayingVideo(prev => prev === videoId ? null : videoId);
+  };
+
+  // Manual status check for a specific video
+  const handleManualStatusCheck = async (video: StoredVideo) => {
+    if (checkingStatus.has(video.id)) return;
+
+    setCheckingStatus(prev => new Set([...prev, video.id]));
+    
+    try {
+      toast.loading(`Checking status for "${video.message.substring(0, 20)}..."`, {
+        id: `status-check-${video.id}`
+      });
+      
+      const statusResponse = await checkVideoStatus(video.video_id);
+      
+      // Update video status
+      setVideos(prev => prev.map(v => {
+        if (v.id === video.id) {
+          return {
+            ...v,
+            status: statusResponse.status,
+            progress: statusResponse.progress || 0,
+            error: statusResponse.error
+          };
+        }
+        return v;
+      }));
+
+      // If completed, update database
+      if (statusResponse.status === 'completed' && statusResponse.video_url) {
+        const videoUrl = statusResponse.video_url;
+        
+        // Update database
+        const updated = await updateVideoUrlInDatabase(video.video_id, videoUrl);
+        
+        if (updated) {
+          console.log(`Updated video ${video.id} with URL: ${videoUrl}`);
+          
+          // Update local state
+          setVideos(prev => prev.map(v => {
+            if (v.id === video.id) {
+              return {
+                ...v,
+                video_url: videoUrl,
+                status: 'completed',
+                progress: 100
+              };
+            }
+            return v;
+          }));
+          
+          toast.success('Video is now ready for download!', {
+            id: `status-check-${video.id}`
+          });
+        } else {
+          toast.error('Failed to update video status in database', {
+            id: `status-check-${video.id}`
+          });
+        }
+      } else if (statusResponse.status === 'failed') {
+        toast.error(`Video generation failed: ${statusResponse.error || 'Unknown error'}`, {
+          id: `status-check-${video.id}`
+        });
+      } else {
+        toast.success(`Video status: ${statusResponse.status} (${statusResponse.progress || 0}% complete)`, {
+          id: `status-check-${video.id}`
+        });
+      }
+
+    } catch (error: any) {
+      console.error('Error checking video status:', error);
+      toast.error(`Failed to check video status: ${error.message}`, {
+        id: `status-check-${video.id}`
+      });
+    } finally {
+      setCheckingStatus(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(video.id);
+        return newSet;
+      });
+    }
+  };
+
+  // Get status icon and color
+  const getStatusDisplay = (video: StoredVideo) => {
+    const isChecking = checkingStatus.has(video.id);
+    
+    if (isChecking) {
+      return {
+        icon: <Loader2 className="h-4 w-4 animate-spin" />,
+        color: 'text-blue-600',
+        bg: 'bg-blue-100',
+        text: 'Checking...'
+      };
+    }
+
+    switch (video.status) {
+      case 'pending':
+        return {
+          icon: <Clock className="h-4 w-4" />,
+          color: 'text-yellow-600',
+          bg: 'bg-yellow-100',
+          text: 'Pending'
+        };
+      case 'processing':
+        return {
+          icon: <Loader2 className="h-4 w-4 animate-spin" />,
+          color: 'text-blue-600',
+          bg: 'bg-blue-100',
+          text: `Processing ${video.progress || 0}%`
+        };
+      case 'completed':
+        return {
+          icon: <CheckCircle className="h-4 w-4" />,
+          color: 'text-green-600',
+          bg: 'bg-green-100',
+          text: 'Ready'
+        };
+      case 'failed':
+        return {
+          icon: <XCircle className="h-4 w-4" />,
+          color: 'text-red-600',
+          bg: 'bg-red-100',
+          text: 'Failed'
+        };
+      default:
+        return {
+          icon: <CheckCircle className="h-4 w-4" />,
+          color: 'text-green-600',
+          bg: 'bg-green-100',
+          text: 'Ready'
+        };
+    }
+  };
+
+  // Check if video is ready for download
+  const isVideoReady = (video: StoredVideo): boolean => {
+    return video.status === 'completed' && 
+           !!video.video_url && 
+           video.video_url !== video.video_id && 
+           video.video_url !== '';
   };
 
   if (!user) {
@@ -330,7 +615,7 @@ export const VideoLibrary: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Generated Video Library</h1>
               <p className="text-gray-600">
-                {isProUser ? 'Your videos are stored until subscription ends' : 'Free videos expire after 2 hours'}
+                Track your video generation progress and download completed videos
               </p>
             </div>
           </div>
@@ -358,7 +643,7 @@ export const VideoLibrary: React.FC = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-purple-100 rounded-lg">
@@ -374,12 +659,12 @@ export const VideoLibrary: React.FC = () => {
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-green-100 rounded-lg">
-                <Cloud className="h-5 w-5 text-green-600" />
+                <CheckCircle className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">High Quality</p>
+                <p className="text-sm text-gray-600">Ready</p>
                 <p className="text-xl font-bold text-gray-900">
-                  {videos.filter(video => video.video_url.includes('supabase.co')).length}
+                  {videos.filter(v => isVideoReady(v)).length}
                 </p>
               </div>
             </div>
@@ -387,19 +672,27 @@ export const VideoLibrary: React.FC = () => {
 
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
             <div className="flex items-center space-x-3">
-              <div className={`p-2 rounded-lg ${isProUser ? 'bg-yellow-100' : 'bg-blue-100'}`}>
-                {isProUser ? (
-                  <Crown className="h-5 w-5 text-yellow-600" />
-                ) : (
-                  <Clock className="h-5 w-5 text-blue-600" />
-                )}
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Loader2 className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">
-                  {isProUser ? 'Pro Storage' : 'Available'}
-                </p>
+                <p className="text-sm text-gray-600">Processing</p>
                 <p className="text-xl font-bold text-gray-900">
-                  {isProUser ? 'Unlimited' : videos.length}
+                  {videos.filter(v => v.status === 'processing' || v.status === 'pending').length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <XCircle className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Failed</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {videos.filter(v => v.status === 'failed').length}
                 </p>
               </div>
             </div>
@@ -517,12 +810,16 @@ export const VideoLibrary: React.FC = () => {
               {filteredVideos.map((video, index) => {
                 const isSelected = selectedVideos.has(video.id);
                 const isDeleting = deletingVideos.has(video.id);
-                const isHighQuality = video.video_url.includes('supabase.co');
+                const isHighQuality = video.video_url && video.video_url.includes('supabase.co');
                 const isPlaying = playingVideo === video.id;
+                const statusDisplay = getStatusDisplay(video);
+                const canDownload = isVideoReady(video);
+                const isChecking = checkingStatus.has(video.id);
 
                 return (
                   <motion.div
                     key={video.id}
+                    id={`video-${video.video_id}`}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9 }}
@@ -533,34 +830,77 @@ export const VideoLibrary: React.FC = () => {
                   >
                     {/* Video Preview */}
                     <div className="relative aspect-video bg-gray-900">
-                      <video
-                        src={video.video_url}
-                        className="w-full h-full object-cover"
-                        muted
-                        loop
-                        playsInline
-                        ref={(el) => {
-                          if (el) {
-                            if (isPlaying) {
-                              el.play();
-                            } else {
-                              el.pause();
+                      {canDownload ? (
+                        <video
+                          src={video.video_url}
+                          className="w-full h-full object-cover"
+                          muted
+                          loop
+                          playsInline
+                          ref={(el) => {
+                            if (el) {
+                              if (isPlaying) {
+                                el.play().catch(console.error);
+                              } else {
+                                el.pause();
+                              }
                             }
-                          }
-                        }}
-                      />
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                          <div className="text-center">
+                            {video.status === 'processing' || video.status === 'pending' ? (
+                              <>
+                                <Loader2 className="h-8 w-8 animate-spin text-purple-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-300">
+                                  {video.status === 'processing' ? 'Processing...' : 'Pending...'}
+                                </p>
+                                {video.progress > 0 && (
+                                  <div className="mt-2 w-32 mx-auto">
+                                    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                      <div 
+                                        className="h-full bg-purple-500 rounded-full" 
+                                        style={{ width: `${video.progress}%` }}
+                                      ></div>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-1">{video.progress}%</p>
+                                  </div>
+                                )}
+                              </>
+                            ) : video.status === 'failed' ? (
+                              <>
+                                <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                                <p className="text-sm text-gray-300">Generation Failed</p>
+                                {video.error && (
+                                  <p className="text-xs text-red-400 mt-1 max-w-xs mx-auto">
+                                    {video.error}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <Video className="h-8 w-8 text-gray-500 mx-auto mb-2" />
+                                <p className="text-sm text-gray-300">Video Not Available</p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       
-                      {/* Play/Pause overlay */}
-                      <div 
-                        className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"
-                        onClick={() => toggleVideoPlay(video.id)}
-                      >
-                        {isPlaying ? (
-                          <Pause className="h-12 w-12 text-white" />
-                        ) : (
-                          <Play className="h-12 w-12 text-white" />
-                        )}
-                      </div>
+                      {/* Play/Pause overlay for completed videos */}
+                      {canDownload && (
+                        <div 
+                          className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"
+                          onClick={() => toggleVideoPlay(video.id)}
+                        >
+                          {isPlaying ? (
+                            <Pause className="h-12 w-12 text-white" />
+                          ) : (
+                            <Play className="h-12 w-12 text-white" />
+                          )}
+                        </div>
+                      )}
 
                       {/* Selection overlay */}
                       <div 
@@ -572,8 +912,15 @@ export const VideoLibrary: React.FC = () => {
 
                       {/* Status badges */}
                       <div className="absolute top-2 right-2 flex flex-col space-y-1">
+                        {/* Status badge */}
+                        <div className={`flex items-center space-x-1 px-2 py-1 ${statusDisplay.bg} ${statusDisplay.color} rounded-full text-xs`}>
+                          {statusDisplay.icon}
+                          <span>{statusDisplay.text}</span>
+                        </div>
+                        
+                        {/* Quality badge */}
                         {isHighQuality && (
-                          <div className="flex items-center space-x-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs">
+                          <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
                             <Cloud className="h-3 w-3" />
                             <span>HQ</span>
                           </div>
@@ -600,16 +947,33 @@ export const VideoLibrary: React.FC = () => {
 
                       {/* Actions */}
                       <div className="flex space-x-2">
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleDownload(video)}
-                          disabled={isDeleting}
-                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Download className="h-3 w-3" />
-                          <span>Download</span>
-                        </motion.button>
+                        {video.status === 'processing' || video.status === 'pending' ? (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleManualStatusCheck(video)}
+                            disabled={isChecking || isDeleting}
+                            className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isChecking ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-3 w-3" />
+                            )}
+                            <span>Check Status</span>
+                          </motion.button>
+                        ) : (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleDownload(video)}
+                            disabled={!canDownload || isDeleting}
+                            className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Download className="h-3 w-3" />
+                            <span>Download</span>
+                          </motion.button>
+                        )}
                         
                         <motion.button
                           whileHover={{ scale: 1.05 }}
@@ -637,11 +1001,15 @@ export const VideoLibrary: React.FC = () => {
                 {filteredVideos.map((video, index) => {
                   const isSelected = selectedVideos.has(video.id);
                   const isDeleting = deletingVideos.has(video.id);
-                  const isHighQuality = video.video_url.includes('supabase.co');
+                  const isHighQuality = video.video_url && video.video_url.includes('supabase.co');
+                  const statusDisplay = getStatusDisplay(video);
+                  const canDownload = isVideoReady(video);
+                  const isChecking = checkingStatus.has(video.id);
 
                   return (
                     <motion.div
                       key={video.id}
+                      id={`video-${video.video_id}`}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -20 }}
@@ -665,11 +1033,23 @@ export const VideoLibrary: React.FC = () => {
 
                         {/* Video thumbnail */}
                         <div className="w-24 h-16 bg-gray-900 rounded-lg overflow-hidden flex-shrink-0">
-                          <video
-                            src={video.video_url}
-                            className="w-full h-full object-cover"
-                            muted
-                          />
+                          {canDownload ? (
+                            <video
+                              src={video.video_url}
+                              className="w-full h-full object-cover"
+                              muted
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              {video.status === 'processing' || video.status === 'pending' ? (
+                                <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                              ) : video.status === 'failed' ? (
+                                <XCircle className="h-5 w-5 text-red-500" />
+                              ) : (
+                                <Video className="h-5 w-5 text-gray-500" />
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Content */}
@@ -683,6 +1063,13 @@ export const VideoLibrary: React.FC = () => {
                             
                             {/* Status badges */}
                             <div className="flex items-center space-x-2">
+                              {/* Status badge */}
+                              <div className={`flex items-center space-x-1 px-2 py-1 ${statusDisplay.bg} ${statusDisplay.color} rounded-full text-xs`}>
+                                {statusDisplay.icon}
+                                <span>{statusDisplay.text}</span>
+                              </div>
+                              
+                              {/* Quality badge */}
                               {isHighQuality && (
                                 <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
                                   <Cloud className="h-3 w-3" />
@@ -698,16 +1085,33 @@ export const VideoLibrary: React.FC = () => {
 
                         {/* Actions */}
                         <div className="flex items-center space-x-2">
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => handleDownload(video)}
-                            disabled={isDeleting}
-                            className="flex items-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Download className="h-3 w-3" />
-                            <span>Download</span>
-                          </motion.button>
+                          {video.status === 'processing' || video.status === 'pending' ? (
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleManualStatusCheck(video)}
+                              disabled={isChecking || isDeleting}
+                              className="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isChecking ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3 w-3" />
+                              )}
+                              <span>Check Status</span>
+                            </motion.button>
+                          ) : (
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleDownload(video)}
+                              disabled={!canDownload || isDeleting}
+                              className="flex items-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Download className="h-3 w-3" />
+                              <span>Download</span>
+                            </motion.button>
+                          )}
                           
                           <motion.button
                             whileHover={{ scale: 1.05 }}

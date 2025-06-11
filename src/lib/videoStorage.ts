@@ -74,7 +74,7 @@ export const storeVideoInSupabase = async (
       storagePath: storagePath
     };
 
-  } catch (error) {
+  } catch (error)  {
     console.error('Error storing video in Supabase:', error);
     return {
       success: false,
@@ -166,5 +166,60 @@ export const getVideoInfo = async (path: string) => {
   } catch (error) {
     console.error('Error getting video info:', error);
     return null;
+  }
+};
+
+/**
+ * Updates a video record in the database with the final video URL
+ */
+export const updateVideoUrlInDatabase = async (
+  videoId: string, 
+  videoUrl: string,
+  storagePath?: string
+): Promise<boolean> => {
+  try {
+    const updateData: any = { video_url: videoUrl };
+    if (storagePath) {
+      updateData.storage_path = storagePath;
+    }
+
+    const { error } = await supabase
+      .from('video_generations')
+      .update(updateData)
+      .eq('video_id', videoId);
+
+    if (error) {
+      console.error('Error updating video URL in database:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error updating video URL:', error);
+    return false;
+  }
+};
+
+/**
+ * Checks for pending videos in the database and returns them
+ */
+export const getPendingVideos = async (userId: string): Promise<any[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('video_generations')
+      .select('*')
+      .eq('user_id', userId)
+      .or('video_url.eq.,video_url.eq.null')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching pending videos:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error getting pending videos:', error);
+    return [];
   }
 };
