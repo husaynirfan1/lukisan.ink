@@ -62,8 +62,6 @@ export function VideoLibrary() {
 
       if (error) {
         toast.error('Failed to load video library.');
-        setLoading(false);
-        setRefreshing(false);
         return;
       }
       
