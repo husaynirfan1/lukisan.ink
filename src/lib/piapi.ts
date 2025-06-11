@@ -189,7 +189,7 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
     if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
 
-    const endpoint = `${PIAPI_BASE_URL}/v1/task/${taskId}`;
+    const endpoint = `${PIAPI_BASE_URL}/api/v1/task/${taskId}`;
 
     const response = await fetch(endpoint, { 
         method: 'GET',
