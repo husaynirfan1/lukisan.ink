@@ -205,99 +205,44 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
  */
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
     if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
-    
-    if (!taskId || taskId.trim() === '') {
-        throw new Error('Invalid task ID provided for status check');
-    }
+    if (!taskId || taskId.trim() === '') throw new Error('Invalid task ID provided for status check');
 
     const endpoint = `${PIAPI_BASE_URL}/api/v1/task/${taskId}`;
-    console.log(`[PiAPI] Checking status for task: ${taskId}`);
     
     try {
         const response = await fetch(endpoint, { 
             method: 'GET',
-            headers: { 
-                'X-API-Key': PIAPI_API_KEY,
-                'Content-Type': 'application/json'
-            } 
+            headers: { 'X-API-Key': PIAPI_API_KEY } 
         });
 
-        console.log(`[PiAPI] Status check response: ${response.status} ${response.statusText}`);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[PiAPI] Status check failed for task ${taskId}:`, errorText);
-            
-            if (response.status === 400 || response.status === 404) {
-                return {
-                    task_id: taskId,
-                    status: 'failed',
-                    error: 'Task not found or expired',
-                    progress: 0
-                };
-            }
-            
-            throw new Error(`Status check failed: ${response.status} ${response.statusText}`);
-        }
-
         const responseData = await response.json();
+
+        if (!response.ok) {
+            // If the API gives a specific error message, use it. Otherwise, use the status text.
+            const errorMessage = responseData?.message || responseData?.error?.message || response.statusText;
+            throw new Error(`PiAPI Error: ${errorMessage}`);
+        }
+        
         console.log(`[PiAPI] Status data for task ${taskId}:`, responseData);
         
         const data = responseData.data || responseData;
-        
-        let status = 'processing';
-        if (data.status) {
-            status = data.status.toLowerCase();
-        }
+        const status = (data.status || 'processing').toLowerCase();
         
         let normalizedStatus: 'pending' | 'processing' | 'completed' | 'failed';
         switch (status) {
-            case 'completed':
-            case 'success':
-            case 'finished':
-            case '99':
-                normalizedStatus = 'completed';
-                break;
-            case 'failed':
-            case 'error':
-            case 'cancelled':
-                normalizedStatus = 'failed';
-                break;
-            case 'pending':
-            case 'queued':
-            case 'waiting':
-                normalizedStatus = 'pending';
-                break;
+            case 'completed': case 'success': case 'finished': case '99':
+                normalizedStatus = 'completed'; break;
+            case 'failed': case 'error': case 'cancelled':
+                normalizedStatus = 'failed'; break;
+            case 'pending': case 'queued': case 'waiting':
+                normalizedStatus = 'pending'; break;
             default:
                 normalizedStatus = 'processing';
         }
         
-        // --- FIXED: More robust video URL and thumbnail extraction ---
-        let videoUrl: string | undefined;
-        let thumbnailUrl: string | undefined;
-
-        if (data.video_url) {
-            videoUrl = data.video_url;
-            console.log(`[PiAPI] Found video URL in data.video_url: ${videoUrl}`);
-        }
-        if (data.thumbnail_url) {
-            thumbnailUrl = data.thumbnail_url;
-            console.log(`[PiAPI] Found thumbnail URL in data.thumbnail_url: ${thumbnailUrl}`);
-        }
+        const videoUrl = data.video_url || data.works?.[0]?.resource?.resourceWithoutWatermark || data.works?.[0]?.resource?.resource;
+        const thumbnailUrl = data.thumbnail_url || data.works?.[0]?.cover?.resource;
         
-        if (!videoUrl && data.works && Array.isArray(data.works) && data.works.length > 0) {
-            const work = data.works[0];
-            if (work && work.resource) {
-                videoUrl = work.resource.resourceWithoutWatermark || work.resource.resource;
-                console.log(`[PiAPI] Found video URL in works[0].resource: ${videoUrl}`);
-            }
-            if (work && work.cover) {
-                thumbnailUrl = work.cover.resource;
-                console.log(`[PiAPI] Found thumbnail URL in works[0].cover: ${thumbnailUrl}`);
-            }
-        }
-        // --- End of Fix ---
-
         let progress = 0;
         if (normalizedStatus === 'completed') progress = 100;
         else if (normalizedStatus === 'failed') progress = 0;
@@ -310,28 +255,17 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
             video_url: videoUrl,
             thumbnail_url: thumbnailUrl,
             progress: progress,
-            error: data.error,
+            error: data.error?.message || data.message,
             data: data
         };
         
     } catch (error: any) {
-        console.error(`[PiAPI] Error checking status for task ${taskId}:`, error);
-        
-        if (error.name === 'TypeError' || error.message.includes('fetch')) {
-            return {
-                task_id: taskId,
-                status: 'processing',
-                progress: 50,
-                error: 'Network error during status check'
-            };
+        console.error(`[PiAPI] Final error for task ${taskId}:`, error);
+        // Ensure that what we throw is always a standard Error object
+        if (error instanceof Error) {
+            throw error;
         }
-        
-        return {
-            task_id: taskId,
-            status: 'failed',
-            error: error.message || 'Unknown error during status check',
-            progress: 0
-        };
+        throw new Error(String(error));
     }
 };
 // =======================================================================
