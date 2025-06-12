@@ -203,6 +203,8 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
  * COMPLETELY FIXED: Check the status of a video generation task
  * This function polls the PiAPI status endpoint to get real-time updates
  */
+// In piapi (1).ts
+
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
     if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
     
@@ -217,7 +219,7 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         const response = await fetch(endpoint, { 
             method: 'GET',
             headers: { 
-                'X-API-Key': PIAPI_API_KEY, // FIXED: Use correct header name
+                'X-API-Key': PIAPI_API_KEY,
                 'Content-Type': 'application/json'
             } 
         });
@@ -228,27 +230,12 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
             const errorText = await response.text();
             console.error(`[PiAPI] Status check failed for task ${taskId}:`, errorText);
             
-            // Handle specific error cases
-            if (response.status === 400) {
+            if (response.status === 400 || response.status === 404) {
                 return {
                     task_id: taskId,
                     status: 'failed',
                     error: 'Task not found or expired',
                     progress: 0
-                };
-            } else if (response.status === 404) {
-                return {
-                    task_id: taskId,
-                    status: 'failed',
-                    error: 'Task not found',
-                    progress: 0
-                };
-            } else if (response.status === 429) {
-                return {
-                    task_id: taskId,
-                    status: 'processing',
-                    progress: 50,
-                    error: 'Rate limited, retrying...'
                 };
             }
             
@@ -258,23 +245,19 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         const responseData = await response.json();
         console.log(`[PiAPI] Status data for task ${taskId}:`, responseData);
         
-        // FIXED: Properly parse the PiAPI response structure
-        // The actual response structure is different from what we expected
         const data = responseData.data || responseData;
         
-        // FIXED: Extract status from the correct location
         let status = 'processing';
         if (data.status) {
             status = data.status.toLowerCase();
         }
         
-        // FIXED: Normalize status values based on PiAPI documentation
         let normalizedStatus: 'pending' | 'processing' | 'completed' | 'failed';
         switch (status) {
             case 'completed':
             case 'success':
             case 'finished':
-            case '99': // PiAPI uses numeric status codes in some responses
+            case '99':
                 normalizedStatus = 'completed';
                 break;
             case 'failed':
@@ -291,36 +274,37 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
                 normalizedStatus = 'processing';
         }
         
-        // FIXED: Extract video URL from the correct location in the response
+        // --- FIXED: More robust video URL and thumbnail extraction ---
         let videoUrl: string | undefined;
         let thumbnailUrl: string | undefined;
+
+        if (data.video_url) {
+            videoUrl = data.video_url;
+            console.log(`[PiAPI] Found video URL in data.video_url: ${videoUrl}`);
+        }
+        if (data.thumbnail_url) {
+            thumbnailUrl = data.thumbnail_url;
+            console.log(`[PiAPI] Found thumbnail URL in data.thumbnail_url: ${thumbnailUrl}`);
+        }
         
-        // Check for works array in the response
-        if (data.works && data.works.length > 0) {
+        if (!videoUrl && data.works && Array.isArray(data.works) && data.works.length > 0) {
             const work = data.works[0];
-            // Prefer resourceWithoutWatermark over resource
-            if (work.resource) {
+            if (work && work.resource) {
                 videoUrl = work.resource.resourceWithoutWatermark || work.resource.resource;
                 console.log(`[PiAPI] Found video URL in works[0].resource: ${videoUrl}`);
             }
-            
-            if (work.cover) {
+            if (work && work.cover) {
                 thumbnailUrl = work.cover.resource;
                 console.log(`[PiAPI] Found thumbnail URL in works[0].cover: ${thumbnailUrl}`);
             }
         }
-        
-        // Calculate progress based on status
+        // --- End of Fix ---
+
         let progress = 0;
-        if (normalizedStatus === 'completed') {
-            progress = 100;
-        } else if (normalizedStatus === 'failed') {
-            progress = 0;
-        } else if (normalizedStatus === 'processing') {
-            progress = 50; // Assume 50% for processing
-        } else if (normalizedStatus === 'pending') {
-            progress = 10; // Assume 10% for pending
-        }
+        if (normalizedStatus === 'completed') progress = 100;
+        else if (normalizedStatus === 'failed') progress = 0;
+        else if (normalizedStatus === 'processing') progress = 50;
+        else if (normalizedStatus === 'pending') progress = 10;
         
         return {
             task_id: data.task_id || taskId,
@@ -335,7 +319,6 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
     } catch (error: any) {
         console.error(`[PiAPI] Error checking status for task ${taskId}:`, error);
         
-        // If it's a network error, treat as still processing
         if (error.name === 'TypeError' || error.message.includes('fetch')) {
             return {
                 task_id: taskId,
@@ -345,7 +328,6 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
             };
         }
         
-        // For other errors, mark as failed
         return {
             task_id: taskId,
             status: 'failed',
@@ -354,7 +336,6 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         };
     }
 };
-
 // =======================================================================
 // UTILITY FUNCTIONS
 // =======================================================================
