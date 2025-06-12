@@ -203,130 +203,50 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
  * COMPLETELY FIXED: Check the status of a video generation task
  * This function polls the PiAPI status endpoint to get real-time updates
  */
-export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
-    if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
-    if (!taskId || taskId.trim() === '') throw new Error('Invalid task ID provided for status check');
 
-    const endpoint = `${PIAPI_BASE_URL}/api/v1/task/${taskId}`;
-    console.log(`[PiAPI] Checking status for task: ${taskId}`);
-    
-    try {
-        const response = await fetch(endpoint, { 
-            method: 'GET',
-            headers: { 
-                'X-API-Key': PIAPI_API_KEY,
-                'Content-Type': 'application/json'
-            } 
-        });
+export async function checkVideoStatus(taskId: string) {
+  const url = `${PIAPI_BASE_URL}/api/v1/task/${taskId}`;
 
-        console.log(`[PiAPI] Status check response: ${response.status} ${response.statusText}`);
-        
-        // Parse the response data first, so we can extract error messages if needed
-        let responseData;
-        try {
-            responseData = await response.json();
-            console.log(`[PiAPI] Status data for task ${taskId}:`, responseData);
-        } catch (parseError) {
-            console.error(`[PiAPI] Error parsing response:`, parseError);
-            throw new Error(`Failed to parse PiAPI response: ${response.statusText}`);
-        }
-        
-        if (!response.ok) {
-            // Extract error message from the response if available
-            const errorMessage = responseData?.message || responseData?.error || `Status check failed: ${response.status} ${response.statusText}`;
-            throw new Error(errorMessage);
-        }
-        
-        const data = responseData.data || responseData;
-        const status = (data.status || 'processing').toLowerCase();
-        
-        let normalizedStatus: 'pending' | 'processing' | 'completed' | 'failed';
-        switch (status) {
-            case 'completed': case 'success': case 'finished': case '99':
-                normalizedStatus = 'completed'; break;
-            case 'failed': case 'error': case 'cancelled':
-                normalizedStatus = 'failed'; break;
-            case 'pending': case 'queued': case 'waiting':
-                normalizedStatus = 'pending'; break;
-            default:
-                normalizedStatus = 'processing';
-        }
-        
-        // IMPROVED: More robust video URL extraction with detailed logging
-        let videoUrl: string | undefined;
-        let thumbnailUrl: string | undefined;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${import.meta.env.VITE_PIAPI_API_KEY}`, // or use process.env if SSR
+    },
+  });
 
-        // First check direct properties on the data object
-        if (data.video_url) {
-            videoUrl = data.video_url;
-            console.log(`[PiAPI] Found video URL in data.video_url: ${videoUrl}`);
-        }
-        
-        if (data.thumbnail_url) {
-            thumbnailUrl = data.thumbnail_url;
-            console.log(`[PiAPI] Found thumbnail URL in data.thumbnail_url: ${thumbnailUrl}`);
-        }
-        
-        // Then check the works array if available
-        if (!videoUrl && data.works && Array.isArray(data.works) && data.works.length > 0) {
-            const work = data.works[0];
-            if (work && work.resource) {
-                videoUrl = work.resource.resourceWithoutWatermark || work.resource.resource;
-                console.log(`[PiAPI] Found video URL in works[0].resource: ${videoUrl}`);
-            }
-            if (work && work.cover) {
-                thumbnailUrl = work.cover.resource;
-                console.log(`[PiAPI] Found thumbnail URL in works[0].cover: ${thumbnailUrl}`);
-            }
-        }
-        
-        // If we found a video URL and status is not completed, log a warning
-        if (videoUrl && normalizedStatus !== 'completed') {
-            console.log(`[PiAPI] Found video URL but status is ${normalizedStatus}, setting status to completed`);
-            normalizedStatus = 'completed';
-        }
-        
-        // If status is completed but no video URL, log a warning
-        if (normalizedStatus === 'completed' && !videoUrl) {
-            console.warn(`[PiAPI] Status is completed but no video URL found for task ${taskId}`);
-        }
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error(`[PiAPI] Failed to check task. Status: ${response.status}, Response: ${errText}`);
+    throw new Error('Invalid API key or task not found.');
+  }
 
-        let progress = 0;
-        if (normalizedStatus === 'completed') progress = 100;
-        else if (normalizedStatus === 'failed') progress = 0;
-        else if (normalizedStatus === 'processing') progress = data.progress || 50;
-        else if (normalizedStatus === 'pending') progress = 10;
-        
-        return {
-            task_id: data.task_id || taskId,
-            status: normalizedStatus,
-            video_url: videoUrl,
-            thumbnail_url: thumbnailUrl,
-            progress: progress,
-            error: data.error,
-            data: data
-        };
-        
-    } catch (error: any) {
-        console.error(`[PiAPI] Error checking status for task ${taskId}:`, error);
-        
-        if (error.name === 'TypeError' || error.message.includes('fetch')) {
-            return {
-                task_id: taskId,
-                status: 'processing',
-                progress: 50,
-                error: 'Network error during status check'
-            };
-        }
-        
-        return {
-            task_id: taskId,
-            status: 'failed',
-            error: error.message || 'Unknown error during status check',
-            progress: 0
-        };
-    }
-};
+  const json = await response.json();
+  const data = json?.data;
+
+  const status = data.status;
+  const progress = data.progress ?? 0;
+  const video_url = data.output?.video_url;
+  const thumbnail_url = data.output?.thumbnail_url;
+
+  if (status === 'completed' && !video_url) {
+    console.warn(`[PiAPI] Task ${taskId} completed but video_url missing — waiting.`);
+    return {
+      task_id: taskId,
+      status: 'waiting_for_video',
+      progress,
+      retry: true,
+    };
+  }
+
+  return {
+    task_id: taskId,
+    status,
+    progress,
+    video_url,
+    thumbnail_url,
+  };
+}
+
 // =======================================================================
 // UTILITY FUNCTIONS
 // =======================================================================

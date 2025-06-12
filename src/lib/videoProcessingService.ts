@@ -1,6 +1,12 @@
 import { supabase } from './supabase';
 import { checkVideoStatus, VideoStatusPoller, showVideoCompleteNotification } from './piapi';
 import toast from 'react-hot-toast';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_SERVICE_KEY
+);
 
 interface VideoProcessingTask {
   taskId: string;
@@ -205,41 +211,34 @@ class VideoProcessingService {
     }
   }
 
-  private async downloadAndStoreVideo(videoUrl: string, taskId: string, userId: string): Promise<string> {
-    try {
-      console.log(`[VideoProcessor] Downloading video for task: ${taskId}`);
-      
-      // Download the video
-      const response = await fetch(videoUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
-      }
-      
-      const videoBlob = await response.blob();
-      const fileName = `${userId}/${taskId}-${Date.now()}.mp4`;
-      
-      // Upload to Supabase storage
-      const { data, error } = await supabase.storage
-        .from('videos')
-        .upload(fileName, videoBlob, {
-          contentType: 'video/mp4',
-          cacheControl: '3600'
-        });
-      
-      if (error) {
-        console.error(`[VideoProcessor] Storage upload error:`, error);
-        throw new Error(`Failed to store video: ${error.message}`);
-      }
-      
-      console.log(`[VideoProcessor] Video stored successfully: ${fileName}`);
-      return fileName;
-      
-    } catch (error: any) {
-      console.error(`[VideoProcessor] Error downloading/storing video:`, error);
-      throw error;
-    }
-  }
+private async downloadAndStoreVideo(videoUrl: string, taskId: string, userId: string): Promise<string> {
+  try {
+    console.log(`[VideoProcessor] Invoking edge function to store video for task: ${taskId}`);
 
+    const { data, error } = await supabase.functions.invoke('force-check-status', {
+      body: {
+        task_id: taskId,
+        user_id: userId,
+        db_id: taskId, // or use actual video DB row ID if available
+      },
+    });
+
+    if (error) {
+      console.error('[VideoProcessor] Edge function error:', error);
+      throw new Error(`Edge function failed: ${error.message}`);
+    }
+
+    if (!data?.video_url) {
+      throw new Error(`Edge function returned no video URL for task ${taskId}`);
+    }
+
+    console.log(`[VideoProcessor] Video stored and URL received: ${data.video_url}`);
+    return data.video_url;
+  } catch (err: any) {
+    console.error('[VideoProcessor] Error calling edge function:', err);
+    throw err;
+  }
+}
   // Public method to get active tasks (for debugging)
   getActiveTasks(): string[] {
     return Array.from(this.activeTasks.keys());
