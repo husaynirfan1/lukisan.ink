@@ -1,13 +1,31 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Zap, Download, Video, Users, Megaphone } from 'lucide-react';
+import { Sparkles, Zap, Download, Video, Users, Megaphone, X, AlertTriangle } from 'lucide-react';
 import { AnimatedTagline } from './AnimatedTagline';
 import { GuestLogoGenerator } from './GuestLogoGenerator';
 import { MediaShowcase } from './MediaShowcase';
 
 export const Hero: React.FC = () => {
+  const [showBanner, setShowBanner] = useState(true);
+
   return (
     <>
+      {showBanner && (
+        <div className="bg-yellow-100 border-b border-yellow-200 text-yellow-800 p-3 text-center text-sm relative">
+          <div className="flex items-center justify-center">
+            <AlertTriangle className="h-4 w-4 mr-2" />
+            <span>Video generation is in maintenance. Any creator credit will be allocated to user once available.</span>
+          </div>
+          <button
+            onClick={() => setShowBanner(false)}
+            className="absolute top-1/2 right-4 -translate-y-1/2 text-yellow-800 hover:bg-yellow-200 rounded-md p-1"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-purple-50">
         {/* Background decoration */}
         <div className="absolute inset-0">
@@ -25,9 +43,9 @@ export const Hero: React.FC = () => {
             >
               <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6">
                 Create Stunning
-               <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent pb-4">
-  AI-Powered Logos
-</span>
+                <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent pb-4">
+                  AI-Powered Logos
+                </span>
               </h1>
             </motion.div>
 
@@ -47,7 +65,7 @@ export const Hero: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed"
             >
-              Transform your ideas into professional logos and personalized videos with cutting-edge AI technology. 
+              Transform your ideas into professional logos and personalized videos with cutting-edge AI technology.
               Create stunning visuals and engaging content that elevates your brand in seconds.
             </motion.p>
 
