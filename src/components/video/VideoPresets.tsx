@@ -28,7 +28,7 @@ export const videoPresets: VideoPreset[] = [
     icon: Package,
     category: 'product',
     duration: 30,
-    prompt: 'Minimalist 3D product render of [Your Product Name], studio lighting, dark background, subtle reflections, 8K, hyper-detailed. A slow, sweeping camera orbit reveals the product. Clean sans-serif text overlays fade in smoothly to list key benefits. The overall aesthetic is premium and sophisticated.',
+    prompt: 'Minimalist 3D product render of [Your Product Name] in a sleek, modern studio setting with precise lighting, dark background, and subtle reflections that accentuate the product\'s features in stunning 8K resolution, hyper-detailed textures, and crisp lines. A slow, sweeping camera orbit smoothly revolves around the product, showcasing its design from multiple angles. Clean, sans-serif text overlays gradually fade in to highlight key benefits, such as innovative technology and premium quality, in a sophisticated and elegant manner. The camera zooms in on the product\'s details, emphasizing its premium aesthetic.',
     negative_prompt: 'Blurry, grainy, low-resolution, distorted, warped, cluttered background, amateurish, ugly, bad lighting.'
   },
   {
