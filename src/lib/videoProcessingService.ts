@@ -238,6 +238,16 @@ private async downloadAndStoreVideo(videoUrl: string, taskId: string, userId: st
     console.error('[VideoProcessor] Error calling edge function:', err);
     throw err;
   }
-};
+}
+  // Public method to get active tasks (for debugging)
+  getActiveTasks(): string[] {
+    return Array.from(this.activeTasks.keys());
+  }
+
+  // Public method to check if a task is being processed
+  isProcessing(taskId: string): boolean {
+    return this.activeTasks.has(taskId);
+  }
+}
 
 export const videoProcessingService = new VideoProcessingService();
