@@ -467,10 +467,13 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
                 normalizedStatus = 'processing';
         }
         
+        // Extract video URL from various possible locations
+        const videoUrl = output.video_url || data.video_url || data.data?.video_url;
+        
         return {
             task_id: data.task_id || taskId,
             status: normalizedStatus,
-            video_url: output.video_url || data.video_url,
+            video_url: videoUrl,
             thumbnail_url: output.thumbnail_url || data.thumbnail_url,
             progress: data.progress || (normalizedStatus === 'completed' ? 100 : normalizedStatus === 'failed' ? 0 : 50),
             error: output.error || data.error,

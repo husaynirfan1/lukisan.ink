@@ -34,6 +34,7 @@ interface StoredVideo {
   file_size?: number;
   error_message?: string;
   integrity_verified?: boolean;
+  updated_at?: string;
 }
 
 interface VideoCardProps {
@@ -48,8 +49,50 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
   const [isHovered, setIsHovered] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Generate thumbnail from video when it's completed
+  useEffect(() => {
+    if (video.status === 'completed' && video.video_url && !thumbnailUrl) {
+      generateThumbnail();
+    }
+  }, [video.status, video.video_url, thumbnailUrl]);
+
+  const generateThumbnail = async () => {
+    if (!video.video_url) return;
+
+    try {
+      const videoElement = document.createElement('video');
+      videoElement.crossOrigin = 'anonymous';
+      videoElement.muted = true;
+      
+      videoElement.onloadeddata = () => {
+        // Seek to 1 second or 10% of video duration, whichever is smaller
+        const seekTime = Math.min(1, videoElement.duration * 0.1);
+        videoElement.currentTime = seekTime;
+      };
+
+      videoElement.onseeked = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (ctx) {
+          canvas.width = videoElement.videoWidth;
+          canvas.height = videoElement.videoHeight;
+          ctx.drawImage(videoElement, 0, 0);
+          
+          const thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setThumbnailUrl(thumbnailDataUrl);
+        }
+      };
+
+      videoElement.src = video.video_url;
+    } catch (error) {
+      console.error('Error generating thumbnail:', error);
+    }
+  };
 
   const getStatusDisplay = () => {
     const isRetryingThis = isRetrying;
@@ -84,14 +127,14 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
           icon: <Download className="h-4 w-4 animate-pulse" />, 
           color: 'text-purple-600', 
           bg: 'bg-purple-100', 
-          text: `Downloading ${video.download_progress || 0}%` 
+          text: `Downloading ${video.download_progress || video.progress || 0}%` 
         };
       case 'storing':
         return { 
           icon: <Database className="h-4 w-4 animate-pulse" />, 
           color: 'text-indigo-600', 
           bg: 'bg-indigo-100', 
-          text: `Storing ${video.storage_progress || 0}%` 
+          text: `Storing ${video.storage_progress || video.progress || 0}%` 
         };
       case 'completed': 
         return { 
@@ -210,16 +253,24 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
               muted 
               loop 
               playsInline 
-              poster={video.logo_url}
+              poster={thumbnailUrl || undefined}
               style={{ display: showPreview ? 'block' : 'none' }}
             />
             {!showPreview && (
               <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                <img
-                  src={video.logo_url || '/api/placeholder/400/225'}
-                  alt="Video thumbnail"
-                  className="w-full h-full object-cover"
-                />
+                {thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt="Video thumbnail"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={video.logo_url || '/api/placeholder/400/225'}
+                    alt="Video thumbnail"
+                    className="w-full h-full object-cover"
+                  />
+                )}
                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                   <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
                     <Play className="h-6 w-6 text-gray-900 ml-1" />
@@ -577,7 +628,14 @@ export function VideoLibrary() {
     
     try {
       await videoStatusManager.manualStatusCheck(video.id, video.video_id, user.id);
+      await videoStatusManager.refreshVideoFromDatabase(video.id);
       toast.success('Status check completed', { id: video.id });
+      
+      // Refresh the video list after status check
+      setTimeout(() => {
+        fetchAndMonitorVideos(false);
+      }, 1000);
+      
     } catch (error: any) {
       console.error(`[VideoLibrary] Manual retry failed:`, error);
       toast.error(`Failed to re-check status: ${error.message}`, { id: video.id });

@@ -37,7 +37,7 @@ export class VideoStatusManager {
 
     const interval = setInterval(async () => {
       await this.checkAndProcessVideoStatus(videoId, taskId, userId);
-    }, 10000); // Check every 10 seconds
+    }, 8000); // Check every 8 seconds
 
     this.pollingIntervals.set(videoId, interval);
     
@@ -102,12 +102,15 @@ export class VideoStatusManager {
     try {
       const updateData: any = {
         status: statusResponse.status,
-        progress: statusResponse.progress || 0
+        progress: statusResponse.progress || 0,
+        updated_at: new Date().toISOString()
       };
 
       if (statusResponse.error) {
         updateData.error_message = statusResponse.error;
       }
+
+      console.log(`[VideoStatusManager] Updating video ${videoId} with:`, updateData);
 
       const { error } = await supabase
         .from('video_generations')
@@ -116,6 +119,8 @@ export class VideoStatusManager {
 
       if (error) {
         console.error(`[VideoStatusManager] Error updating video status:`, error);
+      } else {
+        console.log(`[VideoStatusManager] Successfully updated video ${videoId} status to ${statusResponse.status}`);
       }
     } catch (error) {
       console.error(`[VideoStatusManager] Error updating video status:`, error);
@@ -134,8 +139,8 @@ export class VideoStatusManager {
         .from('video_generations')
         .update({ 
           status: 'downloading',
-          progress: 90,
-          error_message: 'Downloading and saving video to library...'
+          progress: 85,
+          error_message: null
         })
         .eq('id', videoId);
 
@@ -154,6 +159,15 @@ export class VideoStatusManager {
 
       console.log(`[VideoStatusManager] Video stored successfully:`, storeResult.publicUrl);
 
+      // Update status to storing
+      await supabase
+        .from('video_generations')
+        .update({ 
+          status: 'storing',
+          progress: 95
+        })
+        .eq('id', videoId);
+
       // Update the database with the final video URL and mark as completed
       const { error: updateError } = await supabase
         .from('video_generations')
@@ -162,7 +176,8 @@ export class VideoStatusManager {
           storage_path: storeResult.storagePath,
           status: 'completed',
           progress: 100,
-          error_message: null
+          error_message: null,
+          updated_at: new Date().toISOString()
         })
         .eq('id', videoId);
 
@@ -186,7 +201,8 @@ export class VideoStatusManager {
         .update({ 
           status: 'failed', 
           error_message: errorMessage,
-          progress: 0
+          progress: 0,
+          updated_at: new Date().toISOString()
         })
         .eq('id', videoId);
         
@@ -208,6 +224,36 @@ export class VideoStatusManager {
     
     // This calls the same central processing function as the automatic poller
     await this.checkAndProcessVideoStatus(videoId, taskId, userId);
+  }
+
+  /**
+   * Force refresh a video's status from the database
+   */
+  async refreshVideoFromDatabase(videoId: string): Promise<void> {
+    try {
+      console.log(`[VideoStatusManager] Refreshing video ${videoId} from database`);
+      
+      const { data, error } = await supabase
+        .from('video_generations')
+        .select('*')
+        .eq('id', videoId)
+        .single();
+
+      if (error) {
+        console.error(`[VideoStatusManager] Error refreshing video from database:`, error);
+        return;
+      }
+
+      console.log(`[VideoStatusManager] Video ${videoId} current status in DB:`, {
+        status: data.status,
+        progress: data.progress,
+        video_url: data.video_url ? 'present' : 'missing',
+        storage_path: data.storage_path ? 'present' : 'missing'
+      });
+
+    } catch (error) {
+      console.error(`[VideoStatusManager] Error refreshing video from database:`, error);
+    }
   }
 
   /**
