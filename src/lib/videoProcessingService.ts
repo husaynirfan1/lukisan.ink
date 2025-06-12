@@ -1,6 +1,12 @@
 import { supabase } from './supabase';
 import { checkVideoStatus, VideoStatusPoller, showVideoCompleteNotification } from './piapi';
 import toast from 'react-hot-toast';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL,
+  process.env.VITE_SUPABASE_SERVICE_KEY || import.meta.env.VITE_SUPABASE_SERVICE_KEY
+);
 
 interface VideoProcessingTask {
   taskId: string;
@@ -205,41 +211,40 @@ class VideoProcessingService {
     }
   }
 
-  private async downloadAndStoreVideo(videoUrl: string, taskId: string, userId: string): Promise<string> {
-    try {
-      console.log(`[VideoProcessor] Downloading video for task: ${taskId}`);
-      
-      // Download the video
-      const response = await fetch(videoUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
-      }
-      
-      const videoBlob = await response.blob();
-      const fileName = `${userId}/${taskId}-${Date.now()}.mp4`;
-      
-      // Upload to Supabase storage
-      const { data, error } = await supabase.storage
-        .from('generated-videos')
-        .upload(fileName, videoBlob, {
-          contentType: 'video/mp4',
-          cacheControl: '3600'
-        });
-      
-      if (error) {
-        console.error(`[VideoProcessor] Storage upload error:`, error);
-        throw new Error(`Failed to store video: ${error.message}`);
-      }
-      
-      console.log(`[VideoProcessor] Video stored successfully: ${fileName}`);
-      return fileName;
-      
-    } catch (error: any) {
-      console.error(`[VideoProcessor] Error downloading/storing video:`, error);
-      throw error;
-    }
-  }
+private async downloadAndStoreVideo(videoUrl: string, taskId: string, userId: string): Promise<string> {
+  try {
+    console.log(`[VideoProcessor] Downloading video for task: ${taskId}`);
 
+    // Download from PiAPI
+    const response = await fetch(videoUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
+    }
+
+    const videoBlob = await response.blob();
+    const filePath = `${userId}/${taskId}-${Date.now()}.mp4`;
+
+    // ✅ Upload using Supabase Admin client to bypass RLS
+    const { error } = await supabaseAdmin.storage
+      .from('videos')
+      .upload(filePath, videoBlob, {
+        contentType: 'video/mp4',
+        upsert: true
+      });
+
+    if (error) {
+      console.error(`[VideoProcessor] Storage upload error:`, error);
+      throw new Error(`Failed to store video: ${error.message}`);
+    }
+
+    console.log(`[VideoProcessor] Video stored successfully: ${filePath}`);
+    return filePath;
+
+  } catch (error: any) {
+    console.error(`[VideoProcessor] Error downloading/storing video:`, error);
+    throw error;
+  }
+}
   // Public method to get active tasks (for debugging)
   getActiveTasks(): string[] {
     return Array.from(this.activeTasks.keys());
