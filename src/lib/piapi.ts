@@ -203,24 +203,26 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
  * COMPLETELY FIXED: Check the status of a video generation task
  * This function polls the PiAPI status endpoint to get real-time updates
  */
+const PIAPI_BASE_URL = "https://api.piapi.ai";
+
 export async function checkVideoStatus(taskId: string) {
-  const response = await fetch(`${PIAPI_BASE_URL}/task/${taskId}`, {
+  const url = `${PIAPI_BASE_URL}/wanx/task/${taskId}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
     headers: {
-      Authorization: `Bearer ${PIAPI_API_KEY}`,
+      'Authorization': `Bearer ${import.meta.env.VITE_PIAPI_API_KEY}`, // or use process.env if SSR
     },
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to fetch task status: ${errorText}`);
+    const errText = await response.text();
+    console.error(`[PiAPI] Failed to check task. Status: ${response.status}, Response: ${errText}`);
+    throw new Error('Invalid API key or task not found.');
   }
 
   const json = await response.json();
   const data = json?.data;
-
-  if (!data) {
-    throw new Error(`No data in status response for task ${taskId}`);
-  }
 
   const status = data.status;
   const progress = data.progress ?? 0;
@@ -228,7 +230,7 @@ export async function checkVideoStatus(taskId: string) {
   const thumbnail_url = data.output?.thumbnail_url;
 
   if (status === 'completed' && !video_url) {
-    console.warn(`[PiAPI] Task ${taskId} completed, but video URL is not yet ready. Will retry.`);
+    console.warn(`[PiAPI] Task ${taskId} completed but video_url missing — waiting.`);
     return {
       task_id: taskId,
       status: 'waiting_for_video',
