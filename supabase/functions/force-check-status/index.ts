@@ -24,9 +24,10 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Step 1: Fetch current video record including status, progress, and storage_path
     const { data: videos, error: findError } = await supabase
       .from("video_generations")
-      .select("id, video_id")
+      .select("id, video_id, status, progress, storage_path") // Ensure all required fields are selected
       .eq("id", videoId)
       .limit(1);
 
@@ -34,7 +35,7 @@ serve(async (req) => {
     if (!videos || videos.length === 0) {
       return new Response(JSON.stringify({ error: "Video not found" }), { status: 404 });
     }
-    const video = videos[0];
+    const video = videos[0]; // This is the current state from DB
     
     const PIAPI_API_KEY = Deno.env.get("PIAPI_API_KEY");
     if (!PIAPI_API_KEY) {
@@ -65,32 +66,70 @@ serve(async (req) => {
         normalizedStatus = "processing";
     }
     
-    const videoUrl = taskData.works?.[0]?.resource?.resourceWithoutWatermark || taskData.works?.[0]?.resource?.resource;
+    // videoUrl is not used for updating the database record's video_url field.
+    // const videoUrl = taskData.works?.[0]?.resource?.resourceWithoutWatermark || taskData.works?.[0]?.resource?.resource;
     
-    const updateData: any = {
-      updated_at: new Date().toISOString(),
-      status: normalizedStatus // Always update status based on normalizedStatus
-    };
+    const potentialUpdates: any = {};
 
-    // Add progress if available from PiAPI response
+    // Step 2 & 3: Determine new status based on PiAPI and storage_path
+    if (normalizedStatus === 'completed') {
+      if (!video.storage_path || video.storage_path.trim() === '') {
+        potentialUpdates.status = 'processing'; // Downgrade to processing if PiAPI says completed but no storage_path
+      } else {
+        potentialUpdates.status = 'completed'; // Confirm completed only if storage_path is present
+      }
+    } else {
+      // For 'pending', 'processing', 'failed'
+      potentialUpdates.status = normalizedStatus;
+    }
+
+    // Step 5: Add progress if available from PiAPI response
     if (typeof taskData.progress === 'number') {
-      updateData.progress = taskData.progress;
+      potentialUpdates.progress = taskData.progress;
     }
-    // video_url is intentionally not updated here.
-    
-    if (Object.keys(updateData).length > 1) { // Ensure there's something to update besides updated_at
-        const { error: updateError } = await supabase
-            .from("video_generations")
-            .update(updateData)
-            .eq("id", video.id);
-        
-        if (updateError) throw updateError;
+    // video_url is intentionally not updated.
+
+    // Step 6: Conditional database update
+    let needsUpdate = false;
+    if (potentialUpdates.status !== video.status) {
+      needsUpdate = true;
     }
-    
-    return new Response(
-      JSON.stringify({ message: "Status check complete.", newStatus: updateData.status || 'unchanged' }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
-    );
+    if (typeof potentialUpdates.progress === 'number' && potentialUpdates.progress !== video.progress) {
+      // Also consider if video.progress was null/undefined and taskData.progress is now a number
+      if (video.progress === null || video.progress === undefined || potentialUpdates.progress !== video.progress) {
+        needsUpdate = true;
+      }
+    }
+
+    if (needsUpdate) {
+      const finalUpdateData = { ...potentialUpdates, updated_at: new Date().toISOString() };
+      const { error: updateError } = await supabase
+          .from("video_generations")
+          .update(finalUpdateData)
+          .eq("id", video.id);
+
+      if (updateError) throw updateError;
+
+      return new Response(
+        JSON.stringify({
+          message: "Status check processed. Record updated.",
+          newStatus: finalUpdateData.status,
+          oldStatus: video.status,
+          newProgress: finalUpdateData.progress,
+          oldProgress: video.progress
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    } else {
+      return new Response(
+        JSON.stringify({
+          message: "Status check processed. No changes needed.",
+          currentStatus: video.status,
+          currentProgress: video.progress
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
     
   } catch (error) {
     console.error("Error in Edge Function:", error);
