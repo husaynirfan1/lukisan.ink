@@ -45,6 +45,7 @@ import {
 } from '../../lib/piapi';
 import { storeVideoInSupabase } from '../../lib/videoStorage';
 import { videoStatusManager } from '../../lib/videoStatusManager';
+import { enhancedVideoProcessor } from '../../lib/enhancedVideoProcessor';
 import { VideoPresets, VideoPreset } from './VideoPresets';
 import { AIPromptRefiner } from './AIPromptRefiner';
 import { useAuth } from '../../hooks/useAuth';
@@ -223,19 +224,21 @@ export const VideoGenerator: React.FC = () => {
     }
   };
 
-  // Start status polling using the VideoStatusPoller class
+  // FIXED: Start status polling using the VideoStatusPoller class
   const startStatusPolling = (taskId: string, videoDbId: string) => {
     // Stop any existing poller
     if (pollerRef.current) {
       pollerRef.current.stop();
     }
 
+    console.log(`[VideoGenerator] Starting status polling for task: ${taskId}, video: ${videoDbId}`);
+
     // Create new poller
     pollerRef.current = new VideoStatusPoller(
       taskId,
       // onStatusUpdate
       (statusResponse: TaskStatusResponse) => {
-        console.log('Status update:', statusResponse);
+        console.log(`[VideoGenerator] Status update received:`, statusResponse);
         setProgress(statusResponse.progress || 0);
         setStatus(statusResponse.status);
         
@@ -250,12 +253,14 @@ export const VideoGenerator: React.FC = () => {
           .then(({ error }) => {
             if (error) {
               console.error('Failed to update video status in database:', error);
+            } else {
+              console.log(`[VideoGenerator] Updated database status for video ${videoDbId}: ${statusResponse.status}`);
             }
           });
       },
       // onComplete
       async (statusResponse: TaskStatusResponse) => {
-        console.log('Video generation completed:', statusResponse);
+        console.log(`[VideoGenerator] Video generation completed:`, statusResponse);
         setStatus('downloading');
         
         let finalVideoUrl = statusResponse.video_url || null;
@@ -264,7 +269,7 @@ export const VideoGenerator: React.FC = () => {
         // Store video in library and get the stored URL
         if (finalVideoUrl && user) {
           try {
-            console.log('Storing video in Supabase Storage...');
+            console.log(`[VideoGenerator] Storing video in Supabase Storage...`);
             setStatus('storing');
             
             const filename = `video-${mode}-${taskId}`;
@@ -272,7 +277,7 @@ export const VideoGenerator: React.FC = () => {
             const storeResult = await storeVideoInSupabase(finalVideoUrl, user.id, filename);
             
             if (storeResult.success && storeResult.publicUrl) {
-              console.log('Video stored successfully in Supabase Storage');
+              console.log(`[VideoGenerator] Video stored successfully in Supabase Storage`);
               finalVideoUrl = storeResult.publicUrl;
               
               // Update database with the stored video URL and storage path
@@ -294,7 +299,7 @@ export const VideoGenerator: React.FC = () => {
               if (error) {
                 console.error('Failed to update database with video URL:', error);
               } else {
-                console.log('Successfully updated database with video URL');
+                console.log(`[VideoGenerator] Successfully updated database with video URL for ${videoDbId}`);
               }
             } else {
               console.warn('Failed to store video in Supabase Storage:', storeResult.error);
@@ -343,7 +348,7 @@ export const VideoGenerator: React.FC = () => {
       },
       // onError
       (error: string) => {
-        console.error('Video generation failed:', error);
+        console.error(`[VideoGenerator] Video generation failed:`, error);
         setStatus('failed');
         setErrorMessage(error);
         toast.error(error || 'Video generation failed');
@@ -364,7 +369,7 @@ export const VideoGenerator: React.FC = () => {
             });
         }
       },
-      5000 // Poll every 5 seconds
+      10000 // Poll every 10 seconds
     );
 
     // Start polling
@@ -429,6 +434,8 @@ export const VideoGenerator: React.FC = () => {
     try {
         let createTaskResponse: CreateTaskResponse;
 
+        console.log(`[VideoGenerator] Starting ${mode} generation`);
+
         if (mode === 'text-to-video') {
             const request: TextToVideoRequest = {
                 prompt: textPrompt,
@@ -450,10 +457,12 @@ export const VideoGenerator: React.FC = () => {
             createTaskResponse = await generateImageToVideo(request);
         }
 
-        // The enhanced PiAPI service now validates the task_id, so we can trust it's valid
+        // FIXED: The enhanced PiAPI service now validates the task_id, so we can trust it's valid
         const validTaskId = createTaskResponse.task_id.trim();
         setTaskId(validTaskId);
         setStatus('processing');
+
+        console.log(`[VideoGenerator] Task created successfully: ${validTaskId}`);
 
         // Save to database with processing status - IMPORTANT: Provide a placeholder video_url
         let videoDbId: string;
@@ -465,7 +474,7 @@ export const VideoGenerator: React.FC = () => {
                 video_type: mode === 'text-to-video' ? 'marketing' : 'welcome',
                 message: mode === 'text-to-video' ? textPrompt : imagePrompt,
                 video_id: validTaskId,
-                video_url: 'processing', // Placeholder to satisfy NOT NULL constraint
+                video_url: null, // FIXED: Allow NULL during processing
                 status: 'processing',
                 progress: 0
               })
@@ -542,7 +551,7 @@ export const VideoGenerator: React.FC = () => {
         // Start status polling
         startStatusPolling(validTaskId, videoDbId);
         
-        // Redirect to video library after a delay
+        // FIXED: Use a more reliable navigation method for the video library
         setTimeout(() => {
           toast.success('Your video is being processed. You can view its status in the Video Library.', {
             duration: 5000,
@@ -557,8 +566,17 @@ export const VideoGenerator: React.FC = () => {
                 <button
                   onClick={() => {
                     toast.dismiss(t.id);
-                    // Navigate to video library with task ID
-                    window.location.href = `/dashboard/video-library?task_id=${validTaskId}`;
+                    // FIXED: Use history.pushState instead of direct location change
+                    // This prevents the page from reloading and maintains React state
+                    window.history.pushState(
+                      { tab: 'video-library', taskId: validTaskId }, 
+                      '', 
+                      '/dashboard/video-library'
+                    );
+                    // Dispatch a popstate event to trigger the Router's useEffect
+                    window.dispatchEvent(new PopStateEvent('popstate', { 
+                      state: { tab: 'video-library', taskId: validTaskId }
+                    }));
                   }}
                   className="px-3 py-1 bg-purple-600 text-white rounded-md text-sm flex items-center space-x-1"
                 >

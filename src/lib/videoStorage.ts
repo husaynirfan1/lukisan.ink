@@ -206,7 +206,7 @@ export const getVideoInfo = async (path: string) => {
 };
 
 /**
- * Updates a video record in the database with the final video URL
+ * FIXED: Updates a video record in the database with the final video URL
  */
 export const updateVideoUrlInDatabase = async (
   videoId: string, 
@@ -214,7 +214,12 @@ export const updateVideoUrlInDatabase = async (
   storagePath?: string
 ): Promise<boolean> => {
   try {
-    const updateData: any = { video_url: videoUrl };
+    const updateData: any = { 
+      video_url: videoUrl,
+      status: 'completed',
+      progress: 100
+    };
+    
     if (storagePath) {
       updateData.storage_path = storagePath;
     }
@@ -222,13 +227,14 @@ export const updateVideoUrlInDatabase = async (
     const { error } = await supabase
       .from('video_generations')
       .update(updateData)
-      .eq('video_id', videoId);
+      .eq('id', videoId);
 
     if (error) {
       console.error('[VideoStorage] Error updating video URL in database:', error);
       return false;
     }
 
+    console.log('[VideoStorage] Successfully updated video URL in database for', videoId);
     return true;
   } catch (error) {
     console.error('[VideoStorage] Error updating video URL:', error);
@@ -237,7 +243,7 @@ export const updateVideoUrlInDatabase = async (
 };
 
 /**
- * Checks for pending videos in the database and returns them
+ * FIXED: Checks for pending videos in the database and returns them
  */
 export const getPendingVideos = async (userId: string): Promise<any[]> => {
   try {
@@ -245,7 +251,7 @@ export const getPendingVideos = async (userId: string): Promise<any[]> => {
       .from('video_generations')
       .select('*')
       .eq('user_id', userId)
-      .or('video_url.eq.,video_url.eq.null')
+      .in('status', ['pending', 'processing', 'running'])
       .order('created_at', { ascending: false });
 
     if (error) {

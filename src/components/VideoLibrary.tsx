@@ -1,5 +1,3 @@
-'use client';
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -12,6 +10,7 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '../lib/videoStorage';
 import { videoStatusManager } from '../lib/videoStatusManager';
+import { checkVideoStatus } from '../lib/piapi';
 import toast from 'react-hot-toast';
 
 // This interface should match the structure of your 'video_generations' table
@@ -40,11 +39,21 @@ interface VideoCardProps {
   video: StoredVideo;
   onDelete: (videoId: string) => void;
   onRetry: (video: StoredVideo) => void;
+  onCheckStatus: (video: StoredVideo) => void;
   isDeleting: boolean;
   isRetrying: boolean;
+  isCheckingStatus: boolean;
 }
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDeleting, isRetrying }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ 
+  video, 
+  onDelete, 
+  onRetry, 
+  onCheckStatus,
+  isDeleting, 
+  isRetrying,
+  isCheckingStatus 
+}) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -53,13 +62,23 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
 
   const getStatusDisplay = () => {
     const isRetryingThis = isRetrying;
+    const isCheckingThis = isCheckingStatus;
+    
+    if (isCheckingThis) {
+      return { 
+        icon: <Loader2 className="h-4 w-4 animate-spin" />, 
+        color: 'text-blue-600', 
+        bg: 'bg-blue-100', 
+        text: 'Checking...' 
+      };
+    }
     
     if (isRetryingThis) {
       return { 
         icon: <Loader2 className="h-4 w-4 animate-spin" />, 
         color: 'text-blue-600', 
         bg: 'bg-blue-100', 
-        text: 'Checking...' 
+        text: 'Updating...' 
       };
     }
     
@@ -119,7 +138,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
 
   const statusDisplay = getStatusDisplay();
   const isProcessing = ['pending', 'processing', 'running', 'downloading', 'storing'].includes(video.status || '');
-  const canDownload = video.status === 'completed' && video.video_url;
+  const canDownload = video.status === 'completed' && video.video_url && video.video_url !== 'processing' && video.video_url !== null;
   const hasIntegrityIssue = video.status === 'completed' && video.integrity_verified === false;
 
   const formatFileSize = (bytes?: number) => {
@@ -189,6 +208,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
   const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
     onRetry(video);
+  };
+
+  const handleCheckStatus = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onCheckStatus(video);
   };
 
   return (
@@ -342,6 +366,18 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
             </motion.button>
           )}
           
+          {/* New Check Status button */}
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={handleCheckStatus}
+            disabled={isCheckingStatus}
+            className="p-2 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors shadow-lg disabled:opacity-50"
+            title="Force check status"
+          >
+            <RefreshCw className={`h-4 w-4 ${isCheckingStatus ? 'animate-spin' : ''}`} />
+          </motion.button>
+          
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -404,6 +440,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
               </button>
             )}
             
+            {/* Mobile Check Status button */}
+            <button 
+              onClick={handleCheckStatus} 
+              disabled={isCheckingStatus}
+              className="p-2 text-gray-500 hover:text-purple-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+              title="Force check status"
+            >
+              <RefreshCw className={`h-4 w-4 ${isCheckingStatus ? 'animate-spin' : ''}`} />
+            </button>
+            
             <button 
               onClick={handleDelete} 
               disabled={isDeleting}
@@ -434,6 +480,7 @@ export function VideoLibrary() {
   const [deletingVideos, setDeletingVideos] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
+  const [checkingAllStatus, setCheckingAllStatus] = useState(false);
   const [storageInfo, setStorageInfo] = useState<{
     used_space: number;
     total_space: number;
@@ -460,6 +507,7 @@ export function VideoLibrary() {
     };
   }, []);
 
+  // FIXED: Improved fetch and monitor videos function with better error handling
   const fetchAndMonitorVideos = useCallback(async (showLoading = true) => {
     if (!user) return;
     if (showLoading) setLoading(true);
@@ -528,9 +576,11 @@ export function VideoLibrary() {
     }
   }, [user]);
 
+  // FIXED: Improved component mounting and cleanup
   useEffect(() => {
     if (user && !initialFetchDone.current) {
       initialFetchDone.current = true;
+      console.log('[VideoLibrary] Initial fetch starting');
       fetchAndMonitorVideos();
 
       // Set up real-time subscription for video updates
@@ -548,17 +598,48 @@ export function VideoLibrary() {
         .subscribe((status) => {
           console.log('[VideoLibrary] Subscription status:', status);
         });
-      
-      return () => {
-        console.log('[VideoLibrary] Cleaning up subscription');
-        if (realtimeChannelRef.current) {
-          supabase.removeChannel(realtimeChannelRef.current);
-        }
-        // Stop all monitoring when component unmounts
-        videoStatusManager.stopAllMonitoring();
-      };
     }
+    
+    // Cleanup function
+    return () => {
+      console.log('[VideoLibrary] Component unmounting, cleaning up');
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+    };
   }, [user, fetchAndMonitorVideos]);
+
+  // FIXED: Check for task_id in URL state for direct video status viewing
+  useEffect(() => {
+    // Check if we have a taskId in the history state (from navigation)
+    const taskId = window.history.state?.taskId;
+    
+    if (taskId && videos.length > 0) {
+      console.log(`[VideoLibrary] Found taskId in state: ${taskId}, looking for matching video`);
+      
+      // Find the video with this task_id
+      const video = videos.find(v => v.video_id === taskId);
+      
+      if (video) {
+        console.log(`[VideoLibrary] Found video for task ${taskId}: ${video.id}`);
+        
+        // Scroll to the video element
+        setTimeout(() => {
+          const videoElement = document.getElementById(`video-${video.id}`);
+          if (videoElement) {
+            console.log(`[VideoLibrary] Scrolling to video element for task ${taskId}`);
+            videoElement.scrollIntoView({ behavior: 'smooth' });
+            
+            // Add a highlight effect
+            videoElement.classList.add('ring-4', 'ring-purple-500', 'ring-opacity-50');
+            setTimeout(() => {
+              videoElement.classList.remove('ring-4', 'ring-purple-500', 'ring-opacity-50');
+            }, 3000);
+          }
+        }, 500);
+      }
+    }
+  }, [videos]);
 
   const extractStoragePath = (url: string): string | undefined => {
     if (!url || !url.includes('supabase.co/storage/v1/object/public/generated-videos/')) {
@@ -566,6 +647,152 @@ export function VideoLibrary() {
     }
     const parts = url.split('/generated-videos/');
     return parts.length > 1 ? parts[1] : undefined;
+  };
+
+  /**
+   * NEW: Force check status of a video directly from PiAPI
+   * This function will bypass the normal monitoring system and directly check the status
+   */
+// In VideoLibrary.tsx
+
+/**
+ * FIXED: Force check status by invoking the Supabase Edge Function.
+ * This replaces the previous client-side implementation.
+ */
+const handleForceCheckStatus = async (video: StoredVideo) => {
+  if (!user || checkingStatus.has(video.id)) return;
+
+  console.log(`[VideoLibrary] Invoking edge function to check status for video ${video.id}`);
+  const toastId = `status-check-${video.id}`;
+  toast.loading('Checking video status...', { id: toastId });
+
+  setCheckingStatus(prev => new Set(prev).add(video.id));
+
+  try {
+    const { data, error } = await supabase.functions.invoke('force-check-status', {
+      body: { video_id: video.id }, // The Edge Function expects video_id
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (data.error) {
+        throw new Error(data.details?.message || data.error);
+    }
+
+    console.log('[VideoLibrary] Edge function response:', data);
+    toast.success('Status updated successfully!', { id: toastId });
+
+  } catch (error: any) {
+    console.error(`[VideoLibrary] Force status check failed:`, error);
+    toast.error(`Status check failed: ${error.message}`, { id: toastId });
+  } finally {
+    setTimeout(() => {
+      setCheckingStatus(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(video.id);
+        return newSet;
+      });
+    }, 1000);
+  }
+};
+  /**
+   * NEW: Force check status of all processing videos
+   */
+  const handleCheckAllStatus = async () => {
+    if (!user || checkingAllStatus) return;
+    
+    const processingVideos = videos.filter(v => 
+      ['pending', 'processing', 'running'].includes(v.status || '')
+    );
+    
+    if (processingVideos.length === 0) {
+      toast.info('No processing videos to check');
+      return;
+    }
+    
+    setCheckingAllStatus(true);
+    const toastId = 'check-all-status';
+    toast.loading(`Checking status of ${processingVideos.length} videos...`, { id: toastId });
+    
+    try {
+      console.log(`[VideoLibrary] Checking status of ${processingVideos.length} videos`);
+      
+      // Process videos in batches of 3 to avoid overwhelming the API
+      const batchSize = 3;
+      const batches = Math.ceil(processingVideos.length / batchSize);
+      
+      for (let i = 0; i < batches; i++) {
+        const start = i * batchSize;
+        const end = Math.min(start + batchSize, processingVideos.length);
+        const batch = processingVideos.slice(start, end);
+        
+        // Update toast with progress
+        toast.loading(`Checking videos ${start + 1}-${end} of ${processingVideos.length}...`, { id: toastId });
+        
+        // Process batch in parallel
+        await Promise.all(batch.map(async (video) => {
+          try {
+            // Add to checking set
+            setCheckingStatus(prev => new Set(prev).add(video.id));
+            
+            // Check status
+            const statusResponse = await checkVideoStatus(video.video_id);
+            
+            // Update database
+            const updateData: any = {
+              status: statusResponse.status,
+              progress: statusResponse.progress || 0,
+              updated_at: new Date().toISOString()
+            };
+            
+            if (statusResponse.video_url) {
+              updateData.video_url = statusResponse.video_url;
+            }
+            
+            if (statusResponse.error) {
+              updateData.error_message = statusResponse.error;
+            }
+            
+            await supabase
+              .from('video_generations')
+              .update(updateData)
+              .eq('id', video.id);
+            
+            // If completed, start monitoring
+            if (statusResponse.status === 'completed' && statusResponse.video_url) {
+              videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
+            }
+            
+          } catch (error) {
+            console.error(`[VideoLibrary] Error checking video ${video.id}:`, error);
+          } finally {
+            // Remove from checking set
+            setCheckingStatus(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(video.id);
+              return newSet;
+            });
+          }
+        }));
+        
+        // Add a small delay between batches
+        if (i < batches - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      // Refresh the video list
+      await fetchAndMonitorVideos(false);
+      
+      toast.success(`Status check completed for ${processingVideos.length} videos`, { id: toastId });
+    } catch (error: any) {
+      console.error(`[VideoLibrary] Check all status failed:`, error);
+      toast.error(`Status check failed: ${error.message}`, { id: toastId });
+    } finally {
+      setCheckingAllStatus(false);
+    }
   };
 
   const handleManualRetry = async (video: StoredVideo) => {
@@ -724,7 +951,7 @@ export function VideoLibrary() {
       </div>
       
       <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-gray-200/50 mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
@@ -736,7 +963,7 @@ export function VideoLibrary() {
             />
           </div>
           
-          <div className="flex items-center space-x-4 ml-4">
+          <div className="flex flex-wrap items-center gap-3">
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
@@ -749,10 +976,20 @@ export function VideoLibrary() {
               ))}
             </select>
             
+            {/* NEW: Check All Status Button */}
+            <button
+              onClick={handleCheckAllStatus}
+              disabled={checkingAllStatus || videos.filter(v => ['pending', 'processing', 'running'].includes(v.status || '')).length === 0}
+              className="flex items-center space-x-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${checkingAllStatus ? 'animate-spin' : ''}`} />
+              <span>Check All Status</span>
+            </button>
+            
             <button
               onClick={() => fetchAndMonitorVideos(false)}
               disabled={refreshing}
-              className="flex items-center space-x-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+              className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
@@ -786,17 +1023,21 @@ export function VideoLibrary() {
           >
             {filteredVideos.map((video) => (
               <VideoCard
-                key={video.id}
-                video={video}
-                onDelete={handleDelete}
-                onRetry={handleManualRetry}
-                isDeleting={deletingVideos.has(video.id)}
-                isRetrying={checkingStatus.has(video.id)}
-              />
+  key={video.id}
+  video={video}
+  onDelete={handleDelete}
+  // CHANGE THIS LINE:
+  onRetry={handleForceCheckStatus} // Use the robust handler instead of handleManualRetry
+  onCheckStatus={handleForceCheckStatus}
+  isDeleting={deletingVideos.has(video.id)}
+  // CHANGE THIS LINE:
+  isRetrying={checkingStatus.has(video.id)} // Use the same state for both buttons
+  isCheckingStatus={checkingStatus.has(video.id)}
+/>
             ))}
           </motion.div>
         </AnimatePresence>
       )}
     </div>
   );
-};
+}

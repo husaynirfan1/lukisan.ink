@@ -74,11 +74,27 @@ export const Dashboard: React.FC = () => {
     window.history.pushState({ tab: tabId }, '', newUrl);
   };
 
-  // Handle browser back/forward
-  React.useEffect(() => {
+  // FIXED: Improved handling of browser back/forward and popstate events
+  useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      const tab = event.state?.tab || 'generate';
-      setActiveTab(tab);
+      console.log('[Dashboard] PopState event received:', event.state);
+      
+      // If there's a specific tab in the state, use it
+      if (event.state?.tab) {
+        setActiveTab(event.state.tab);
+        return;
+      }
+      
+      // Otherwise, try to determine tab from URL
+      const pathParts = window.location.pathname.split('/');
+      const urlTab = pathParts[2] as DashboardTab;
+      
+      if (urlTab && tabs.some(t => t.id === urlTab)) {
+        setActiveTab(urlTab);
+      } else {
+        // Default to generate if no valid tab is found
+        setActiveTab('generate');
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -86,36 +102,58 @@ export const Dashboard: React.FC = () => {
     // Set initial tab based on URL
     const pathParts = window.location.pathname.split('/');
     const urlTab = pathParts[2] as DashboardTab;
+    
     if (urlTab && tabs.some(t => t.id === urlTab)) {
       setActiveTab(urlTab);
+      
+      // Ensure the history state is set correctly
+      if (!window.history.state || window.history.state.tab !== urlTab) {
+        window.history.replaceState({ tab: urlTab }, '', window.location.pathname);
+      }
     }
 
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Check for task_id in URL query params for direct video status viewing
+  // FIXED: Improved handling of task_id in URL query params for direct video status viewing
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const taskId = params.get('task_id');
     
     if (taskId) {
-      // If there's a task_id, switch to video tab
+      console.log(`[Dashboard] Found task_id in URL: ${taskId}`);
+      
+      // If there's a task_id, switch to video library tab
       setActiveTab('video-library');
       
       // Remove the query parameter after processing
       window.history.replaceState(
-        { tab: 'video-library' }, 
+        { tab: 'video-library', taskId }, 
         '', 
-        window.location.pathname
+        '/dashboard/video-library'
       );
       
-      // Scroll to the video with this task_id if it exists
-      setTimeout(() => {
+      // Scroll to the video with this task_id if it exists (with retry)
+      const scrollToVideo = (attempts = 0) => {
         const videoElement = document.getElementById(`video-${taskId}`);
         if (videoElement) {
+          console.log(`[Dashboard] Found video element for task ${taskId}, scrolling into view`);
           videoElement.scrollIntoView({ behavior: 'smooth' });
+          
+          // Add a highlight effect
+          videoElement.classList.add('ring-4', 'ring-purple-500', 'ring-opacity-50');
+          setTimeout(() => {
+            videoElement.classList.remove('ring-4', 'ring-purple-500', 'ring-opacity-50');
+          }, 3000);
+        } else if (attempts < 5) {
+          // Retry a few times with increasing delays
+          console.log(`[Dashboard] Video element for task ${taskId} not found, retrying (${attempts + 1}/5)`);
+          setTimeout(() => scrollToVideo(attempts + 1), 1000 * (attempts + 1));
         }
-      }, 1000);
+      };
+      
+      // Start the first attempt after a delay to allow the component to render
+      setTimeout(() => scrollToVideo(), 1000);
     }
   }, []);
 
