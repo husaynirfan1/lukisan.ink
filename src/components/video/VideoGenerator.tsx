@@ -550,7 +550,7 @@ export const VideoGenerator: React.FC = () => {
         // Start status polling
         startStatusPolling(validTaskId, videoDbId);
         
-        // Redirect to video library after a delay
+        // FIXED: Use a more reliable navigation method for the video library
         setTimeout(() => {
           toast.success('Your video is being processed. You can view its status in the Video Library.', {
             duration: 5000,
@@ -565,8 +565,17 @@ export const VideoGenerator: React.FC = () => {
                 <button
                   onClick={() => {
                     toast.dismiss(t.id);
-                    // Navigate to video library with task ID
-                    window.location.href = `/dashboard/video-library?task_id=${validTaskId}`;
+                    // FIXED: Use history.pushState instead of direct location change
+                    // This prevents the page from reloading and maintains React state
+                    window.history.pushState(
+                      { tab: 'video-library', taskId: validTaskId }, 
+                      '', 
+                      '/dashboard/video-library'
+                    );
+                    // Dispatch a popstate event to trigger the Router's useEffect
+                    window.dispatchEvent(new PopStateEvent('popstate', { 
+                      state: { tab: 'video-library', taskId: validTaskId }
+                    }));
                   }}
                   className="px-3 py-1 bg-purple-600 text-white rounded-md text-sm flex items-center space-x-1"
                 >

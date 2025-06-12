@@ -1,5 +1,3 @@
-'use client';
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -460,6 +458,7 @@ export function VideoLibrary() {
     };
   }, []);
 
+  // FIXED: Improved fetch and monitor videos function with better error handling
   const fetchAndMonitorVideos = useCallback(async (showLoading = true) => {
     if (!user) return;
     if (showLoading) setLoading(true);
@@ -528,9 +527,11 @@ export function VideoLibrary() {
     }
   }, [user]);
 
+  // FIXED: Improved component mounting and cleanup
   useEffect(() => {
     if (user && !initialFetchDone.current) {
       initialFetchDone.current = true;
+      console.log('[VideoLibrary] Initial fetch starting');
       fetchAndMonitorVideos();
 
       // Set up real-time subscription for video updates
@@ -548,17 +549,50 @@ export function VideoLibrary() {
         .subscribe((status) => {
           console.log('[VideoLibrary] Subscription status:', status);
         });
-      
-      return () => {
-        console.log('[VideoLibrary] Cleaning up subscription');
-        if (realtimeChannelRef.current) {
-          supabase.removeChannel(realtimeChannelRef.current);
-        }
-        // Stop all monitoring when component unmounts
-        videoStatusManager.stopAllMonitoring();
-      };
     }
+    
+    // Cleanup function
+    return () => {
+      console.log('[VideoLibrary] Component unmounting, cleaning up');
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+      // Stop all monitoring when component unmounts
+      videoStatusManager.stopAllMonitoring();
+    };
   }, [user, fetchAndMonitorVideos]);
+
+  // FIXED: Check for task_id in URL state for direct video status viewing
+  useEffect(() => {
+    // Check if we have a taskId in the history state (from navigation)
+    const taskId = window.history.state?.taskId;
+    
+    if (taskId && videos.length > 0) {
+      console.log(`[VideoLibrary] Found taskId in state: ${taskId}, looking for matching video`);
+      
+      // Find the video with this task_id
+      const video = videos.find(v => v.video_id === taskId);
+      
+      if (video) {
+        console.log(`[VideoLibrary] Found video for task ${taskId}: ${video.id}`);
+        
+        // Scroll to the video element
+        setTimeout(() => {
+          const videoElement = document.getElementById(`video-${taskId}`);
+          if (videoElement) {
+            console.log(`[VideoLibrary] Scrolling to video element for task ${taskId}`);
+            videoElement.scrollIntoView({ behavior: 'smooth' });
+            
+            // Add a highlight effect
+            videoElement.classList.add('ring-4', 'ring-purple-500', 'ring-opacity-50');
+            setTimeout(() => {
+              videoElement.classList.remove('ring-4', 'ring-purple-500', 'ring-opacity-50');
+            }, 3000);
+          }
+        }, 500);
+      }
+    }
+  }, [videos]);
 
   const extractStoragePath = (url: string): string | undefined => {
     if (!url || !url.includes('supabase.co/storage/v1/object/public/generated-videos/')) {
