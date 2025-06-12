@@ -1047,15 +1047,17 @@ export function VideoLibrary() {
           >
             {filteredVideos.map((video) => (
               <VideoCard
-                key={video.id}
-                video={video}
-                onDelete={handleDelete}
-                onRetry={handleManualRetry}
-                onCheckStatus={handleForceCheckStatus}
-                isDeleting={deletingVideos.has(video.id)}
-                isRetrying={checkingStatus.has(video.id)}
-                isCheckingStatus={checkingStatus.has(video.id)}
-              />
+  key={video.id}
+  video={video}
+  onDelete={handleDelete}
+  // CHANGE THIS LINE:
+  onRetry={handleForceCheckStatus} // Use the robust handler instead of handleManualRetry
+  onCheckStatus={handleForceCheckStatus}
+  isDeleting={deletingVideos.has(video.id)}
+  // CHANGE THIS LINE:
+  isRetrying={checkingStatus.has(video.id)} // Use the same state for both buttons
+  isCheckingStatus={checkingStatus.has(video.id)}
+/>
             ))}
           </motion.div>
         </AnimatePresence>
