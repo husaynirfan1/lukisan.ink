@@ -205,6 +205,16 @@ export const VideoGenerator: React.FC = () => {
         return;
     }
 
+    // Check if PiAPI is properly configured
+    const PIAPI_API_KEY = import.meta.env.VITE_PIAPI_API_KEY;
+    if (!PIAPI_API_KEY || PIAPI_API_KEY === 'your_piapi_api_key_here') {
+        toast.error('PiAPI key not configured. Please add your API key to the .env file to enable video generation.', {
+            duration: 8000,
+            icon: '⚠️'
+        });
+        return;
+    }
+
     // Check if user has enough credits
     if (!hasEnoughCredits()) {
         const remainingCredits = getRemainingGenerations();
@@ -404,8 +414,22 @@ export const VideoGenerator: React.FC = () => {
     } catch (error: any) {
         console.error('Video generation error:', error);
         setStatus('failed');
-        setErrorMessage(error.message || 'Failed to submit video generation task.');
-        toast.error(error.message || 'Failed to submit video generation task.');
+        
+        // Enhanced error handling
+        let userFriendlyMessage = 'Failed to submit video generation task.';
+        
+        if (error.message?.includes('PiAPI key not configured')) {
+            userFriendlyMessage = 'PiAPI key not configured. Please add your API key to the .env file.';
+        } else if (error.message?.includes('insufficient credits')) {
+            userFriendlyMessage = 'Insufficient credits on your PiAPI account. Please top up your credits.';
+        } else if (error.message?.includes('failed to find task')) {
+            userFriendlyMessage = 'Task not found on PiAPI. Please try again.';
+        } else if (error.message?.includes('Failed to fetch')) {
+            userFriendlyMessage = 'Network error. Please check your internet connection and try again.';
+        }
+        
+        setErrorMessage(userFriendlyMessage);
+        toast.error(userFriendlyMessage);
     }
   };
 
@@ -479,9 +503,10 @@ export const VideoGenerator: React.FC = () => {
           <div className="bg-gray-50 rounded-lg p-4 text-left max-w-md mx-auto">
             <p className="text-sm text-gray-700 mb-2">To enable this feature:</p>
             <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-              <li>Sign up for an account at PiAPI</li>
+              <li>Sign up for an account at <a href="https://piapi.ai/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">PiAPI</a></li>
               <li>Get your API key from the dashboard</li>
-              <li>Add <code className="bg-gray-200 px-1 rounded">VITE_PIAPI_API_KEY</code> to your environment variables</li>
+              <li>Replace <code className="bg-gray-200 px-1 rounded">your_piapi_api_key_here</code> in your .env file with your actual API key</li>
+              <li>Purchase credits on your PiAPI account for video generation</li>
             </ol>
           </div>
         </div>
