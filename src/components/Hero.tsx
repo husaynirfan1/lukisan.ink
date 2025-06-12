@@ -14,7 +14,7 @@ export const Hero: React.FC = () => {
         <div className="bg-yellow-100 border-b border-yellow-200 text-yellow-800 p-3 text-center text-sm relative">
           <div className="flex items-center justify-center">
             <AlertTriangle className="h-4 w-4 mr-2" />
-            <span>Video generation is in maintenance. Any creator credit will be allocated to user once available.</span>
+            <span>Video generation is in maintenance. Early creator adopter will get allocated credits once available.</span>
           </div>
           <button
             onClick={() => setShowBanner(false)}
