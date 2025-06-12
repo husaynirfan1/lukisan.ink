@@ -34,7 +34,7 @@ class EnhancedVideoProcessor {
       const piapiResult = await this.monitorPiAPITask(taskId, videoDbId, abortController.signal);
       
       // Step 2: Download and store the video.
-      const storageResult = await this.downloadAndStoreVideo(piapiResult.videoUrl, userId, taskId);
+      const storageResult = await this.downloadAndStoreVideo(videoDbId, piapiResult.videoUrl, userId, taskId);
       
       // Step 3: Update database with final success status.
       await this.updateDatabase(videoDbId, {
@@ -43,7 +43,7 @@ class EnhancedVideoProcessor {
         storage_path: storageResult.storagePath,
         file_size: storageResult.fileSize,
         progress: 100,
-        error_message: null
+        error_message: null // Explicitly ensure error_message is null on success
       });
 
       console.log(`[Processor] Successfully processed and stored video ${videoDbId}. Final URL: ${storageResult.publicUrl}`);
@@ -53,7 +53,12 @@ class EnhancedVideoProcessor {
       console.error(`[Processor] Workflow failed for video ${videoDbId}:`, error.message);
       
       try {
-        await this.updateDatabase(videoDbId, { status: 'failed', error_message: error.message });
+        const errorMessage = (error && typeof error.message === 'string') ? error.message : 'Unknown processing error';
+        await this.updateDatabase(videoDbId, {
+          status: 'failed',
+          error_message: errorMessage,
+          progress: 0
+        });
       } catch (dbError) {
         console.error(`[Processor] Could not update failure status for ${videoDbId}:`, dbError);
       }
@@ -89,22 +94,38 @@ class EnhancedVideoProcessor {
   }
 
   private async downloadAndStoreVideo(
+    videoDbId: string, // Added videoDbId
     tempUrl: string,
     userId: string,
     taskId: string,
   ): Promise<{ publicUrl: string, storagePath: string, fileSize: number }> {
-    await this.updateDatabase(taskId, { status: 'downloading', progress: 95 });
-    const response = await fetch(tempUrl);
-    if (!response.ok) throw new Error(`Failed to download from PiAPI: ${response.statusText}`);
+    await this.updateDatabase(videoDbId, { status: 'downloading', progress: 95 }); // Changed taskId to videoDbId
+    console.log(`[Processor] Attempting to fetch video from URL: ${tempUrl}`);
+    const response = await fetch(tempUrl, {
+      mode: 'cors',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; VideoDownloader/1.0)',
+      },
+    });
+    if (!response.ok) {
+      console.error(`[Processor] Failed to fetch video from URL: ${tempUrl}. Status: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to download from PiAPI: ${response.statusText}`);
+    }
+    console.log(`[Processor] Successfully fetched video from URL: ${tempUrl}. Status: ${response.status}`);
     const videoBlob = await response.blob();
     
-    await this.updateDatabase(taskId, { status: 'storing', progress: 98 });
+    await this.updateDatabase(videoDbId, { status: 'storing', progress: 98 }); // Changed taskId to videoDbId
     const filePath = `videos/${userId}/${taskId}.mp4`;
     
+    console.log(`[Processor] Attempting to upload video to Supabase. File path: ${filePath}`);
     const { error: uploadError } = await supabase.storage
       .from('generated-videos')
       .upload(filePath, videoBlob, { upsert: true });
-    if (uploadError) throw new Error(uploadError.message);
+    if (uploadError) {
+      console.error(`[Processor] Failed to upload video to Supabase. File path: ${filePath}. Error: ${uploadError.message}`);
+      throw new Error(uploadError.message);
+    }
+    console.log(`[Processor] Successfully uploaded video to Supabase. File path: ${filePath}`);
 
     const { data: urlData } = supabase.storage.from('generated-videos').getPublicUrl(filePath);
     if (!urlData.publicUrl) throw new Error('Failed to get public URL from Supabase Storage.');
