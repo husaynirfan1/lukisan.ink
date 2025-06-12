@@ -48,7 +48,7 @@ export const videoPresets: VideoPreset[] = [
     icon: PlayCircle,
     category: 'explainer',
     duration: 60,
-    prompt: '2D animated explainer video, flat design style, friendly characters with expressive gestures, smooth motion graphics. Infographic elements like animated charts and progress bars. The scene shows [Your Service/Concept] in action. Subtle background element movement, characters have slight breathing motion. Bright and approachable brand colors.',
+    prompt: '2D animated explainer video in a vibrant flat design style, featuring friendly characters with exaggerated, expressive gestures and smooth motion graphics. Infographic elements such as animated charts, progress bars, and icons dynamically illustrate key concepts. The scene showcases [Your Service/Concept] in action, with characters engaging in natural actions like nodding or gesturing. Subtle background element movement and slight breathing motion add depth. Bright and approachable brand colors create a welcoming atmosphere. Medium shot, gentle camera pans and zooms emphasize the characters and graphics, conveying a sense of approachability and professionalism throughout.',
     negative_prompt: 'Photorealistic, 3D, complex textures, shaky, hand-drawn, blurry, mismatched colors.'
   },
   {
