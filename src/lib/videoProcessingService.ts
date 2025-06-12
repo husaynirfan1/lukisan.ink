@@ -226,7 +226,7 @@ private async downloadAndStoreVideo(videoUrl: string, taskId: string, userId: st
 
     // ✅ Upload using Supabase Admin client to bypass RLS
     const { error } = await supabaseAdmin.storage
-      .from('videos')
+      .from('generated-videos')
       .upload(filePath, videoBlob, {
         contentType: 'video/mp4',
         upsert: true
