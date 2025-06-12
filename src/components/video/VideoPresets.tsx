@@ -67,7 +67,7 @@ export const videoPresets: VideoPreset[] = [
     description: 'Authentic and trustworthy, featuring a satisfied customer\'s experience',
     icon: MessageSquare,
     category: 'testimonial',
-
+    duration: 45, 
     prompt: 'Professional customer testimonial video in a modern corporate style, featuring a medium close-up shot of a genuine customer speaking directly to the camera. The background is a well-lit, contemporary office with a soft focus effect, blurred to emphasize the customer. The person displays subtle, natural motions like occasional blinking and slight head movements. A clean, animated lower-third graphic overlays the footage, showcasing the customer\'s name in a clear, easy-to-read font. The camera remains steady, capturing the testimonial in crisp, high-definition quality with crystal clear audio, highlighting the customer\'s sincere expression and words.',
     negative_prompt: 'Dark, underexposed, shaky camera, distracting background, out of focus, amateur, cluttered, bad audio sync (visual representation).'
   }
