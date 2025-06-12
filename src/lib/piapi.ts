@@ -470,13 +470,19 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         // Extract video URL from various possible locations
         const videoUrl = output.video_url || data.video_url || data.data?.video_url;
         
+        // Extract error message with fallback for failed tasks
+        const apiError = output.error || data.error;
+        const errorMessage = normalizedStatus === 'failed' && !apiError 
+            ? 'Video generation failed due to an unknown error.' 
+            : apiError;
+        
         return {
             task_id: data.task_id || taskId,
             status: normalizedStatus,
             video_url: videoUrl,
             thumbnail_url: output.thumbnail_url || data.thumbnail_url,
             progress: data.progress || (normalizedStatus === 'completed' ? 100 : normalizedStatus === 'failed' ? 0 : 50),
-            error: output.error || data.error,
+            error: errorMessage,
             output: output
         };
         
