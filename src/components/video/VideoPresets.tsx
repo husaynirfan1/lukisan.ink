@@ -111,15 +111,7 @@ export const VideoPresets: React.FC<VideoPresetsProps> = ({
               }`}
             >
               {/* Category Badge */}
-              <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium ${
-                preset.category === 'product' ? 'bg-blue-100 text-blue-700' :
-                preset.category === 'marketing' ? 'bg-red-100 text-red-700' :
-                preset.category === 'explainer' ? 'bg-green-100 text-green-700' :
-                preset.category === 'brand' ? 'bg-purple-100 text-purple-700' :
-                'bg-orange-100 text-orange-700'
-              }`}>
-                {preset.duration}s
-              </div>
+       
 
               {/* Icon */}
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 ${
