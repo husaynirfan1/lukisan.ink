@@ -213,47 +213,32 @@ class VideoProcessingService {
 
 private async downloadAndStoreVideo(videoUrl: string, taskId: string, userId: string): Promise<string> {
   try {
-    console.log(`[VideoProcessor] Downloading video for task: ${taskId}`);
+    console.log(`[VideoProcessor] Invoking edge function to store video for task: ${taskId}`);
 
-    // Download from PiAPI
-    const response = await fetch(videoUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
-    }
-
-    const videoBlob = await response.blob();
-    const filePath = `${userId}/${taskId}-${Date.now()}.mp4`;
-
-    // ✅ Upload using Supabase Admin client to bypass RLS
-    const { error } = await supabaseAdmin.storage
-      .from('generated-videos')
-      .upload(filePath, videoBlob, {
-        contentType: 'video/mp4',
-        upsert: true
-      });
+    const { data, error } = await supabase.functions.invoke('force-check-status', {
+      body: {
+        task_id: taskId,
+        user_id: userId,
+        db_id: taskId, // or use actual video DB row ID if available
+      },
+    });
 
     if (error) {
-      console.error(`[VideoProcessor] Storage upload error:`, error);
-      throw new Error(`Failed to store video: ${error.message}`);
+      console.error('[VideoProcessor] Edge function error:', error);
+      throw new Error(`Edge function failed: ${error.message}`);
     }
 
-    console.log(`[VideoProcessor] Video stored successfully: ${filePath}`);
-    return filePath;
+    if (!data?.video_url) {
+      throw new Error(`Edge function returned no video URL for task ${taskId}`);
+    }
 
-  } catch (error: any) {
-    console.error(`[VideoProcessor] Error downloading/storing video:`, error);
-    throw error;
+    console.log(`[VideoProcessor] Video stored and URL received: ${data.video_url}`);
+    return data.video_url;
+  } catch (err: any) {
+    console.error('[VideoProcessor] Error calling edge function:', err);
+    throw err;
   }
 }
-  // Public method to get active tasks (for debugging)
-  getActiveTasks(): string[] {
-    return Array.from(this.activeTasks.keys());
-  }
 
-  // Public method to check if a task is being processed
-  isProcessing(taskId: string): boolean {
-    return this.activeTasks.has(taskId);
-  }
-}
 
 export const videoProcessingService = new VideoProcessingService();
