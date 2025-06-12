@@ -205,7 +205,7 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
  */
 
 export async function checkVideoStatus(taskId: string) {
-  const url = `${PIAPI_BASE_URL}/wanx/task/${taskId}`;
+  const url = `${PIAPI_BASE_URL}/api/v1/task/${taskId}`;
 
   const response = await fetch(url, {
     method: 'GET',
