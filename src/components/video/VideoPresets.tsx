@@ -58,7 +58,7 @@ export const videoPresets: VideoPreset[] = [
     icon: Heart,
     category: 'brand',
     duration: 60,
-    prompt: 'Cinematic, emotional, and authentic brand story. A beautifully composed scene showing [Your Brand\'s Story Moment]. Soft, natural golden hour lighting, warm color grade, shallow depth of field, beautiful bokeh. A slow-motion shot captures the key emotional moment. Gentle camera drift, subtle wind in hair, dust motes floating in the air.',
+    prompt: 'Cinematic, emotional, and authentic brand story film, showcasing a poignant moment that embodies [Your Brand\'s Story Moment]. Soft, natural golden hour lighting bathes the scene, complemented by a warm color grade and shallow depth of field, creating a beautiful bokeh effect. A slow-motion shot masterfully captures the key emotional moment, as gentle camera drift subtly enhances the atmosphere. The subject\'s hair flows softly in the breeze, with dust motes delicately floating in the air. Medium shot, character eye-level, with a subtle pan and slow zoom, emphasizing the emotional intensity of the moment.',
     negative_prompt: 'Corporate, sterile, harsh lighting, flat, oversaturated, fast cuts, shaky camera, uninspired.'
   },
   {
