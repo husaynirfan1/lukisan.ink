@@ -13,11 +13,11 @@ export interface VideoPreset {
   id: string;
   title: string;
   description: string;
-  icon: Icon;
+  icon: React.ElementType;
   category: string;
   duration: number;
   prompt: string;
-  negative_prompt: string; // Added negative prompt for better control
+  negative_prompt: string;
 }
 
 export const videoPresets: VideoPreset[] = [
@@ -110,9 +110,6 @@ export const VideoPresets: React.FC<VideoPresetsProps> = ({
                   : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
               }`}
             >
-              {/* Category Badge */}
-       
-
               {/* Icon */}
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 ${
                 isSelected 
