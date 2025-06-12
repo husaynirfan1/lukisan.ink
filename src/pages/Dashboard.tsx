@@ -4,7 +4,7 @@ import { Sparkles, Images, Crown, Video } from 'lucide-react';
 import { LogoGenerator } from '../components/LogoGenerator';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { VideoGenerator } from '../components/video/VideoGenerator';
-import { VideoLibrary } from '../components/VideoLibrary';
+import { EnhancedVideoLibrary } from '../components/video/EnhancedVideoLibrary';
 import { SubscriptionCard } from '../components/SubscriptionCard';
 import { useAuth } from '../hooks/useAuth';
 
@@ -249,7 +249,7 @@ export const Dashboard: React.FC = () => {
           
           {activeTab === 'library' && <ImageLibrary />}
 
-          {activeTab === 'video-library' && <VideoLibrary />}
+          {activeTab === 'video-library' && <EnhancedVideoLibrary />}
         </motion.div>
       </div>
     </div>
