@@ -238,7 +238,6 @@ private async downloadAndStoreVideo(videoUrl: string, taskId: string, userId: st
     console.error('[VideoProcessor] Error calling edge function:', err);
     throw err;
   }
-}
-
+};
 
 export const videoProcessingService = new VideoProcessingService();
