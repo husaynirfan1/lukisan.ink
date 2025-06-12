@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
-import { checkVideoStatus, type TaskStatusResponse } from './piapi';
-import { storeVideoInSupabase } from './videoStorage';
+import { enhancedVideoProcessor, VideoProcessingProgress } from './enhancedVideoProcessor';
 import toast from 'react-hot-toast';
 
 export interface VideoStatusUpdate {
@@ -13,9 +12,7 @@ export interface VideoStatusUpdate {
 
 export class VideoStatusManager {
   private static instance: VideoStatusManager;
-  private pollingIntervals: Map<string, NodeJS.Timeout> = new Map();
-  private consecutiveErrors: Map<string, number> = new Map();
-  private maxConsecutiveErrors = 3;
+  private monitoringVideos: Set<string> = new Set();
 
   private constructor() {}
 
@@ -26,97 +23,84 @@ export class VideoStatusManager {
     return VideoStatusManager.instance;
   }
 
+  /**
+   * Start monitoring a video using the enhanced processor
+   */
   startMonitoring(videoId: string, taskId: string, userId: string): void {
-    if (this.pollingIntervals.has(videoId)) {
+    if (this.monitoringVideos.has(videoId)) {
       console.log(`[VideoStatusManager] Already monitoring video ${videoId}`);
-      return; // Already monitoring
+      return;
     }
 
-    console.log(`[VideoStatusManager] Starting monitoring for video ${videoId}, task ${taskId}`);
-    this.consecutiveErrors.set(videoId, 0);
+    console.log(`[VideoStatusManager] Starting enhanced monitoring for video ${videoId}, task ${taskId}`);
+    this.monitoringVideos.add(videoId);
 
-    const interval = setInterval(async () => {
-      await this.checkAndProcessVideoStatus(videoId, taskId, userId);
-    }, 15000); // Check every 15 seconds (increased from 10)
-
-    this.pollingIntervals.set(videoId, interval);
-    
-    // Initial check after a short delay
-    setTimeout(() => {
-      this.checkAndProcessVideoStatus(videoId, taskId, userId);
-    }, 2000);
+    // Use the enhanced video processor
+    enhancedVideoProcessor.processVideo(
+      taskId,
+      videoId,
+      userId,
+      (progress: VideoProcessingProgress) => {
+        console.log(`[VideoStatusManager] Progress update for ${videoId}:`, progress);
+        
+        // Show toast notifications for key milestones
+        if (progress.stage === 'completed') {
+          toast.success('Video generation completed and saved to library!');
+          this.monitoringVideos.delete(videoId);
+        } else if (progress.stage === 'failed') {
+          toast.error(`Video generation failed: ${progress.message}`);
+          this.monitoringVideos.delete(videoId);
+        }
+      }
+    ).then((result) => {
+      console.log(`[VideoStatusManager] Processing completed for video ${videoId}:`, result);
+      this.monitoringVideos.delete(videoId);
+      
+      if (result.success) {
+        console.log(`[VideoStatusManager] Video ${videoId} successfully processed and stored`);
+      } else {
+        console.error(`[VideoStatusManager] Video ${videoId} processing failed:`, result.error);
+      }
+    }).catch((error) => {
+      console.error(`[VideoStatusManager] Unexpected error processing video ${videoId}:`, error);
+      this.monitoringVideos.delete(videoId);
+      toast.error(`Video processing failed: ${error.message}`);
+    });
   }
 
+  /**
+   * Stop monitoring a specific video
+   */
   stopMonitoring(videoId: string): void {
-    const interval = this.pollingIntervals.get(videoId);
-    if (interval) {
-      clearInterval(interval);
-      this.pollingIntervals.delete(videoId);
-      this.consecutiveErrors.delete(videoId);
+    if (this.monitoringVideos.has(videoId)) {
+      enhancedVideoProcessor.stopProcessing(videoId);
+      this.monitoringVideos.delete(videoId);
       console.log(`[VideoStatusManager] Stopped monitoring video ${videoId}`);
     }
   }
-  
-  private async checkAndProcessVideoStatus(videoId: string, taskId: string, userId: string): Promise<void> {
-    try {
-      console.log(`[VideoStatusManager] Checking status for video ${videoId}, task ${taskId}`);
-      
-      const statusResponse = await checkVideoStatus(taskId);
-      console.log(`[VideoStatusManager] Status response:`, statusResponse);
 
-      // Reset error counter on successful check
-      this.consecutiveErrors.set(videoId, 0);
-
-      // Update the database with the current status
-      await this.updateVideoStatus(videoId, statusResponse);
-
-      if (statusResponse.status === 'completed' && statusResponse.video_url) {
-        // Stop polling this task as it's completed
-        this.stopMonitoring(videoId);
-        console.log(`[VideoStatusManager] Video ${videoId} completed, processing video storage`);
-        
-        // Process the completed video
-        await this.handleVideoCompletion(videoId, statusResponse.video_url, userId, taskId);
-      } else if (statusResponse.status === 'failed') {
-        this.stopMonitoring(videoId);
-        console.log(`[VideoStatusManager] Video ${videoId} failed:`, statusResponse.error);
-        await this.handleVideoFailure(videoId, statusResponse.error || 'Unknown error');
-      }
-      // For other statuses (pending, processing), continue polling
-
-    } catch (error: any) {
-      const errorCount = (this.consecutiveErrors.get(videoId) || 0) + 1;
-      this.consecutiveErrors.set(videoId, errorCount);
-      
-      console.error(`[VideoStatusManager] Error checking status for video ${videoId} (attempt ${errorCount}):`, error);
-      
-      // If we've had too many consecutive errors, stop monitoring and mark as failed
-      if (errorCount >= this.maxConsecutiveErrors) {
-        this.stopMonitoring(videoId);
-        await this.handleVideoFailure(videoId, `Status check failed after ${errorCount} attempts: ${error.message}`);
-        toast.error(`Video ${videoId} monitoring failed after multiple attempts`);
-      }
-      // Otherwise, continue polling - the error might be temporary
-    }
+  /**
+   * Manual status check using the enhanced processor
+   */
+  async manualStatusCheck(videoId: string, taskId: string, userId: string): Promise<void> {
+    console.log(`[VideoStatusManager] Manual status check triggered for video ${videoId}`);
+    
+    // Stop any existing monitoring for this video
+    this.stopMonitoring(videoId);
+    
+    // Start fresh monitoring
+    this.startMonitoring(videoId, taskId, userId);
   }
 
-  private async updateVideoStatus(videoId: string, statusResponse: TaskStatusResponse): Promise<void> {
+  /**
+   * Update video status in database (legacy method for compatibility)
+   */
+  async updateVideoStatus(videoId: string, updates: Partial<VideoStatusUpdate>): Promise<void> {
     try {
       const updateData: any = {
-        status: statusResponse.status,
-        progress: statusResponse.progress || 0
+        ...updates,
+        updated_at: new Date().toISOString()
       };
-
-      if (statusResponse.error) {
-        updateData.error_message = statusResponse.error;
-      }
-
-      // FIXED: If we have a video URL, update it in the database
-      if (statusResponse.video_url) {
-        updateData.video_url = statusResponse.video_url;
-      }
-
-      console.log(`[VideoStatusManager] Updating video ${videoId} with:`, updateData);
 
       const { error } = await supabase
         .from('video_generations')
@@ -124,122 +108,72 @@ export class VideoStatusManager {
         .eq('id', videoId);
 
       if (error) {
-        console.error(`[VideoStatusManager] Error updating video status:`, error);
-      } else {
-        console.log(`[VideoStatusManager] Successfully updated video ${videoId} status to ${statusResponse.status}`);
+        console.error('[VideoStatusManager] Error updating video status:', error);
+        throw error;
       }
+
+      console.log('[VideoStatusManager] Video status updated successfully');
     } catch (error) {
-      console.error(`[VideoStatusManager] Error updating video status:`, error);
+      console.error('[VideoStatusManager] Failed to update video status:', error);
+      throw error;
     }
   }
 
   /**
-   * Handle video completion by downloading and storing the video
+   * Mark video as completed (legacy method for compatibility)
    */
-  private async handleVideoCompletion(videoId: string, piapiVideoUrl: string, userId: string, taskId: string): Promise<void> {
-    try {
-      console.log(`[VideoStatusManager] Processing completed video ${videoId}`);
-      
-      // Update status to show we're processing the storage
-      await supabase
-        .from('video_generations')
-        .update({ 
-          status: 'downloading',
-          progress: 90,
-          error_message: null
-        })
-        .eq('id', videoId);
-
-      // Generate filename for the video
-      const timestamp = Date.now();
-      const filename = `video-${taskId}-${timestamp}`;
-      
-      console.log(`[VideoStatusManager] Storing video in Supabase Storage...`);
-      
-      // Store the video in Supabase Storage
-      const storeResult = await storeVideoInSupabase(piapiVideoUrl, userId, filename);
-      
-      if (!storeResult.success) {
-        throw new Error(storeResult.error || 'Failed to store video');
-      }
-
-      console.log(`[VideoStatusManager] Video stored successfully:`, storeResult.publicUrl);
-
-      // Update the database with the final video URL and mark as completed
-      const { error: updateError } = await supabase
-        .from('video_generations')
-        .update({
-          video_url: storeResult.publicUrl,
-          storage_path: storeResult.storagePath,
-          status: 'completed',
-          progress: 100,
-          error_message: null
-        })
-        .eq('id', videoId);
-
-      if (updateError) {
-        throw new Error(`Database update failed: ${updateError.message}`);
-      }
-
-      console.log(`[VideoStatusManager] Successfully processed video ${videoId}`);
-      toast.success('Video generation completed and saved to library!');
-
-    } catch (error: any) {
-      console.error(`[VideoStatusManager] Error processing completed video:`, error);
-      await this.handleVideoFailure(videoId, `Failed to save to library: ${error.message}`);
-    }
-  }
-
-  private async handleVideoFailure(videoId: string, errorMessage: string): Promise<void> {
-    try {
-      console.log(`[VideoStatusManager] Handling video failure for ${videoId}: ${errorMessage}`);
-      
-      await supabase
-        .from('video_generations')
-        .update({ 
-          status: 'failed', 
-          error_message: errorMessage,
-          progress: 0
-        })
-        .eq('id', videoId);
-        
-      toast.error(`Video generation failed: ${errorMessage}`);
-    } catch (error) {
-      console.error(`[VideoStatusManager] Error handling video failure:`, error);
-    }
+  async markVideoCompleted(
+    videoId: string,
+    videoUrl: string,
+    storagePath: string,
+    fileSize: number,
+    integrityVerified: boolean = true
+  ): Promise<void> {
+    await this.updateVideoStatus(videoId, {
+      status: 'completed',
+      progress: 100,
+      video_url: videoUrl,
+      // Note: These fields might not exist in the current schema
+      // storage_path: storagePath,
+      // file_size: fileSize,
+      // integrity_verified: integrityVerified
+    });
   }
 
   /**
-   * Manually triggers a status check for a specific video.
-   * This function is called by the "Re-check Status" button in the UI.
+   * Mark video as failed (legacy method for compatibility)
    */
-  async manualStatusCheck(videoId: string, taskId: string, userId: string): Promise<void> {
-    console.log(`[VideoStatusManager] Manual status check triggered for video ${videoId}`);
-    
-    // Reset error counter for manual checks
-    this.consecutiveErrors.set(videoId, 0);
-    
-    // This calls the same central processing function as the automatic poller
-    await this.checkAndProcessVideoStatus(videoId, taskId, userId);
+  async markVideoFailed(videoId: string, errorMessage: string): Promise<void> {
+    await this.updateVideoStatus(videoId, {
+      status: 'failed',
+      error: errorMessage,
+      progress: 0
+    });
   }
 
   /**
    * Get monitoring status for debugging
    */
-  getMonitoringStatus(): { activeVideos: string[], errorCounts: Record<string, number> } {
+  getMonitoringStatus(): { activeVideos: string[], totalActive: number } {
+    const processorStatus = enhancedVideoProcessor.getProcessingStatus();
+    
     return {
-      activeVideos: Array.from(this.pollingIntervals.keys()),
-      errorCounts: Object.fromEntries(this.consecutiveErrors.entries())
+      activeVideos: Array.from(this.monitoringVideos),
+      totalActive: this.monitoringVideos.size
     };
   }
 
   /**
-   * Stop all monitoring (useful for cleanup)
+   * Stop all monitoring
    */
   stopAllMonitoring(): void {
-    for (const videoId of this.pollingIntervals.keys()) {
-      this.stopMonitoring(videoId);
-    }
+    console.log('[VideoStatusManager] Stopping all monitoring');
+    
+    // Stop enhanced processor
+    enhancedVideoProcessor.stopAllProcessing();
+    
+    // Clear our tracking
+    this.monitoringVideos.clear();
   }
 }
 

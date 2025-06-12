@@ -117,7 +117,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
 
   const statusDisplay = getStatusDisplay();
   const isProcessing = ['pending', 'processing', 'running', 'downloading', 'storing'].includes(video.status || '');
-  const canDownload = video.status === 'completed' && video.video_url && video.video_url !== 'processing';
+  const canDownload = video.status === 'completed' && video.video_url && video.video_url !== 'processing' && video.video_url !== null;
   const hasIntegrityIssue = video.status === 'completed' && video.integrity_verified === false;
 
   const formatFileSize = (bytes?: number) => {
@@ -578,7 +578,7 @@ export function VideoLibrary() {
         
         // Scroll to the video element
         setTimeout(() => {
-          const videoElement = document.getElementById(`video-${taskId}`);
+          const videoElement = document.getElementById(`video-${video.id}`);
           if (videoElement) {
             console.log(`[VideoLibrary] Scrolling to video element for task ${taskId}`);
             videoElement.scrollIntoView({ behavior: 'smooth' });
@@ -833,4 +833,4 @@ export function VideoLibrary() {
       )}
     </div>
   );
-};
+}

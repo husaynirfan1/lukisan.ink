@@ -45,6 +45,7 @@ import {
 } from '../../lib/piapi';
 import { storeVideoInSupabase } from '../../lib/videoStorage';
 import { videoStatusManager } from '../../lib/videoStatusManager';
+import { enhancedVideoProcessor } from '../../lib/enhancedVideoProcessor';
 import { VideoPresets, VideoPreset } from './VideoPresets';
 import { AIPromptRefiner } from './AIPromptRefiner';
 import { useAuth } from '../../hooks/useAuth';

@@ -130,10 +130,13 @@ serve(async (req) => {
     let videoUrl;
     let thumbnailUrl;
     
-    if (normalizedStatus === "completed" && taskData.works && taskData.works.length > 0) {
+    if (taskData.works && taskData.works.length > 0) {
       const work = taskData.works[0];
       videoUrl = work.resource?.resourceWithoutWatermark || work.resource?.resource;
       thumbnailUrl = work.cover?.resource;
+      
+      console.log("Found video URL in works:", videoUrl);
+      console.log("Found thumbnail URL in works:", thumbnailUrl);
     }
     
     // Calculate progress
