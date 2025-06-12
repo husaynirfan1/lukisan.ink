@@ -28,7 +28,20 @@ export class VideoStatusManager {
     enhancedVideoProcessor.processVideo(taskId, videoId, userId)
       .catch(error => {
         console.error(`[Manager] Final processing error for video ${videoId}:`, error);
-        toast.error(`Video failed: ${error.message || 'An unknown error occurred'}`);
+
+        // --- FINAL FIX for [object Object] error ---
+        // Robustly extract the error message for the toast notification.
+        let errorMessage = 'An unknown error occurred';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (typeof error === 'object' && error !== null && 'message' in error) {
+            errorMessage = String(error.message);
+        }
+        
+        toast.error(`Video generation failed: ${errorMessage}`);
+        // --- End of Final Fix ---
       })
       .finally(() => {
         // Once processing is complete (success or fail), remove it from the active set.
@@ -49,19 +62,6 @@ export class VideoStatusManager {
     return {
       activeVideos: Array.from(this.monitoringVideos),
     };
-  }
-
-  // Manual status check method for UI buttons
-  public async manualStatusCheck(videoId: string, taskId: string, userId: string): Promise<void> {
-    console.log(`[Manager] Manual status check triggered for video ${videoId}`);
-    
-    // This calls the same central processing function as the automatic poller
-    try {
-      await enhancedVideoProcessor.processVideo(taskId, videoId, userId);
-    } catch (error: any) {
-      console.error(`[Manager] Manual status check failed for video ${videoId}:`, error);
-      throw error; // Re-throw so the UI can handle it
-    }
   }
 }
 

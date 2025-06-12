@@ -203,8 +203,6 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
  * COMPLETELY FIXED: Check the status of a video generation task
  * This function polls the PiAPI status endpoint to get real-time updates
  */
-// In piapi (1).ts
-
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
     if (!PIAPI_API_KEY) throw new Error('PiAPI key not configured');
     
