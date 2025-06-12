@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -244,7 +246,8 @@ export const VideoGenerator: React.FC = () => {
           .from('video_generations')
           .update({
             status: statusResponse.status,
-            progress: statusResponse.progress || 0
+            progress: statusResponse.progress || 0,
+            updated_at: new Date().toISOString()
           })
           .eq('id', videoDbId)
           .then(({ error }) => {
@@ -279,7 +282,8 @@ export const VideoGenerator: React.FC = () => {
               const updateData: any = { 
                 video_url: storeResult.publicUrl,
                 status: 'completed',
-                progress: 100
+                progress: 100,
+                updated_at: new Date().toISOString()
               };
               
               if (storeResult.storagePath) {
@@ -305,7 +309,8 @@ export const VideoGenerator: React.FC = () => {
                 .update({ 
                   video_url: finalVideoUrl,
                   status: 'completed',
-                  progress: 100
+                  progress: 100,
+                  updated_at: new Date().toISOString()
                 })
                 .eq('id', videoDbId);
               
@@ -321,7 +326,8 @@ export const VideoGenerator: React.FC = () => {
               .update({ 
                 video_url: finalVideoUrl,
                 status: 'completed',
-                progress: 100
+                progress: 100,
+                updated_at: new Date().toISOString()
               })
               .eq('id', videoDbId);
           }
@@ -354,7 +360,8 @@ export const VideoGenerator: React.FC = () => {
             .from('video_generations')
             .update({ 
               status: 'failed',
-              error_message: error
+              error_message: error,
+              updated_at: new Date().toISOString()
             })
             .eq('id', videoDbId)
             .then(({ error: dbError }) => {
@@ -450,12 +457,17 @@ export const VideoGenerator: React.FC = () => {
             createTaskResponse = await generateImageToVideo(request);
         }
 
-        // The enhanced PiAPI service now validates the task_id, so we can trust it's valid
+        // CRITICAL FIX: Validate task_id is present and valid
+        if (!createTaskResponse.task_id || createTaskResponse.task_id.trim() === '') {
+            throw new Error('Invalid task ID returned from PiAPI. Please try again.');
+        }
+
         const validTaskId = createTaskResponse.task_id.trim();
+        console.log(`[VideoGenerator] Received valid task_id: ${validTaskId}`);
         setTaskId(validTaskId);
         setStatus('processing');
 
-        // Save to database with processing status - IMPORTANT: Provide a placeholder video_url
+        // Save to database with processing status
         let videoDbId: string;
         try {
             const { data, error: dbError } = await supabase
@@ -464,10 +476,11 @@ export const VideoGenerator: React.FC = () => {
                 user_id: user.id,
                 video_type: mode === 'text-to-video' ? 'marketing' : 'welcome',
                 message: mode === 'text-to-video' ? textPrompt : imagePrompt,
-                video_id: validTaskId,
-                video_url: 'processing', // Placeholder to satisfy NOT NULL constraint
+                video_id: validTaskId, // CRITICAL: Store the task_id from PiAPI as video_id in our DB
+                video_url: null, // Use null instead of placeholder
                 status: 'processing',
-                progress: 0
+                progress: 0,
+                updated_at: new Date().toISOString()
               })
               .select('id')
               .single();
@@ -479,7 +492,7 @@ export const VideoGenerator: React.FC = () => {
 
             videoDbId = data.id;
             setVideoId(videoDbId);
-            console.log(`[VideoGenerator] Created video record: ${videoDbId}`);
+            console.log(`[VideoGenerator] Created video record: ${videoDbId} with task_id: ${validTaskId}`);
         } catch (dbError) {
             console.error('Database insertion failed:', dbError);
             throw new Error('Failed to save video generation record');

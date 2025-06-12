@@ -566,7 +566,27 @@ export function VideoLibrary() {
       fetchedVideos.forEach(video => {
         if (['pending', 'processing', 'running', 'downloading', 'storing'].includes(video.status || '')) {
           console.log(`[VideoLibrary] Starting monitoring for video ${video.id} with status ${video.status}`);
-          videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
+          
+          // CRITICAL FIX: Validate video_id before starting monitoring
+          if (video.video_id && video.video_id !== 'undefined' && video.video_id !== 'null') {
+            videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
+          } else {
+            console.error(`[VideoLibrary] Invalid video_id for video ${video.id}: "${video.video_id}"`);
+            // Update the database to mark this video as failed
+            supabase
+              .from('video_generations')
+              .update({
+                status: 'failed',
+                error_message: 'Invalid task ID - cannot monitor video generation',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', video.id)
+              .then(({ error }) => {
+                if (error) {
+                  console.error('[VideoLibrary] Error updating invalid video:', error);
+                }
+              });
+          }
         }
       });
 
@@ -627,6 +647,11 @@ export function VideoLibrary() {
     setCheckingStatus(prev => new Set(prev).add(video.id));
     
     try {
+      // CRITICAL FIX: Validate video_id before checking status
+      if (!video.video_id || video.video_id === 'undefined' || video.video_id === 'null') {
+        throw new Error('Invalid task ID - cannot check status');
+      }
+      
       await videoStatusManager.manualStatusCheck(video.id, video.video_id, user.id);
       await videoStatusManager.refreshVideoFromDatabase(video.id);
       toast.success('Status check completed', { id: video.id });

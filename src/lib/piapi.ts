@@ -79,59 +79,64 @@ const postToApi = async (payload: ApidogRequestPayload): Promise<CreateTaskRespo
     
     const endpoint = `${PIAPI_BASE_URL}/api/v1/task`;
 
-    console.log('Sending request to PiAPI:', {
+    console.log('[PiAPI] Sending request to PiAPI:', {
         endpoint,
         payload: JSON.stringify(payload, null, 2)
     });
 
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'x-api-key': PIAPI_API_KEY,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    });
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'x-api-key': PIAPI_API_KEY,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
 
-    console.log('PiAPI response status:', response.status, response.statusText);
+        console.log('[PiAPI] Response status:', response.status, response.statusText);
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error('PiAPI error response:', errorText);
-        
-        let errorData;
-        try {
-            errorData = JSON.parse(errorText);
-        } catch {
-            errorData = { message: errorText };
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[PiAPI] Error response:', errorText);
+            
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch {
+                errorData = { message: errorText };
+            }
+            
+            throw new Error(errorData.message || `API error: ${response.status} ${response.statusText}`);
         }
+
+        const responseData = await response.json();
+        console.log('[PiAPI] Response data:', responseData);
+
+        // Validate the response structure based on PiAPI docs
+        if (!responseData) {
+            throw new Error('Empty response from PiAPI service');
+        }
+
+        // Extract task_id from nested data object if present
+        const taskId = responseData.data?.task_id || responseData.task_id;
         
-        throw new Error(errorData.message || `API error: ${response.status} ${response.statusText}`);
+        // Check for task_id in the response - it should be present according to PiAPI docs
+        if (!taskId || typeof taskId !== 'string' || taskId.trim() === '') {
+            console.error('[PiAPI] Invalid task_id in response:', responseData);
+            throw new Error('PiAPI service returned an invalid or missing task_id. Response: ' + JSON.stringify(responseData));
+        }
+
+        // Return the response in the expected format
+        return {
+            task_id: taskId,
+            status: responseData.data?.status || responseData.status,
+            message: responseData.message
+        };
+    } catch (error: any) {
+        console.error('[PiAPI] Request error:', error);
+        throw error;
     }
-
-    const responseData = await response.json();
-    console.log('PiAPI response data:', responseData);
-
-    // Validate the response structure based on PiAPI docs
-    if (!responseData) {
-        throw new Error('Empty response from PiAPI service');
-    }
-
-    // Extract task_id from nested data object if present
-    const taskId = responseData.data?.task_id || responseData.task_id;
-    
-    // Check for task_id in the response - it should be present according to PiAPI docs
-    if (!taskId || typeof taskId !== 'string' || taskId.trim() === '') {
-        console.error('Invalid task_id in response:', responseData);
-        throw new Error('PiAPI service returned an invalid or missing task_id. Response: ' + JSON.stringify(responseData));
-    }
-
-    // Return the response in the expected format
-    return {
-        task_id: taskId,
-        status: responseData.data?.status || responseData.status,
-        message: responseData.message
-    };
 };
 
 // --- Simplified Public Functions ---
@@ -143,7 +148,7 @@ export interface TextToVideoRequest {
 }
 
 export const generateTextToVideo = async (request: TextToVideoRequest): Promise<CreateTaskResponse> => {
-    console.log("Building Text-to-Video request:", request);
+    console.log("[PiAPI] Building Text-to-Video request:", request);
 
     const payload: ApidogRequestPayload = {
         model: API_MODEL,
@@ -166,7 +171,7 @@ export interface ImageToVideoRequest {
 }
 
 export const generateImageToVideo = async (request: ImageToVideoRequest): Promise<CreateTaskResponse> => {
-    console.log("Building Image-to-Video request:", request);
+    console.log("[PiAPI] Building Image-to-Video request:", request);
 
     const payload: ApidogRequestPayload = {
         model: API_MODEL,
@@ -212,18 +217,11 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
             console.error(`[PiAPI] Status check failed for task ${taskId}:`, errorText);
             
             // Handle specific error cases
-            if (response.status === 400) {
+            if (response.status === 400 || response.status === 404) {
                 return {
                     task_id: taskId,
                     status: 'failed',
                     error: 'Task not found or expired',
-                    progress: 0
-                };
-            } else if (response.status === 404) {
-                return {
-                    task_id: taskId,
-                    status: 'failed',
-                    error: 'Task not found',
                     progress: 0
                 };
             } else if (response.status === 429) {
@@ -277,30 +275,42 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         }
         
         // Extract video URL from works array if completed
-        if (normalizedStatus === 'completed' && works.length > 0) {
+        if (works.length > 0) {
             const work = works[0];
-            if (work.resource) {
-                // Use resourceWithoutWatermark if available, otherwise use resource
-                videoUrl = work.resource.resourceWithoutWatermark || work.resource.resource;
+            
+            // Check work status - 99 means completed in PiAPI
+            if (work.status === 99) {
+                normalizedStatus = 'completed';
+                progress = 100;
                 
-                // Extract thumbnail from cover if available
-                if (work.cover && work.cover.resource) {
-                    thumbnailUrl = work.cover.resource;
+                if (work.resource) {
+                    // Use resourceWithoutWatermark if available, otherwise use resource
+                    videoUrl = work.resource.resourceWithoutWatermark || work.resource.resource;
+                    
+                    // Extract thumbnail from cover if available
+                    if (work.cover && work.cover.resource) {
+                        thumbnailUrl = work.cover.resource;
+                    }
+                    
+                    console.log(`[PiAPI] Extracted video URL: ${videoUrl}`);
+                    console.log(`[PiAPI] Extracted thumbnail URL: ${thumbnailUrl}`);
                 }
-                
-                console.log(`[PiAPI] Extracted video URL: ${videoUrl}`);
-                console.log(`[PiAPI] Extracted thumbnail URL: ${thumbnailUrl}`);
+            } else if (work.status < 0) {
+                // Negative status means error in PiAPI
+                normalizedStatus = 'failed';
+                progress = 0;
+                errorMessage = `Video generation failed with status code: ${work.status}`;
+            } else if (work.status > 0 && work.status < 99) {
+                // Status between 1-98 means processing
+                normalizedStatus = 'processing';
+                // Calculate progress based on status code (rough estimate)
+                progress = Math.min(90, Math.floor((work.status / 99) * 100));
             }
         }
         
         // Handle failed status
-        if (normalizedStatus === 'failed') {
+        if (normalizedStatus === 'failed' && !errorMessage) {
             errorMessage = 'Video generation failed';
-            
-            // Try to extract more specific error information
-            if (works.length > 0 && works[0].status !== 99) {
-                errorMessage = `Video generation failed with status: ${works[0].status}`;
-            }
         }
         
         const result: TaskStatusResponse = {
@@ -464,13 +474,20 @@ export class VideoStatusPoller {
 
   start(): void {
     if (this.isPolling) {
-      console.warn('Polling already started for task:', this.taskId);
+      console.warn('[PiAPI] Polling already started for task:', this.taskId);
+      return;
+    }
+
+    // CRITICAL: Validate task ID before starting polling
+    if (!this.taskId || this.taskId.trim() === '' || this.taskId === 'undefined' || this.taskId === 'null') {
+      console.error('[PiAPI] Invalid task ID for polling:', this.taskId);
+      this.onError('Invalid task ID - cannot monitor video generation');
       return;
     }
 
     this.isPolling = true;
     this.consecutiveErrors = 0;
-    console.log('Starting status polling for task:', this.taskId);
+    console.log('[PiAPI] Starting status polling for task:', this.taskId);
 
     // Initial check
     this.checkStatus();
@@ -488,11 +505,12 @@ export class VideoStatusPoller {
     }
     this.isPolling = false;
     this.consecutiveErrors = 0;
-    console.log('Stopped status polling for task:', this.taskId);
+    console.log('[PiAPI] Stopped status polling for task:', this.taskId);
   }
 
   private async checkStatus(): Promise<void> {
     try {
+      console.log(`[PiAPI] Checking status for task: ${this.taskId}`);
       const status = await checkVideoStatus(this.taskId);
       
       // Reset error counter on successful check
@@ -502,7 +520,7 @@ export class VideoStatusPoller {
       this.onStatusUpdate(status);
 
       // Check if task is complete
-      if (status.status === 'completed') {
+      if (status.status === 'completed' && status.video_url) {
         this.stop();
         this.onComplete(status);
       } else if (status.status === 'failed') {
@@ -511,7 +529,7 @@ export class VideoStatusPoller {
       }
     } catch (error: any) {
       this.consecutiveErrors++;
-      console.error(`Error checking video status (attempt ${this.consecutiveErrors}):`, error);
+      console.error(`[PiAPI] Error checking video status (attempt ${this.consecutiveErrors}):`, error);
       
       // If we've had too many consecutive errors, stop polling and mark as failed
       if (this.consecutiveErrors >= this.maxConsecutiveErrors) {

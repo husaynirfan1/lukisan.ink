@@ -59,6 +59,14 @@ export class VideoStatusManager {
     try {
       console.log(`[VideoStatusManager] Checking status for video ${videoId}, task ${taskId}`);
       
+      // CRITICAL: Verify the task ID is valid before making API call
+      if (!taskId || taskId.trim() === '' || taskId === 'undefined' || taskId === 'null') {
+        console.error(`[VideoStatusManager] Invalid task ID for video ${videoId}: "${taskId}"`);
+        await this.handleVideoFailure(videoId, 'Invalid task ID - video generation may have failed during creation');
+        this.stopMonitoring(videoId);
+        return;
+      }
+      
       const statusResponse = await checkVideoStatus(taskId);
       console.log(`[VideoStatusManager] Status response for ${videoId}:`, statusResponse);
 
@@ -217,7 +225,14 @@ export class VideoStatusManager {
    * This function is called by the "Re-check Status" button in the UI.
    */
   async manualStatusCheck(videoId: string, taskId: string, userId: string): Promise<void> {
-    console.log(`[VideoStatusManager] Manual status check triggered for video ${videoId}`);
+    console.log(`[VideoStatusManager] Manual status check triggered for video ${videoId}, task ${taskId}`);
+    
+    // CRITICAL: Verify the task ID before making API call
+    if (!taskId || taskId.trim() === '' || taskId === 'undefined' || taskId === 'null') {
+      console.error(`[VideoStatusManager] Invalid task ID for manual check: "${taskId}"`);
+      toast.error('Invalid task ID - cannot check status');
+      return;
+    }
     
     // Reset error counter for manual checks
     this.consecutiveErrors.set(videoId, 0);
@@ -248,7 +263,9 @@ export class VideoStatusManager {
         status: data.status,
         progress: data.progress,
         video_url: data.video_url ? 'present' : 'missing',
-        storage_path: data.storage_path ? 'present' : 'missing'
+        storage_path: data.storage_path ? 'present' : 'missing',
+        task_id: data.video_id,
+        updated_at: data.updated_at
       });
 
     } catch (error) {
