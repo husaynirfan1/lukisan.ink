@@ -1,15 +1,11 @@
+// In enhancedVideoProcessor.ts
+
 import { supabase } from './supabase';
 import { checkVideoStatus } from './piapi';
 import toast from 'react-hot-toast';
 
-const MAX_POLLING_ATTEMPTS = 120; // Poll for a maximum of 30 minutes (120 attempts * 15s)
-const POLL_INTERVAL = 15000; // 15 seconds
-
-export interface VideoProcessingResult {
-  success: boolean;
-  finalUrl?: string;
-  error?: string;
-}
+const MAX_POLLING_ATTEMPTS = 120;
+const POLL_INTERVAL = 15000;
 
 class EnhancedVideoProcessor {
   private activeProcessors: Map<string, AbortController> = new Map();
@@ -23,10 +19,10 @@ class EnhancedVideoProcessor {
     taskId: string,
     videoDbId: string,
     userId: string
-  ): Promise<VideoProcessingResult> {
+  ): Promise<void> {
     if (this.activeProcessors.has(videoDbId)) {
       console.log(`[Processor] Monitoring for ${videoDbId} is already active.`);
-      return { success: true };
+      return;
     }
 
     const abortController = new AbortController();
@@ -34,10 +30,13 @@ class EnhancedVideoProcessor {
     console.log(`[Processor] Starting full processing workflow for video: ${videoDbId}`);
 
     try {
+      // Step 1: Monitor PiAPI task. This will throw an error on failure.
       const piapiResult = await this.monitorPiAPITask(taskId, videoDbId, abortController.signal);
-
+      
+      // Step 2: Download and store the video.
       const storageResult = await this.downloadAndStoreVideo(piapiResult.videoUrl, userId, taskId);
       
+      // Step 3: Update database with final success status.
       await this.updateDatabase(videoDbId, {
         status: 'completed',
         video_url: storageResult.publicUrl,
@@ -49,24 +48,18 @@ class EnhancedVideoProcessor {
 
       console.log(`[Processor] Successfully processed and stored video ${videoDbId}. Final URL: ${storageResult.publicUrl}`);
       toast.success('Video is ready and saved to your library!');
-      
-      return { success: true, finalUrl: storageResult.publicUrl };
 
     } catch (error: any) {
-      console.error(`[Processor] Workflow failed for video ${videoDbId}:`, error);
+      console.error(`[Processor] Workflow failed for video ${videoDbId}:`, error.message);
       
-      // Ensure we always have a clean error message string.
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // Attempt to update the database with the failure, but don't let this stop the process.
       try {
-        await this.updateDatabase(videoDbId, { status: 'failed', error_message: errorMessage });
+        await this.updateDatabase(videoDbId, { status: 'failed', error_message: error.message });
       } catch (dbError) {
         console.error(`[Processor] Could not update failure status for ${videoDbId}:`, dbError);
       }
 
-      // IMPORTANT: Always throw a NEW, standard Error object for the manager to catch.
-      throw new Error(errorMessage);
+      // Re-throw the clean error for the manager to catch and display.
+      throw error;
 
     } finally {
       this.activeProcessors.delete(videoDbId);
@@ -76,7 +69,8 @@ class EnhancedVideoProcessor {
   private async monitorPiAPITask(taskId: string, videoDbId: string, signal: AbortSignal): Promise<{ videoUrl: string }> {
     for (let i = 0; i < MAX_POLLING_ATTEMPTS; i++) {
       if (signal.aborted) throw new Error('Processing was aborted.');
-
+      
+      // Since checkVideoStatus now throws on any error, we can simplify this.
       const statusResponse = await checkVideoStatus(taskId);
       
       await this.updateDatabase(videoDbId, {
@@ -85,14 +79,10 @@ class EnhancedVideoProcessor {
       });
 
       if (statusResponse.status === 'completed' && statusResponse.video_url) {
-        console.log(`[Processor] PiAPI task complete. Found temporary URL for ${videoDbId}.`);
         return { videoUrl: statusResponse.video_url };
       }
       
-      if (statusResponse.status === 'failed') {
-        throw new Error(statusResponse.error || 'PiAPI task failed without a specific error.');
-      }
-
+      // No need to check for 'failed' here, as it would have thrown an error.
       await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
     }
     throw new Error('Polling timed out after 30 minutes.');
@@ -103,21 +93,17 @@ class EnhancedVideoProcessor {
     userId: string,
     taskId: string,
   ): Promise<{ publicUrl: string, storagePath: string, fileSize: number }> {
-    console.log(`[Processor] Downloading video from temporary URL.`);
     await this.updateDatabase(taskId, { status: 'downloading', progress: 95 });
-
     const response = await fetch(tempUrl);
     if (!response.ok) throw new Error(`Failed to download from PiAPI: ${response.statusText}`);
     const videoBlob = await response.blob();
     
-    console.log(`[Processor] Storing video in Supabase Storage.`);
     await this.updateDatabase(taskId, { status: 'storing', progress: 98 });
     const filePath = `videos/${userId}/${taskId}.mp4`;
     
     const { error: uploadError } = await supabase.storage
       .from('generated-videos')
       .upload(filePath, videoBlob, { upsert: true });
-      
     if (uploadError) throw new Error(uploadError.message);
 
     const { data: urlData } = supabase.storage.from('generated-videos').getPublicUrl(filePath);
@@ -137,8 +123,6 @@ class EnhancedVideoProcessor {
       .eq('id', videoDbId);
 
     if (error) {
-      // Log the error but don't re-throw, as these are non-critical progress updates.
-      // The main function's catch block will handle terminal failures.
       console.error(`[Processor] Non-critical DB update failed for ${videoDbId}: ${error.message}`);
     }
   }
