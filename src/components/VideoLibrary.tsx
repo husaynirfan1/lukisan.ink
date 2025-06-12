@@ -653,74 +653,50 @@ export function VideoLibrary() {
    * NEW: Force check status of a video directly from PiAPI
    * This function will bypass the normal monitoring system and directly check the status
    */
-  const handleForceCheckStatus = async (video: StoredVideo) => {
-    if (!user || checkingStatus.has(video.id)) return;
-    
-    console.log(`[VideoLibrary] Force checking status for video ${video.id}, task ${video.video_id}`);
-    const toastId = `status-check-${video.id}`;
-    toast.loading('Checking video status...', { id: toastId });
-    
-    // Add to checking set
-    setCheckingStatus(prev => new Set(prev).add(video.id));
-    
-    try {
-      // 1. Directly check status from PiAPI
-      const statusResponse = await checkVideoStatus(video.video_id);
-      console.log(`[VideoLibrary] Direct status check result:`, statusResponse);
-      
-      // 2. Update the database with the latest status
-      const updateData: any = {
-        status: statusResponse.status,
-        progress: statusResponse.progress || 0,
-        updated_at: new Date().toISOString()
-      };
-      
-      // Add video URL if available
-      if (statusResponse.video_url) {
-        updateData.video_url = statusResponse.video_url;
-      }
-      
-      // Add error message if available
-      if (statusResponse.error) {
-        updateData.error_message = statusResponse.error;
-      }
-      
-      // 3. Update the database
-      const { error } = await supabase
-        .from('video_generations')
-        .update(updateData)
-        .eq('id', video.id);
-      
-      if (error) {
-        throw new Error(`Database update failed: ${error.message}`);
-      }
-      
-      // 4. If completed, start monitoring to handle the download and storage
-      if (statusResponse.status === 'completed' && statusResponse.video_url) {
-        videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
-      }
-      
-      // 5. Refresh the video list
-      await fetchAndMonitorVideos(false);
-      
-      // 6. Show success message
-      toast.success('Status updated successfully!', { id: toastId });
-      
-    } catch (error: any) {
-      console.error(`[VideoLibrary] Force status check failed:`, error);
-      toast.error(`Status check failed: ${error.message}`, { id: toastId });
-    } finally {
-      // Remove from checking set
-      setTimeout(() => {
-        setCheckingStatus(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(video.id);
-          return newSet;
-        });
-      }, 1000);
-    }
-  };
+// In VideoLibrary.tsx
 
+/**
+ * FIXED: Force check status by invoking the Supabase Edge Function.
+ * This replaces the previous client-side implementation.
+ */
+const handleForceCheckStatus = async (video: StoredVideo) => {
+  if (!user || checkingStatus.has(video.id)) return;
+
+  console.log(`[VideoLibrary] Invoking edge function to check status for video ${video.id}`);
+  const toastId = `status-check-${video.id}`;
+  toast.loading('Checking video status...', { id: toastId });
+
+  setCheckingStatus(prev => new Set(prev).add(video.id));
+
+  try {
+    const { data, error } = await supabase.functions.invoke('force-check-status', {
+      body: { video_id: video.id }, // The Edge Function expects video_id
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (data.error) {
+        throw new Error(data.details?.message || data.error);
+    }
+
+    console.log('[VideoLibrary] Edge function response:', data);
+    toast.success('Status updated successfully!', { id: toastId });
+
+  } catch (error: any) {
+    console.error(`[VideoLibrary] Force status check failed:`, error);
+    toast.error(`Status check failed: ${error.message}`, { id: toastId });
+  } finally {
+    setTimeout(() => {
+      setCheckingStatus(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(video.id);
+        return newSet;
+      });
+    }, 1000);
+  }
+};
   /**
    * NEW: Force check status of all processing videos
    */
