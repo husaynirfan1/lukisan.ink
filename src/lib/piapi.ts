@@ -203,7 +203,6 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
  * COMPLETELY FIXED: Check the status of a video generation task
  * This function polls the PiAPI status endpoint to get real-time updates
  */
-const PIAPI_BASE_URL = "https://api.piapi.ai";
 
 export async function checkVideoStatus(taskId: string) {
   const url = `${PIAPI_BASE_URL}/wanx/task/${taskId}`;
