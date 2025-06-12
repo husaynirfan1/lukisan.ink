@@ -198,6 +198,9 @@ class VideoProcessingService {
     
     if (storagePath) {
       updateData.storage_path = storagePath;
+      if (status === 'completed') {
+        updateData.video_url = storagePath;
+      }
     }
     
     const { error: updateError } = await supabase

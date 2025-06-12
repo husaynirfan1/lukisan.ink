@@ -91,9 +91,9 @@ export const handleSupabaseError = (error: any, operation: string) => {
     return {
       isNetworkError: true,
       isSessionError: false,
-      userMessage: 'Unable to connect to the server. Please check your internet connection and try again.',
+      userMessage: 'Unable to connect to the server. Please check your internet connection and try again. If the problem persists, try checking your network settings, using a different browser, or ensuring you\'re not on a restricted network.',
       shouldRetry: true,
-      suggestion: 'Check that your Supabase project URL is correct and that https://localhost:5173 is added to your allowed origins.'
+      suggestion: 'Check that your Supabase project URL is correct and that https://localhost:5173 is added to your allowed origins. Also, consider if your browser extensions might be interfering with network requests.'
     };
   }
   
