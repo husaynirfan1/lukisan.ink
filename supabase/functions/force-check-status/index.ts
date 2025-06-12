@@ -68,20 +68,17 @@ serve(async (req) => {
     const videoUrl = taskData.works?.[0]?.resource?.resourceWithoutWatermark || taskData.works?.[0]?.resource?.resource;
     
     const updateData: any = {
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      status: normalizedStatus // Always update status based on normalizedStatus
     };
 
-    if (videoUrl) {
-      updateData.video_url = videoUrl;
+    // Add progress if available from PiAPI response
+    if (typeof taskData.progress === 'number') {
+      updateData.progress = taskData.progress;
     }
-
-    if (normalizedStatus === 'completed' && videoUrl) {
-        updateData.status = 'completed';
-    } else if (normalizedStatus !== 'completed') {
-        updateData.status = normalizedStatus;
-    }
+    // video_url is intentionally not updated here.
     
-    if (Object.keys(updateData).length > 1) {
+    if (Object.keys(updateData).length > 1) { // Ensure there's something to update besides updated_at
         const { error: updateError } = await supabase
             .from("video_generations")
             .update(updateData)
