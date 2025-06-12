@@ -60,7 +60,7 @@ export class VideoStatusManager {
       console.log(`[VideoStatusManager] Checking status for video ${videoId}, task ${taskId}`);
       
       const statusResponse = await checkVideoStatus(taskId);
-      console.log(`[VideoStatusManager] Status response:`, statusResponse);
+      console.log(`[VideoStatusManager] Status response for ${videoId}:`, statusResponse);
 
       // Reset error counter on successful check
       this.consecutiveErrors.set(videoId, 0);
@@ -78,7 +78,7 @@ export class VideoStatusManager {
       } else if (statusResponse.status === 'failed') {
         this.stopMonitoring(videoId);
         console.log(`[VideoStatusManager] Video ${videoId} failed:`, statusResponse.error);
-        await this.handleVideoFailure(videoId, statusResponse.error || 'Unknown error');
+        await this.handleVideoFailure(videoId, statusResponse.error || 'Video generation failed');
       }
       // For other statuses (pending, processing), continue polling
 
