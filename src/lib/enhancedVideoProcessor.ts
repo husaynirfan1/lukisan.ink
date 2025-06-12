@@ -1,10 +1,7 @@
-// In enhancedVideoProcessor.ts
-
 import { supabase } from './supabase';
-import { checkVideoStatus, TaskStatusResponse } from './piapi';
+import { checkVideoStatus } from './piapi';
 import toast from 'react-hot-toast';
 
-// --- Constants for Configuration ---
 const MAX_POLLING_ATTEMPTS = 120; // Poll for a maximum of 30 minutes (120 attempts * 15s)
 const POLL_INTERVAL = 15000; // 15 seconds
 
@@ -14,7 +11,6 @@ export interface VideoProcessingResult {
   error?: string;
 }
 
-// --- Main Processing Logic ---
 class EnhancedVideoProcessor {
   private activeProcessors: Map<string, AbortController> = new Map();
 
@@ -38,19 +34,16 @@ class EnhancedVideoProcessor {
     console.log(`[Processor] Starting full processing workflow for video: ${videoDbId}`);
 
     try {
-      // Step 1: Monitor the PiAPI task until it's complete and has a URL.
       const piapiResult = await this.monitorPiAPITask(taskId, videoDbId, abortController.signal);
       if (!piapiResult.success || !piapiResult.videoUrl) {
         throw new Error(piapiResult.error || 'Task completed without a video URL.');
       }
 
-      // Step 2: Download the video from the temporary PiAPI URL and upload it to Supabase Storage.
       const storageResult = await this.downloadAndStoreVideo(piapiResult.videoUrl, userId, taskId, videoDbId);
       if (!storageResult.success || !storageResult.publicUrl) {
         throw new Error(storageResult.error || 'Failed to store video in user library.');
       }
       
-      // Step 3: Update the database with the FINAL permanent URL and completed status.
       await this.updateDatabase(videoDbId, {
         status: 'completed',
         video_url: storageResult.publicUrl,
@@ -68,14 +61,12 @@ class EnhancedVideoProcessor {
     } catch (error: any) {
       console.error(`[Processor] Workflow failed for video ${videoDbId}:`, error);
       await this.updateDatabase(videoDbId, { status: 'failed', error_message: error.message });
-      toast.error(`Video generation failed: ${error.message}`);
-      return { success: false, error: error.message };
+      // The toast is now thrown by the videoStatusManager, preventing page crashes
+      throw error; // Re-throw the error so the caller can handle it
     } finally {
       this.activeProcessors.delete(videoDbId);
     }
   }
-
-  // --- Helper Methods ---
 
   private async monitorPiAPITask(taskId: string, videoDbId: string, signal: AbortSignal): Promise<{ success: boolean, videoUrl?: string, error?: string }> {
     for (let i = 0; i < MAX_POLLING_ATTEMPTS; i++) {
@@ -113,12 +104,10 @@ class EnhancedVideoProcessor {
       console.log(`[Processor] Downloading video for ${videoDbId} from temporary URL.`);
       await this.updateDatabase(videoDbId, { status: 'downloading', progress: 95 });
 
-      // 1. Download video data into a Blob
       const response = await fetch(tempUrl);
       if (!response.ok) throw new Error(`Failed to download from PiAPI: ${response.statusText}`);
       const videoBlob = await response.blob();
       
-      // 2. Upload Blob to Supabase Storage
       console.log(`[Processor] Storing video for ${videoDbId} in Supabase Storage.`);
       await this.updateDatabase(videoDbId, { status: 'storing', progress: 98 });
       const filePath = `videos/${userId}/${taskId}.mp4`;
@@ -127,9 +116,8 @@ class EnhancedVideoProcessor {
         .from('generated-videos')
         .upload(filePath, videoBlob, { upsert: true });
         
-      if (uploadError) throw uploadError;
+      if (uploadError) throw new Error(uploadError.message); // FIX: throw as Error instance
 
-      // 3. Get the permanent public URL
       const { data: urlData } = supabase.storage.from('generated-videos').getPublicUrl(filePath);
       if (!urlData.publicUrl) throw new Error('Failed to get public URL from Supabase Storage.');
 
@@ -147,12 +135,14 @@ class EnhancedVideoProcessor {
 
   private async updateDatabase(videoDbId: string, updates: any): Promise<void> {
     try {
-      await supabase
+      const { error } = await supabase
         .from('video_generations')
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', videoDbId);
+      if (error) throw new Error(error.message); // FIX: throw as Error instance
     } catch (error) {
       console.error(`[Processor] Failed to update database for ${videoDbId}:`, error);
+      // Don't re-throw here, as this is a non-critical update. The main flow can continue.
     }
   }
 
