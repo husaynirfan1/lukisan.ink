@@ -38,7 +38,7 @@ export const videoPresets: VideoPreset[] = [
     icon: Zap,
     category: 'marketing',
     duration: 15,
-    prompt: 'Dynamic, high-energy teaser. Fast cuts, energetic transitions, whip pans, glitch effects, strobing lights. Kinetic typography with text that scales and pulses to the beat. Bold, vibrant neon colors, high contrast. Particle effects and lens flares. Dramatic reveal of [Your Product/Event Name] with a powerful logo animation.',
+    prompt: 'High-energy teaser video with dynamic fast cuts and energetic transitions, incorporating whip pans, glitch effects, and strobing lights. The kinetic typography features bold, vibrant neon colors with high contrast, as text scales and pulses to the beat, accompanied by particle effects and lens flares. The camera rapidly zooms and pans across the scene, capturing the intensity. As the video builds up, it culminates in a dramatic reveal of [Your Product/Event Name] with a powerful logo animation that explodes into view, filling the screen with an electrifying presence. Close-up shots emphasize the logo.',
     negative_prompt: 'Slow, calm, boring, static, blurry, out of focus, flat colors, peaceful.'
   },
   {
