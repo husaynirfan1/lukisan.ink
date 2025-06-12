@@ -119,7 +119,7 @@ Provide only the refined prompt without any quotes or additional formatting.`;
             content: refinementPrompt
           }
         ],
-        max_tokens: 200,
+        max_tokens: 1000,
         temperature: 0.7,
         top_p: 0.9,
       }),
@@ -156,48 +156,27 @@ Provide only the refined prompt without any quotes or additional formatting.`;
 
 // NEW: Function to refine video prompts using Llama model
 export const refineVideoPrompt = async (originalPrompt: string): Promise<string> => {
-  const videoRefinementPrompt = `You are a creative director for viral marketing videos and an expert in video production. Your task is to take a basic user idea and expand it into a detailed, vivid prompt for AI video generation that will create compelling, professional-quality videos.
+  // This new, more detailed prompt is adapted from the Python example for video generation.
+  // It instructs the AI to act as a "prompt engineer" focusing on technical and visual details.
+  const videoRefinementPrompt = `You are a prompt engineer, aiming to rewrite user inputs into high-quality prompts for better video generation without affecting the original meaning.
 
-Original user idea: "${originalPrompt}"
+Task requirements:
+1. For overly concise user inputs, reasonably infer and add details to make the video more complete and appealing without altering the original intent.
+2. Enhance the main features in user descriptions (e.g., appearance, expression, quantity, race, posture, etc.), visual style, spatial relationships, and shot scales.
+3. Output the entire prompt in English, retaining original text in quotes and titles, and preserving key input information.
+4. Prompts should match the user’s intent and accurately reflect the specified style. If a style is not specified, choose the most appropriate one for the video.
+5. Emphasize motion information and different camera movements (zooms, pans, tracking shots).
+6. Your output should describe natural motion. For any subject, add natural actions using simple, direct verbs.
+7. The revised prompt should be around 80-100 words long.
 
-Transform this into a comprehensive video prompt by adding:
+Revised prompt examples:
+- Japanese-style fresh film photography, a young East Asian girl with braided pigtails sitting by the boat. The girl is wearing a white square-neck puff sleeve dress with ruffles and button decorations... Medium shot half-body portrait in a seated position.
+- CG game concept digital art, a giant crocodile with its mouth open wide, with trees and thorns growing on its back... Close-up, low-angle view.
+- American TV series poster style, Walter White wearing a yellow protective suit sitting on a metal folding chair, with "Breaking Bad" in sans-serif text above... Medium shot character eye-level close-up.
 
-1. **Cinematic Style & Visual Aesthetics:**
-   - Specific camera angles (close-up, wide shot, drone shot, tracking shot, etc.)
-   - Lighting style (natural, studio, dramatic, soft, golden hour, etc.)
-   - Color grading and mood (warm, cool, high contrast, desaturated, etc.)
-   - Visual composition and framing techniques
+Now, please rewrite the following user prompt. Directly expand and rewrite it in English while preserving the original meaning. Output only the rewritten prompt without any extra conversation, replies, or quotation marks.
 
-2. **Technical Specifications:**
-   - Shot types and camera movements
-   - Transition styles between scenes
-   - Visual effects or motion graphics if appropriate
-   - Pacing and rhythm of the video
-
-3. **Audio & Music:**
-   - Background music style and tempo
-   - Sound design elements
-   - Voiceover style if applicable
-
-4. **Narrative Structure:**
-   - Clear beginning, middle, and end
-   - Key moments or beats to highlight
-   - Call-to-action or message delivery
-
-5. **Production Value:**
-   - Professional quality indicators
-   - Specific visual elements that enhance the message
-   - Brand-appropriate styling
-
-Guidelines:
-- Keep the core concept from the original idea
-- Make it specific enough for AI to generate high-quality video
-- Focus on visual storytelling elements
-- Ensure the prompt is actionable and detailed
-- Aim for 3-4 sentences that paint a vivid picture
-- Include specific technical and creative direction
-
-Provide only the enhanced video prompt without quotes or additional formatting.`;
+User Prompt to Rewrite: "${originalPrompt}"`;
 
   try {
     const response = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
@@ -248,7 +227,6 @@ Provide only the enhanced video prompt without quotes or additional formatting.`
     return originalPrompt;
   }
 };
-
 // Function to create a tailored prompt based on style and user input
 const createTailoredPrompt = (userPrompt: string, category: string, aspectRatio?: string): string => {
   const style = stylePrompts[category as keyof typeof stylePrompts];
