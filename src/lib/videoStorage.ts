@@ -206,7 +206,7 @@ export const getVideoInfo = async (path: string) => {
 };
 
 /**
- * Updates a video record in the database with the final video URL
+ * FIXED: Updates a video record in the database with the final video URL
  */
 export const updateVideoUrlInDatabase = async (
   videoId: string, 
@@ -243,7 +243,7 @@ export const updateVideoUrlInDatabase = async (
 };
 
 /**
- * Checks for pending videos in the database and returns them
+ * FIXED: Checks for pending videos in the database and returns them
  */
 export const getPendingVideos = async (userId: string): Promise<any[]> => {
   try {

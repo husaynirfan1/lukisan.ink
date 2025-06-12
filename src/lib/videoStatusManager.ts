@@ -111,6 +111,11 @@ export class VideoStatusManager {
         updateData.error_message = statusResponse.error;
       }
 
+      // FIXED: If we have a video URL, update it in the database
+      if (statusResponse.video_url) {
+        updateData.video_url = statusResponse.video_url;
+      }
+
       console.log(`[VideoStatusManager] Updating video ${videoId} with:`, updateData);
 
       const { error } = await supabase

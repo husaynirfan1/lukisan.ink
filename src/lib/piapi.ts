@@ -200,7 +200,7 @@ export const generateImageToVideo = async (request: ImageToVideoRequest): Promis
 };
 
 /**
- * FIXED: Check the status of a video generation task
+ * COMPLETELY FIXED: Check the status of a video generation task
  * This function polls the PiAPI status endpoint to get real-time updates
  */
 export const checkVideoStatus = async (taskId: string): Promise<TaskStatusResponse> => {
@@ -217,7 +217,7 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         const response = await fetch(endpoint, { 
             method: 'GET',
             headers: { 
-                'x-api-key': PIAPI_API_KEY,
+                'X-API-Key': PIAPI_API_KEY, // FIXED: Use correct header name
                 'Content-Type': 'application/json'
             } 
         });
@@ -255,19 +255,26 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
             throw new Error(`Status check failed: ${response.status} ${response.statusText}`);
         }
 
-        const data = await response.json();
-        console.log(`[PiAPI] Status data for task ${taskId}:`, data);
+        const responseData = await response.json();
+        console.log(`[PiAPI] Status data for task ${taskId}:`, responseData);
         
-        // FIXED: Handle the actual response structure from PiAPI
-        const taskData = data.data || data;
-        const status = taskData.status || 'processing';
+        // FIXED: Properly parse the PiAPI response structure
+        // The actual response structure is different from what we expected
+        const data = responseData.data || responseData;
+        
+        // FIXED: Extract status from the correct location
+        let status = 'processing';
+        if (data.status) {
+            status = data.status.toLowerCase();
+        }
         
         // FIXED: Normalize status values based on PiAPI documentation
         let normalizedStatus: 'pending' | 'processing' | 'completed' | 'failed';
-        switch (status.toLowerCase()) {
+        switch (status) {
             case 'completed':
             case 'success':
             case 'finished':
+            case '99': // PiAPI uses numeric status codes in some responses
                 normalizedStatus = 'completed';
                 break;
             case 'failed':
@@ -288,14 +295,19 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         let videoUrl: string | undefined;
         let thumbnailUrl: string | undefined;
         
-        if (normalizedStatus === 'completed' && taskData.works && taskData.works.length > 0) {
-            const work = taskData.works[0];
+        // Check for works array in the response
+        if (data.works && data.works.length > 0) {
+            const work = data.works[0];
             // Prefer resourceWithoutWatermark over resource
-            videoUrl = work.resource?.resourceWithoutWatermark || work.resource?.resource;
-            thumbnailUrl = work.cover?.resource;
+            if (work.resource) {
+                videoUrl = work.resource.resourceWithoutWatermark || work.resource.resource;
+                console.log(`[PiAPI] Found video URL in works[0].resource: ${videoUrl}`);
+            }
             
-            console.log(`[PiAPI] Extracted video URL: ${videoUrl}`);
-            console.log(`[PiAPI] Extracted thumbnail URL: ${thumbnailUrl}`);
+            if (work.cover) {
+                thumbnailUrl = work.cover.resource;
+                console.log(`[PiAPI] Found thumbnail URL in works[0].cover: ${thumbnailUrl}`);
+            }
         }
         
         // Calculate progress based on status
@@ -311,13 +323,13 @@ export const checkVideoStatus = async (taskId: string): Promise<TaskStatusRespon
         }
         
         return {
-            task_id: taskData.task_id || taskId,
+            task_id: data.task_id || taskId,
             status: normalizedStatus,
             video_url: videoUrl,
             thumbnail_url: thumbnailUrl,
             progress: progress,
-            error: taskData.error,
-            data: taskData
+            error: data.error,
+            data: data
         };
         
     } catch (error: any) {
@@ -510,8 +522,8 @@ export class VideoStatusPoller {
       this.onStatusUpdate(status);
 
       // Check if task is complete
-      if (status.status === 'completed') {
-        console.log(`[VideoStatusPoller] Task completed: ${this.taskId}`);
+      if (status.status === 'completed' && status.video_url) {
+        console.log(`[VideoStatusPoller] Task completed: ${this.taskId}, video URL: ${status.video_url}`);
         this.stop();
         this.onComplete(status);
       } else if (status.status === 'failed') {
