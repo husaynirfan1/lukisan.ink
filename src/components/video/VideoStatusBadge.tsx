@@ -112,7 +112,9 @@ export const VideoStatusBadge: React.FC<VideoStatusBadgeProps> = ({
   };
   
   const sizeClasses = sizeConfig[size];
-
+if (video.status === 'completed' && !video.video_url) {
+  return <Badge className="text-yellow-600 border-yellow-600">Finalizing...</Badge>;
+}
   return (
     <div 
       className={`inline-flex items-center ${sizeClasses.padding} ${sizeClasses.space} rounded-full ${config.bgColor} ${config.color} border ${config.borderColor} ${className}`}
