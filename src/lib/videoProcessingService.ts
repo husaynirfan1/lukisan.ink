@@ -220,7 +220,7 @@ class VideoProcessingService {
       
       // Upload to Supabase storage
       const { data, error } = await supabase.storage
-        .from('videos')
+        .from('generated-videos')
         .upload(fileName, videoBlob, {
           contentType: 'video/mp4',
           cacheControl: '3600'
