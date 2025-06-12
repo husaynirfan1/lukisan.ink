@@ -38,7 +38,7 @@ export const videoPresets: VideoPreset[] = [
     icon: Zap,
     category: 'marketing',
     duration: 15,
-    prompt: 'Dynamic, high-energy teaser. Fast cuts, energetic transitions, whip pans, glitch effects, strobing lights. Kinetic typography with text that scales and pulses to the beat. Bold, vibrant neon colors, high contrast. Particle effects and lens flares. Dramatic reveal of [Your Product/Event Name] with a powerful logo animation.',
+    prompt: 'High-energy teaser video with dynamic fast cuts and energetic transitions, incorporating whip pans, glitch effects, and strobing lights. The kinetic typography features bold, vibrant neon colors with high contrast, as text scales and pulses to the beat, accompanied by particle effects and lens flares. The camera rapidly zooms and pans across the scene, capturing the intensity. As the video builds up, it culminates in a dramatic reveal of [Your Product/Event Name] with a powerful logo animation that explodes into view, filling the screen with an electrifying presence. Close-up shots emphasize the logo.',
     negative_prompt: 'Slow, calm, boring, static, blurry, out of focus, flat colors, peaceful.'
   },
   {
@@ -48,7 +48,7 @@ export const videoPresets: VideoPreset[] = [
     icon: PlayCircle,
     category: 'explainer',
     duration: 60,
-    prompt: '2D animated explainer video, flat design style, friendly characters with expressive gestures, smooth motion graphics. Infographic elements like animated charts and progress bars. The scene shows [Your Service/Concept] in action. Subtle background element movement, characters have slight breathing motion. Bright and approachable brand colors.',
+    prompt: '2D animated explainer video in a vibrant flat design style, featuring friendly characters with exaggerated, expressive gestures and smooth motion graphics. Infographic elements such as animated charts, progress bars, and icons dynamically illustrate key concepts. The scene showcases [Your Service/Concept] in action, with characters engaging in natural actions like nodding or gesturing. Subtle background element movement and slight breathing motion add depth. Bright and approachable brand colors create a welcoming atmosphere. Medium shot, gentle camera pans and zooms emphasize the characters and graphics, conveying a sense of approachability and professionalism throughout.',
     negative_prompt: 'Photorealistic, 3D, complex textures, shaky, hand-drawn, blurry, mismatched colors.'
   },
   {
@@ -58,7 +58,7 @@ export const videoPresets: VideoPreset[] = [
     icon: Heart,
     category: 'brand',
     duration: 60,
-    prompt: 'Cinematic, emotional, and authentic brand story. A beautifully composed scene showing [Your Brand\'s Story Moment]. Soft, natural golden hour lighting, warm color grade, shallow depth of field, beautiful bokeh. A slow-motion shot captures the key emotional moment. Gentle camera drift, subtle wind in hair, dust motes floating in the air.',
+    prompt: 'Cinematic, emotional, and authentic brand story film, showcasing a poignant moment that embodies [Your Brand\'s Story Moment]. Soft, natural golden hour lighting bathes the scene, complemented by a warm color grade and shallow depth of field, creating a beautiful bokeh effect. A slow-motion shot masterfully captures the key emotional moment, as gentle camera drift subtly enhances the atmosphere. The subject\'s hair flows softly in the breeze, with dust motes delicately floating in the air. Medium shot, character eye-level, with a subtle pan and slow zoom, emphasizing the emotional intensity of the moment.',
     negative_prompt: 'Corporate, sterile, harsh lighting, flat, oversaturated, fast cuts, shaky camera, uninspired.'
   },
   {
@@ -67,8 +67,8 @@ export const videoPresets: VideoPreset[] = [
     description: 'Authentic and trustworthy, featuring a satisfied customer\'s experience',
     icon: MessageSquare,
     category: 'testimonial',
-    duration: 45,
-    prompt: 'Professional customer testimonial. A medium close-up shot of a genuine customer speaking. The background is a well-lit, modern office with soft focus. The person shows subtle, natural motion like blinking and slight head movements. Clean, animated lower-third graphic with the customer\'s name. Crystal clear audio quality (visual representation).',
+    duration: 45, 
+    prompt: 'Professional customer testimonial video in a modern corporate style, featuring a medium close-up shot of a genuine customer speaking directly to the camera. The background is a well-lit, contemporary office with a soft focus effect, blurred to emphasize the customer. The person displays subtle, natural motions like occasional blinking and slight head movements. A clean, animated lower-third graphic overlays the footage, showcasing the customer\'s name in a clear, easy-to-read font. The camera remains steady, capturing the testimonial in crisp, high-definition quality with crystal clear audio, highlighting the customer\'s sincere expression and words.',
     negative_prompt: 'Dark, underexposed, shaky camera, distracting background, out of focus, amateur, cluttered, bad audio sync (visual representation).'
   }
 ];
@@ -111,15 +111,7 @@ export const VideoPresets: React.FC<VideoPresetsProps> = ({
               }`}
             >
               {/* Category Badge */}
-              <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium ${
-                preset.category === 'product' ? 'bg-blue-100 text-blue-700' :
-                preset.category === 'marketing' ? 'bg-red-100 text-red-700' :
-                preset.category === 'explainer' ? 'bg-green-100 text-green-700' :
-                preset.category === 'brand' ? 'bg-purple-100 text-purple-700' :
-                'bg-orange-100 text-orange-700'
-              }`}>
-                {preset.duration}s
-              </div>
+       
 
               {/* Icon */}
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 ${
