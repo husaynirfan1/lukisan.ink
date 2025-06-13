@@ -51,17 +51,20 @@ export interface CreateTaskResponse {
 }
 
 // FIXED: Response from the status check call - Updated to match actual PiAPI response structure
+// Added 'pending_url' to possible status values
 export interface TaskStatusResponse {
     task_id: string;
-    status: 'pending' | 'processing' | 'completed' | 'failed';
+    status: 'pending' | 'processing' | 'completed' | 'failed' | 'pending_url';
     video_url?: string;
     thumbnail_url?: string;
     progress?: number;
     error?: string;
+    retry?: boolean; // Added to explicitly signal if polling should continue for certain statuses
     // FIXED: Add the actual response structure from PiAPI
-    data?: {
+    data?: { // This part seems to be from an older version or direct PiAPI, distinct from normalized TaskStatusResponse
         task_id: string;
-        status: string;
+        status: string; // Raw status from PiAPI
+        progress?: number; // Raw progress from PiAPI
         works?: Array<{
             resource?: {
                 resourceWithoutWatermark?: string;
@@ -71,6 +74,11 @@ export interface TaskStatusResponse {
                 resource?: string;
             };
         }>;
+        // PiAPI might also return video_url directly under data.output or similar
+        output?: {
+            video_url?: string;
+            thumbnail_url?: string;
+        }
     };
 }
 
@@ -221,29 +229,75 @@ export async function checkVideoStatus(taskId: string) {
   }
 
   const json = await response.json();
-  const data = json?.data;
+  // The actual PiAPI response structure can vary. We need to normalize it.
+  // The Edge Function `force-check-status` already does robust normalization.
+  // This `checkVideoStatus` function in `piapi.ts` is used by the client-side poller.
+  // It should ideally either:
+  // 1. Call the `force-check-status` Edge Function (preferred for consistency).
+  // 2. Or, replicate the normalization logic of the Edge Function if calling PiAPI directly.
 
-  const status = data.status;
-  const progress = data.progress ?? 0;
-  const video_url = data.output?.video_url;
-  const thumbnail_url = data.output?.thumbnail_url;
+  // For this modification, we'll assume it calls PiAPI directly and needs to normalize.
+  const taskData = json?.data || json; // Handle if 'data' field is not present
 
-  if (status === 'completed' && !video_url) {
-    console.warn(`[PiAPI] Task ${taskId} completed but video_url missing — waiting.`);
-    return {
-      task_id: taskId,
-      status: 'waiting_for_video',
-      progress,
-      retry: true,
-    };
+  let rawStatus = (taskData.status || "processing").toLowerCase();
+  let normalizedStatus: TaskStatusResponse['status'];
+  let videoUrl: string | undefined;
+  let thumbnailUrl: string | undefined;
+  let currentProgress = taskData.progress ?? 0;
+
+  // Video URL extraction logic (simplified, mirrors part of Edge Function)
+  if (taskData.output?.video_url) {
+    videoUrl = taskData.output.video_url;
+  } else if (taskData.video_url) {
+    videoUrl = taskData.video_url;
+  } else if (taskData.works && Array.isArray(taskData.works) && taskData.works.length > 0) {
+    const work = taskData.works[0];
+    if (work && work.resource) {
+      videoUrl = work.resource.resourceWithoutWatermark || work.resource.resource;
+    }
+    if (work && work.cover) {
+      thumbnailUrl = work.cover.resource;
+    }
   }
+  if (!thumbnailUrl && taskData.output?.thumbnail_url) {
+    thumbnailUrl = taskData.output.thumbnail_url;
+  }
+
+
+  switch (rawStatus) {
+    case "completed": case "success": case "finished": case "99":
+      if (videoUrl) {
+        normalizedStatus = "completed";
+        currentProgress = 100;
+      } else {
+        // This is the key change: if PiAPI says "completed" but no URL, we mark as 'pending_url'
+        console.warn(`[PiAPI] Task ${taskId} reported as '${rawStatus}' by PiAPI but video_url is missing. Setting status to 'pending_url'.`);
+        normalizedStatus = "pending_url";
+        currentProgress = 95; // Progress for pending_url
+      }
+      break;
+    case "failed": case "error": case "cancelled":
+      normalizedStatus = "failed";
+      currentProgress = 0;
+      break;
+    case "pending": case "queued": case "waiting":
+      normalizedStatus = "pending";
+      break;
+    default: // "processing", "running", etc.
+      normalizedStatus = "processing";
+  }
+
+  // If status is pending_url, we want the poller to retry.
+  const shouldRetry = normalizedStatus === 'pending_url';
 
   return {
     task_id: taskId,
-    status,
-    progress,
-    video_url,
-    thumbnail_url,
+    status: normalizedStatus,
+    progress: currentProgress,
+    video_url: videoUrl,
+    thumbnail_url: thumbnailUrl,
+    retry: shouldRetry, // Explicitly tell poller to retry for pending_url
+    error: taskData.error // Include error message if any
   };
 }
 
@@ -410,19 +464,25 @@ export class VideoStatusPoller {
       
       console.log(`[VideoStatusPoller] Status received:`, status);
       
-      // Call the status update callback
+      // Call the status update callback in all cases where an update is received
       this.onStatusUpdate(status);
 
-      // Check if task is complete
+      // Check for terminal states or states that require specific actions
       if (status.status === 'completed' && status.video_url) {
         console.log(`[VideoStatusPoller] Task completed: ${this.taskId}, video URL: ${status.video_url}`);
-        this.stop();
+        this.stop(); // Stop polling on successful completion with URL
         this.onComplete(status);
       } else if (status.status === 'failed') {
         console.log(`[VideoStatusPoller] Task failed: ${this.taskId}, error: ${status.error}`);
-        this.stop();
+        this.stop(); // Stop polling on failure
         this.onError(status.error || 'Video generation failed');
+      } else if (status.status === 'pending_url') {
+        console.log(`[VideoStatusPoller] Task ${this.taskId} is pending_url. Continuing to poll.`);
+        // Do not stop polling, onStatusUpdate has been called.
+        // The `retry: true` in the status object (if we choose to use it) could also signify this.
       }
+      // For other statuses like 'pending', 'processing', polling continues automatically
+      // unless stop() is called.
     } catch (error: any) {
       this.consecutiveErrors++;
       console.error(`[VideoStatusPoller] Error checking video status (attempt ${this.consecutiveErrors}):`, error);
