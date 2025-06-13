@@ -7,7 +7,7 @@ import {
   Wifi, WifiOff, Database, Shield, Eye, EyeOff, Info
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import { videoLibraryService, VideoRecord, VideoFilter } from '../../lib/videoLibraryService';
+import { videoLibraryService, VideoRecord, VideoFilter, VideoStats } from '../../lib/videoLibraryService';
 import { videoProcessingService } from '../../lib/videoProcessingService';
 import toast from 'react-hot-toast';
 
@@ -31,7 +31,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const [showPreview, setShowPreview] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
-  // Define a stable placeholder URL. This will ALWAYS be used for the thumbnail display.
+
   const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; 
 
   const getStatusDisplay = () => {
@@ -102,6 +102,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const statusDisplay = getStatusDisplay();
   const isProcessing = ['pending', 'processing', 'downloading', 'storing'].includes(video.status || '');
   const canDownload = video.status === 'completed' && video.video_url;
+  const hasIntegrityIssue = video.status === 'completed' && video.integrity_verified === false;
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size';
@@ -110,7 +111,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  // Handle hover for video preview
   const handleMouseEnter = () => {
     setIsHovered(true);
     if (canDownload && videoRef.current) {
@@ -121,7 +121,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           videoRef.current.play().catch(console.error);
           setIsPlaying(true);
         }
-      }, 500); // Start preview after 500ms hover
+      }, 500);
     }
   };
 
@@ -154,7 +154,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (canDownload && video.video_url) {
-      const filename = `video-${video.video_type}-${Date.now()}.mp4`;
+      const filename = `video-<span class="math-inline">\{video\.video\_type\}\-</span>{Date.now()}.mp4`;
       videoLibraryService.downloadVideo(video.video_url, filename)
         .then(() => {
           toast.success('Download started!');
@@ -207,7 +207,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
               </div>
             )}
             
-            {/* Video controls overlay */}
             {showPreview && (
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
@@ -242,7 +241,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
               </div>
               <p className={`mt-2 font-medium ${statusDisplay.color}`}>{statusDisplay.text}</p>
               
-              {/* Progress display */}
               {isProcessing && (
                 <div className="mt-3 space-y-2">
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -252,7 +250,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
                     />
                   </div>
                   
-                  {/* File size info */}
                   {video.file_size && (
                     <div className="text-xs text-gray-300">
                       Size: {formatFileSize(video.file_size)}
@@ -261,7 +258,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
                 </div>
               )}
               
-              {/* Error message */}
               {video.status === 'failed' && video.error_message && (
                 <p className="text-xs text-red-400 mt-1 max-w-xs truncate" title={video.error_message}>
                   {video.error_message}
@@ -271,7 +267,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           </div>
         )}
 
-        {/* Status badges - REMOVED STORAGE PATH BADGE TO FIX BLINKING ICON */}
+        {/* Status badges */}
         {video.integrity_verified === false && (
           <div className="absolute top-2 left-2">
             <div className="flex items-center space-x-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
@@ -399,13 +395,7 @@ export const EnhancedVideoLibrary: React.FC = () => {
   const [deletingVideos, setDeletingVideos] = useState<Set<string>>(new Set());
   const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline'>('online');
-  const [videoStats, setVideoStats] = useState<{
-    total: number;
-    completed: number;
-    processing: number;
-    failed: number;
-    totalSize: number;
-  }>({
+  const [videoStats, setVideoStats] = useState<VideoStats>({
     total: 0,
     completed: 0,
     processing: 0,
@@ -496,18 +486,39 @@ export const EnhancedVideoLibrary: React.FC = () => {
     }
   };
 
-  // Handle delete 
+  // Handle delete - MODIFIED TO USE TOAST AND OPTIMISTIC UI UPDATES
   const handleDelete = async (videoId: string) => {
-    if (!user) return;
-    
-    setDeletingVideos(prev => new Set(prev).add(videoId));
-    
+    // Ensure user is available before proceeding and find the video to get its file_size
+    const videoToDelete = videos.find(v => v.id === videoId);
+    if (!videoToDelete || !user) return; 
+
+    setDeletingVideos(prev => new Set(prev).add(videoId)); // Set deleting state for the specific video
+    const toastId = toast.loading('Deleting video...', { id: `delete-${videoId}` }); // Show loading toast
+
     try {
-      await videoLibraryService.deleteVideo(videoId);
-      toast.success('Video deleted successfully');
-    } catch (error) {
+      // Delegate the actual deletion (Storage + DB via Edge Function) to videoLibraryService
+      await videoLibraryService.deleteVideo(videoId); 
+      
+      toast.success('Video deleted successfully!', { id: toastId });
+      
+      // Optimistic UI update: immediately remove from local state
+      // This is crucial for immediate UI feedback. Realtime will eventually correct if needed.
+      setVideos(prev => prev.filter(v => v.id !== videoId));
+
+      // Optimistic update for videoStats
+      if (videoToDelete.file_size !== undefined) { 
+          setVideoStats(prevStats => ({
+              total: prevStats.total - 1,
+              completed: videoToDelete.status === 'completed' ? prevStats.completed - 1 : prevStats.completed,
+              processing: ['pending', 'processing', 'downloading', 'storing'].includes(videoToDelete.status || '') ? prevStats.processing - 1 : prevStats.processing,
+              failed: videoToDelete.status === 'failed' ? prevStats.failed - 1 : prevStats.failed,
+              totalSize: prevStats.totalSize - (videoToDelete.file_size || 0)
+          }));
+      }
+
+    } catch (error: any) {
       console.error('[VideoLibrary] Delete error:', error);
-      toast.error('Failed to delete video');
+      toast.error(`Failed to delete video: ${error.message}`, { id: toastId }); // Use toastId if defined
     } finally {
       setDeletingVideos(prev => {
         const newSet = new Set(prev);
@@ -545,7 +556,10 @@ export const EnhancedVideoLibrary: React.FC = () => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = 
         video.message.toLowerCase().includes(searchLower) ||
-        video.video_type.toLowerCase().includes(searchLower);
+        video.video_type.toLowerCase().includes(searchLower) ||
+        // Add optional search for recipient_name and company_name if they exist on VideoRecord
+        (video as any).recipient_name?.toLowerCase().includes(searchLower) ||
+        (video as any).company_name?.toLowerCase().includes(searchLower);
     
     const matchesType = selectedType === 'all' || video.video_type === selectedType;
     return matchesSearch && matchesType;
@@ -580,7 +594,6 @@ export const EnhancedVideoLibrary: React.FC = () => {
             <p className="text-gray-600">Track and manage your generated videos.</p>
           </div>
           
-          {/* Connection status indicator */}
           <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
             connectionStatus === 'online' 
               ? 'bg-green-100 text-green-800' 
@@ -624,6 +637,13 @@ export const EnhancedVideoLibrary: React.FC = () => {
             </div>
           </div>
         </div>
+        
+        {/* Debug info in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-2 text-xs text-gray-500 bg-gray-100 p-2 rounded">
+            Active monitoring: {videoStatusManager.getMonitoringStatus().activeVideos.length} videos
+          </div>
+        )}
       </div>
       
       <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-gray-200/50 mb-6">
@@ -740,7 +760,6 @@ export const EnhancedVideoLibrary: React.FC = () => {
                     </div>
                   )}
                   
-                  {/* Progress overlay for processing videos */}
                   {isProcessing && (
                     <div className="absolute bottom-0 left-0 right-0 bg-black/50 p-2">
                       <div className="w-full bg-gray-200 rounded-full h-1.5">
@@ -781,7 +800,6 @@ export const EnhancedVideoLibrary: React.FC = () => {
                     </div>
                   </div>
                   
-                  {/* Error message */}
                   {video.status === 'failed' && video.error_message && (
                     <div className="mt-2 p-2 bg-red-50 rounded-lg">
                       <p className="text-xs text-red-600">{video.error_message}</p>
@@ -830,7 +848,6 @@ export const EnhancedVideoLibrary: React.FC = () => {
         </div>
       )}
       
-      {/* Processing Info */}
       {videoStats.processing > 0 && (
         <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
           <div className="flex items-center space-x-2 mb-2">
