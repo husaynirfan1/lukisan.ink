@@ -28,7 +28,7 @@ const showcaseItems: MediaItem[] = [
   },
    {
     id: 'brand-showcase-1',
-    type: 'image',
+    type: 'video',
     src: '/assets/images/gallery/sample-5.png',
     title: 'Fishermen Friend',
     description: 'Modern, clean and simple with natural blend.',
