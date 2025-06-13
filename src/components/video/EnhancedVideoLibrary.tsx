@@ -167,7 +167,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
 
    const handleDelete = async (videoId: string) => {
 
-    setDeletingVideos(prev => new Set(prev).add(videoId));
     try {
       // Stop monitoring if it's active
       videoStatusManager.stopMonitoring(videoId);
