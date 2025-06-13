@@ -18,7 +18,7 @@ interface MediaItem {
 const showcaseItems: MediaItem[] = [
   {
     id: 'lukisan-logo',
-    type: 'logo',
+    type: 'Banner',
     src: '/assets/images/gallery/lukisan-logo.png',
     title: 'Lukisan Brand Identity',
     description: 'Our banner logo representing innovation in AI-powered creative solutions',
