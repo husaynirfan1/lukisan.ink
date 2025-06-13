@@ -10,6 +10,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { videoLibraryService, VideoRecord, VideoFilter } from '../../lib/videoLibraryService';
 import { videoProcessingService } from '../../lib/videoProcessingService';
 import toast from 'react-hot-toast';
+import { videoStatusManager } from '../../lib/videoStatusManager';
 
 interface VideoCardProps {
   video: VideoRecord;
