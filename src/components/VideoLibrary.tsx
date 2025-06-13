@@ -22,7 +22,7 @@ interface StoredVideo {
   company_name?: string;
   video_id: string; // This is the task_id from PiAPI
   video_url: string;
-  logo_url?: string;
+  logo_url?: string; // Corrected to logo_url
   created_at: string;
   storage_path?: string;
   status?: 'pending' | 'processing' | 'running' | 'downloading' | 'storing' | 'completed' | 'failed';
@@ -48,6 +48,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
   const [showPreview, setShowPreview] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Define a stable placeholder URL. This should be a URL to a real, static image.
+  // IMPORTANT: Replace this with an actual path to a placeholder image in your project
+  // e.g., '/images/video-placeholder.png' or 'https://via.placeholder.com/400x225?text=Video+Thumbnail'
+  const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; // Example, replace with your actual path!
 
   const getStatusDisplay = () => {
     const isRetryingThis = isRetrying;
@@ -134,9 +139,14 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
       previewTimeoutRef.current = setTimeout(() => {
         setShowPreview(true);
         if (videoRef.current) {
-          videoRef.current.currentTime = 0;
-          videoRef.current.play().catch(console.error);
-          setIsPlaying(true);
+          if (videoRef.current.paused) {
+            videoRef.current.currentTime = 0;
+            videoRef.current.play().catch(e => {
+              console.error("Video play failed:", e);
+              setIsPlaying(false);
+            });
+            setIsPlaying(true);
+          }
         }
       }, 500); // Start preview after 500ms hover
     }
@@ -162,7 +172,9 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
         videoRef.current.pause();
         setIsPlaying(false);
       } else {
-        videoRef.current.play().catch(console.error);
+        videoRef.current.play().catch(e => {
+          console.error("Video play failed on click:", e);
+        });
         setIsPlaying(true);
       }
     }
@@ -201,6 +213,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
       <div className="relative aspect-video bg-gray-900 cursor-pointer" onClick={handleVideoClick}>
         {canDownload ? (
           <>
+            {/* The video element with a stable poster */}
             <video 
               ref={videoRef}
               src={video.video_url} 
@@ -208,15 +221,25 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
               muted 
               loop 
               playsInline 
-              poster={video.logo_url}
+              poster={video.logo_url || FALLBACK_PLACEHOLDER_URL} // Use fallback for poster
               style={{ display: showPreview ? 'block' : 'none' }}
             />
+            {/* The image overlay when not showing preview */}
             {!showPreview && (
               <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                 <img
-                  src={video.logo_url || '/api/placeholder/400/225'}
+                  src={video.logo_url || FALLBACK_PLACEHOLDER_URL} // Use fallback for img src
                   alt="Video thumbnail"
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // This onError will catch issues with the actual video.logo_url AND the FALLBACK_PLACEHOLDER_URL
+                    // If the FALLBACK_PLACEHOLDER_URL itself fails, it prevents an infinite loop
+                    const target = e.target as HTMLImageElement;
+                    if (target.src !== FALLBACK_PLACEHOLDER_URL) {
+                      target.onerror = null; // Prevent infinite loop if fallback also fails
+                      target.src = FALLBACK_PLACEHOLDER_URL;
+                    }
+                  }}
                 />
                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                   <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
@@ -427,8 +450,8 @@ export function VideoLibrary() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); 
+  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set()); 
   const [deletingVideos, setDeletingVideos] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
@@ -468,7 +491,7 @@ export function VideoLibrary() {
       
       const { data, error } = await supabase
         .from('video_generations')
-        .select('*')
+        .select('*') // Select all columns, including logo_url implicitly
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -495,7 +518,7 @@ export function VideoLibrary() {
             status: currentStatus,
             storage_path: video.video_url ? extractStoragePath(video.video_url) : undefined
         };
-      });
+      }) as StoredVideo[]; // Cast to StoredVideo array
 
       setVideos(fetchedVideos);
 
@@ -577,19 +600,39 @@ export function VideoLibrary() {
     setCheckingStatus(prev => new Set(prev).add(video.id));
 
     try {
-      const { data, error } = await supabase.functions.invoke('force-check-status', {
+      // The `supabase.functions.invoke` call should return a { data, error } object.
+      // The 'data' property contains the raw JSON string from the Edge Function response.
+      const { data: rawData, error: efError } = await supabase.functions.invoke('force-check-status', {
         body: { video_id: video.id },
       });
 
-      if (error) {
-        throw new Error(error.message);
+      if (efError) {
+        throw new Error(efError.message);
       }
-      if (data.error) {
-        throw new Error(data.details?.message || data.error);
+      
+      let efResponse: any;
+      if (rawData) {
+        try {
+          efResponse = JSON.parse(rawData as string); // Parse the raw JSON string
+        } catch (parseError) {
+          console.error('[VideoLibrary] Failed to parse Edge Function response:', rawData, parseError);
+          throw new Error('Malformed response from Edge Function.');
+        }
+      } else {
+        throw new Error('No data received from Edge Function.');
       }
 
-      console.log('[VideoLibrary] Edge function response:', data);
+      // Check for an 'error' property within the parsed response from the Edge Function
+      if (efResponse.error) {
+        throw new Error(efResponse.details?.message || efResponse.error);
+      }
+
+      console.log('[VideoLibrary] Edge function response:', efResponse);
       toast.success('Status check complete.', { id: toastId });
+
+      // Trigger a re-fetch of videos to update the UI with the latest status and URLs from DB
+      // This is crucial because the Edge Function updated the DB, but our component's state needs to reflect it.
+      fetchAndMonitorVideos(false);
 
     } catch (error: any) {
       console.error(`[VideoLibrary] Force status check failed:`, error);
@@ -606,16 +649,21 @@ export function VideoLibrary() {
   };
   
   const handleDelete = async (videoId: string) => {
-    const video = videos.find(v => v.id === videoId);
-    if (!video || !user) return;
+    const videoToDelete = videos.find(v => v.id === videoId);
+    if (!videoToDelete || !user) return;
 
     setDeletingVideos(prev => new Set(prev).add(videoId));
     try {
       // Stop monitoring if it's active
       videoStatusManager.stopMonitoring(videoId);
       
-      if (video.storage_path) {
-        await deleteVideoFromSupabase(video.storage_path);
+      if (videoToDelete.storage_path) {
+        // Assume deleteVideoFromSupabase can handle both video and logo_url if needed
+        await deleteVideoFromSupabase(videoToDelete.storage_path);
+        // If logo_url is stored separately in storage, you might need another delete call here
+        // e.g., if (videoToDelete.logo_url && extractStoragePath(videoToDelete.logo_url)) {
+        //   await deleteVideoFromSupabase(extractStoragePath(videoToDelete.logo_url));
+        // }
       }
       const { error: dbError } = await supabase
         .from('video_generations')
@@ -624,14 +672,13 @@ export function VideoLibrary() {
         .eq('user_id', user.id);
       if (dbError) throw new Error(dbError.message);
       toast.success('Video deleted successfully');
-      setVideos(prev => prev.filter(v => v.id !== videoId));
+      // No need to setVideos here, realtime subscription should handle it
       
-      // Update storage info
-      const deletedVideo = videos.find(v => v.id === videoId);
-      if (deletedVideo && storageInfo) {
+      // Update storage info (optimistic update, will be corrected by next fetch)
+      if (storageInfo) {
         setStorageInfo(prev => prev ? {
           ...prev,
-          used_space: prev.used_space - (deletedVideo.file_size || 0),
+          used_space: prev.used_space - (videoToDelete.file_size || 0),
           video_count: prev.video_count - 1
         } : null);
       }
