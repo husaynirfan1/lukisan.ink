@@ -15,14 +15,11 @@ import {
   Loader2,
   Cloud,
   ExternalLink,
-  RefreshCw,
-  Video,
-  Play
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { downloadImageFromSupabase, deleteImageFromSupabase } from '../lib/imageStorage';
-import { checkVideoStatus } from '../lib/piapi';
 import toast from 'react-hot-toast';
 
 interface StoredImage {
@@ -36,27 +33,9 @@ interface StoredImage {
   storage_path?: string;
 }
 
-interface StoredVideo {
-  id: string;
-  user_id: string;
-  video_type: string;
-  message: string;
-  recipient_name?: string;
-  company_name?: string;
-  video_id: string;
-  video_url: string;
-  logo_url?: string;
-  created_at: string;
-  status?: 'processing' | 'completed' | 'failed';
-}
-
-type LibraryTab = 'logos' | 'videos';
-
 export const ImageLibrary: React.FC = () => {
   const { user, getUserTier } = useAuth();
-  const [activeTab, setActiveTab] = useState<LibraryTab>('logos');
   const [images, setImages] = useState<StoredImage[]>([]);
-  const [videos, setVideos] = useState<StoredVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -64,18 +43,17 @@ export const ImageLibrary: React.FC = () => {
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
   const [deletingImages, setDeletingImages] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
-  const [processingVideos, setProcessingVideos] = useState<Set<string>>(new Set());
 
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
 
   useEffect(() => {
     if (user) {
-      fetchContent();
+      fetchImages();
     }
-  }, [user, activeTab]);
+  }, [user]);
 
-  const fetchContent = async (showLoading = true) => {
+  const fetchImages = async (showLoading = true) => {
     if (!user) return;
 
     if (showLoading) {
@@ -85,114 +63,48 @@ export const ImageLibrary: React.FC = () => {
     }
 
     try {
-      if (activeTab === 'logos') {
-        await fetchImages();
-      } else {
-        await fetchVideos();
+      console.log('Fetching images for user:', user.id);
+      
+      const { data, error } = await supabase
+        .from('logo_generations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching images:', error);
+        toast.error('Failed to load image library');
+        return;
       }
+
+      console.log('Fetched images from database:', data?.length || 0);
+
+      // Calculate expiration times for free users
+      const imagesWithExpiration = (data || []).map(image => {
+        if (!isProUser) {
+          const createdAt = new Date(image.created_at);
+          const expiresAt = new Date(createdAt.getTime() + (2 * 60 * 60 * 1000)); // 2 hours
+          return {
+            ...image,
+            expires_at: expiresAt.toISOString(),
+            storage_path: extractStoragePath(image.image_url)
+          };
+        }
+        return {
+          ...image,
+          storage_path: extractStoragePath(image.image_url)
+        };
+      });
+
+      setImages(imagesWithExpiration);
+      console.log('Updated local state with images:', imagesWithExpiration.length);
     } catch (error) {
-      console.error('Error fetching content:', error);
-      toast.error('Failed to load library content');
+      console.error('Error fetching images:', error);
+      toast.error('Failed to load image library');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  const fetchImages = async () => {
-    console.log('Fetching images for user:', user.id);
-    
-    const { data, error } = await supabase
-      .from('logo_generations')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching images:', error);
-      toast.error('Failed to load image library');
-      return;
-    }
-
-    console.log('Fetched images from database:', data?.length || 0);
-
-    // Calculate expiration times for free users
-    const imagesWithExpiration = (data || []).map(image => {
-      if (!isProUser) {
-        const createdAt = new Date(image.created_at);
-        const expiresAt = new Date(createdAt.getTime() + (2 * 60 * 60 * 1000)); // 2 hours
-        return {
-          ...image,
-          expires_at: expiresAt.toISOString(),
-          storage_path: extractStoragePath(image.image_url)
-        };
-      }
-      return {
-        ...image,
-        storage_path: extractStoragePath(image.image_url)
-      };
-    });
-
-    setImages(imagesWithExpiration);
-  };
-
-  const fetchVideos = async () => {
-    console.log('Fetching videos for user:', user.id);
-    
-    const { data, error } = await supabase
-      .from('video_generations')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching videos:', error);
-      toast.error('Failed to load video library');
-      return;
-    }
-
-    console.log('Fetched videos from database:', data?.length || 0);
-
-    // Check status of videos that don't have URLs yet
-    const videosWithStatus = await Promise.all((data || []).map(async (video) => {
-      let status: 'processing' | 'completed' | 'failed' = 'completed';
-      
-      // If video doesn't have a URL, check its status
-      if (!video.video_url && video.video_id) {
-        try {
-          const statusResponse = await checkVideoStatus(video.video_id);
-          status = statusResponse.status as 'processing' | 'completed' | 'failed';
-          
-          // If completed and we got a video URL, update the database
-          if (statusResponse.status === 'completed' && statusResponse.video_url) {
-            await supabase
-              .from('video_generations')
-              .update({ video_url: statusResponse.video_url })
-              .eq('id', video.id);
-            
-            video.video_url = statusResponse.video_url;
-          }
-        } catch (error) {
-          console.error('Error checking video status:', error);
-          status = 'failed';
-        }
-      }
-      
-      return {
-        ...video,
-        status
-      };
-    }));
-
-    setVideos(videosWithStatus);
-    
-    // Track processing videos for polling
-    const processing = new Set(
-      videosWithStatus
-        .filter(v => v.status === 'processing')
-        .map(v => v.video_id)
-    );
-    setProcessingVideos(processing);
   };
 
   // Extract storage path from Supabase URL
@@ -230,7 +142,7 @@ export const ImageLibrary: React.FC = () => {
     return `${minutes}m`;
   };
 
-  // Filter content based on search and category
+  // Filter images based on search and category
   const filteredImages = images.filter(image => {
     const matchesSearch = image.prompt.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          image.category.toLowerCase().includes(searchTerm.toLowerCase());
@@ -239,18 +151,8 @@ export const ImageLibrary: React.FC = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const filteredVideos = videos.filter(video => {
-    const matchesSearch = video.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         video.video_type.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || video.video_type === selectedCategory;
-    
-    return matchesSearch && matchesCategory;
-  });
-
   // Get unique categories
-  const categories = activeTab === 'logos' 
-    ? ['all', ...Array.from(new Set(images.map(img => img.category)))]
-    : ['all', ...Array.from(new Set(videos.map(vid => vid.video_type)))];
+  const categories = ['all', ...Array.from(new Set(images.map(img => img.category)))];
 
   const handleDownload = async (image: StoredImage) => {
     try {
@@ -281,28 +183,6 @@ export const ImageLibrary: React.FC = () => {
     }
   };
 
-  const handleVideoDownload = async (video: StoredVideo) => {
-    if (!video.video_url) {
-      toast.error('Video not available for download');
-      return;
-    }
-
-    try {
-      const filename = `video-${video.video_type}-${Date.now()}.mp4`;
-      const link = document.createElement('a');
-      link.href = video.video_url;
-      link.download = filename;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      toast.success('Video download started!');
-    } catch (error) {
-      console.error('Video download error:', error);
-      toast.error('Failed to download video');
-    }
-  };
-
   const handleDelete = async (imageId: string) => {
     const image = images.find(img => img.id === imageId);
     if (!image) {
@@ -315,6 +195,8 @@ export const ImageLibrary: React.FC = () => {
     console.log('Image ID:', imageId);
     console.log('Image URL:', image.image_url);
     console.log('Storage Path:', image.storage_path);
+    console.log('Image User ID:', image.user_id);
+    console.log('Current User ID:', user?.id);
 
     setDeletingImages(prev => new Set([...prev, imageId]));
 
@@ -441,7 +323,7 @@ export const ImageLibrary: React.FC = () => {
       // Force refresh to ensure UI consistency
       console.log('Forcing refresh due to deletion error');
       setTimeout(() => {
-        fetchContent(false);
+        fetchImages(false);
       }, 1000);
     } finally {
       setDeletingImages(prev => {
@@ -484,7 +366,7 @@ export const ImageLibrary: React.FC = () => {
       toast.error(`Deleted ${successCount} image(s), ${failCount} failed`);
       // Force refresh to ensure consistency
       setTimeout(() => {
-        fetchContent(false);
+        fetchImages(false);
       }, 1000);
     }
     
@@ -505,9 +387,7 @@ export const ImageLibrary: React.FC = () => {
   };
 
   const selectAllVisible = () => {
-    const visibleIds = activeTab === 'logos' 
-      ? filteredImages.map(img => img.id)
-      : filteredVideos.map(vid => vid.id);
+    const visibleIds = filteredImages.map(img => img.id);
     setSelectedImages(new Set(visibleIds));
   };
 
@@ -518,7 +398,7 @@ export const ImageLibrary: React.FC = () => {
   // Manual refresh function
   const handleRefresh = () => {
     console.log('Manual refresh triggered');
-    fetchContent(false);
+    fetchImages(false);
     toast.success('Library refreshed');
   };
 
@@ -527,15 +407,12 @@ export const ImageLibrary: React.FC = () => {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center">
           <Images className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Content Library</h2>
-          <p className="text-gray-600">Sign in to view your generated content</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Generated Logo Library</h2>
+          <p className="text-gray-600">Sign in to view your generated images</p>
         </div>
       </div>
     );
   }
-
-  const currentContent = activeTab === 'logos' ? filteredImages : filteredVideos;
-  const totalContent = activeTab === 'logos' ? images.length : videos.length;
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -547,9 +424,9 @@ export const ImageLibrary: React.FC = () => {
               <Images className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Content Library</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Generated Logo Library</h1>
               <p className="text-gray-600">
-                {isProUser ? 'Your content is stored until subscription ends' : 'Free images expire after 2 hours'}
+                {isProUser ? 'Your images are stored until subscription ends' : 'Free images expire after 2 hours'}
               </p>
             </div>
           </div>
@@ -567,7 +444,7 @@ export const ImageLibrary: React.FC = () => {
               <span className="text-sm">Refresh</span>
             </motion.button>
             
-            {!isProUser && activeTab === 'logos' && (
+            {!isProUser && (
               <div className="flex items-center space-x-2 px-4 py-2 bg-orange-100 text-orange-800 rounded-lg">
                 <Clock className="h-4 w-4" />
                 <span className="text-sm font-medium">Auto-delete in 2h</span>
@@ -576,46 +453,16 @@ export const ImageLibrary: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex space-x-1 bg-gray-100 rounded-lg p-1 mb-6">
-          <button
-            onClick={() => setActiveTab('logos')}
-            className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md transition-all duration-200 ${
-              activeTab === 'logos'
-                ? 'bg-white text-indigo-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <Images className="h-4 w-4" />
-            <span>Logos ({images.length})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('videos')}
-            className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md transition-all duration-200 ${
-              activeTab === 'videos'
-                ? 'bg-white text-indigo-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <Video className="h-4 w-4" />
-            <span>Videos ({videos.length})</span>
-          </button>
-        </div>
-
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-blue-100 rounded-lg">
-                {activeTab === 'logos' ? (
-                  <Images className="h-5 w-5 text-blue-600" />
-                ) : (
-                  <Video className="h-5 w-5 text-blue-600" />
-                )}
+                <Images className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total {activeTab === 'logos' ? 'Images' : 'Videos'}</p>
-                <p className="text-xl font-bold text-gray-900">{totalContent}</p>
+                <p className="text-sm text-gray-600">Total Images</p>
+                <p className="text-xl font-bold text-gray-900">{images.length}</p>
               </div>
             </div>
           </div>
@@ -628,10 +475,7 @@ export const ImageLibrary: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-600">High Quality</p>
                 <p className="text-xl font-bold text-gray-900">
-                  {activeTab === 'logos' 
-                    ? images.filter(img => img.image_url.includes('supabase.co')).length
-                    : videos.filter(vid => vid.video_url).length
-                  }
+                  {images.filter(img => img.image_url.includes('supabase.co')).length}
                 </p>
               </div>
             </div>
@@ -648,15 +492,10 @@ export const ImageLibrary: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-600">
-                  {isProUser ? 'Pro Storage' : activeTab === 'logos' ? 'Expiring Soon' : 'Processing'}
+                  {isProUser ? 'Pro Storage' : 'Expiring Soon'}
                 </p>
                 <p className="text-xl font-bold text-gray-900">
-                  {isProUser 
-                    ? 'Unlimited' 
-                    : activeTab === 'logos'
-                      ? images.filter(img => !isImageExpired(img)).length
-                      : videos.filter(vid => vid.status === 'processing').length
-                  }
+                  {isProUser ? 'Unlimited' : images.filter(img => !isImageExpired(img)).length}
                 </p>
               </div>
             </div>
@@ -673,7 +512,7 @@ export const ImageLibrary: React.FC = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder={`Search ${activeTab}...`}
+                placeholder="Search images..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -698,7 +537,7 @@ export const ImageLibrary: React.FC = () => {
 
           {/* View Mode and Actions */}
           <div className="flex items-center space-x-4">
-            {selectedImages.size > 0 && activeTab === 'logos' && (
+            {selectedImages.size > 0 && (
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-600">{selectedImages.size} selected</span>
                 <button
@@ -718,14 +557,12 @@ export const ImageLibrary: React.FC = () => {
             )}
 
             <div className="flex items-center space-x-2">
-              {activeTab === 'logos' && (
-                <button
-                  onClick={selectAllVisible}
-                  className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors text-sm"
-                >
-                  Select All
-                </button>
-              )}
+              <button
+                onClick={selectAllVisible}
+                className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors text-sm"
+              >
+                Select All
+              </button>
               
               <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
@@ -754,21 +591,17 @@ export const ImageLibrary: React.FC = () => {
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-          <span className="ml-2 text-gray-600">Loading your {activeTab}...</span>
+          <span className="ml-2 text-gray-600">Loading your images...</span>
         </div>
-      ) : currentContent.length === 0 ? (
+      ) : filteredImages.length === 0 ? (
         <div className="text-center py-12">
-          {activeTab === 'logos' ? (
-            <Images className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          ) : (
-            <Video className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          )}
+          <Images className="h-16 w-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {totalContent === 0 ? `No ${activeTab} yet` : `No ${activeTab} match your search`}
+            {images.length === 0 ? 'No images yet' : 'No images match your search'}
           </h3>
           <p className="text-gray-600 mb-6">
-            {totalContent === 0 
-              ? `Generate your first ${activeTab.slice(0, -1)} to see it here` 
+            {images.length === 0 
+              ? 'Generate your first logo to see it here' 
               : 'Try adjusting your search terms or filters'
             }
           </p>
@@ -777,9 +610,124 @@ export const ImageLibrary: React.FC = () => {
         <AnimatePresence>
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {activeTab === 'logos' ? (
-                // Logo Grid View
-                filteredImages.map((image, index) => {
+              {filteredImages.map((image, index) => {
+                const isExpired = isImageExpired(image);
+                const timeLeft = getTimeUntilExpiration(image);
+                const isSelected = selectedImages.has(image.id);
+                const isDeleting = deletingImages.has(image.id);
+                const isHighQuality = image.image_url.includes('supabase.co');
+
+                return (
+                  <motion.div
+                    key={image.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`bg-white rounded-xl shadow-md overflow-hidden border-2 transition-all duration-200 ${
+                      isSelected ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-transparent'
+                    } ${isExpired ? 'opacity-60' : ''} ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    {/* Image */}
+                    <div className="relative aspect-square bg-gray-100">
+                      <img
+                        src={image.image_url}
+                        alt={`Generated logo - ${image.category}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=400&h=400&fit=crop';
+                        }}
+                      />
+                      
+                      {/* Selection overlay */}
+                      <div 
+                        className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"
+                        onClick={() => toggleImageSelection(image.id)}
+                      >
+                        <div className={`w-6 h-6 rounded border-2 border-white ${
+                          isSelected ? 'bg-indigo-500' : 'bg-transparent'
+                        } flex items-center justify-center`}>
+                          {isSelected && <span className="text-white text-xs">✓</span>}
+                        </div>
+                      </div>
+
+                      {/* Status badges */}
+                      <div className="absolute top-2 left-2 flex flex-col space-y-1">
+                        {isHighQuality && (
+                          <div className="flex items-center space-x-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs">
+                            <Cloud className="h-3 w-3" />
+                            <span>HQ</span>
+                          </div>
+                        )}
+                        
+                        {isExpired && (
+                          <div className="flex items-center space-x-1 px-2 py-1 bg-red-500 text-white rounded-full text-xs">
+                            <AlertTriangle className="h-3 w-3" />
+                            <span>Expired</span>
+                          </div>
+                        )}
+                        
+                        {!isProUser && !isExpired && timeLeft && (
+                          <div className="flex items-center space-x-1 px-2 py-1 bg-orange-500 text-white rounded-full text-xs">
+                            <Clock className="h-3 w-3" />
+                            <span>{timeLeft}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-4">
+                      <div className="mb-3">
+                        <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
+                          {image.prompt.length > 50 ? `${image.prompt.substring(0, 50)}...` : image.prompt}
+                        </h3>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600 capitalize">{image.category}</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(image.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex space-x-2">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleDownload(image)}
+                          disabled={isExpired || isDeleting}
+                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Download className="h-3 w-3" />
+                          <span>Download</span>
+                        </motion.button>
+                        
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleDelete(image.id)}
+                          disabled={isDeleting}
+                          className="flex items-center justify-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isDeleting ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
+                        </motion.button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          ) : (
+            /* List View */
+            <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/50 overflow-hidden">
+              <div className="divide-y divide-gray-200">
+                {filteredImages.map((image, index) => {
                   const isExpired = isImageExpired(image);
                   const timeLeft = getTimeUntilExpiration(image);
                   const isSelected = selectedImages.has(image.id);
@@ -789,85 +737,83 @@ export const ImageLibrary: React.FC = () => {
                   return (
                     <motion.div
                       key={image.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ delay: index * 0.05 }}
-                      className={`bg-white rounded-xl shadow-md overflow-hidden border-2 transition-all duration-200 ${
-                        isSelected ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-transparent'
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ delay: index * 0.02 }}
+                      className={`p-4 hover:bg-gray-50 transition-colors ${
+                        isSelected ? 'bg-indigo-50' : ''
                       } ${isExpired ? 'opacity-60' : ''} ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
                     >
-                      {/* Image */}
-                      <div className="relative aspect-square bg-gray-100">
-                        <img
-                          src={image.image_url}
-                          alt={`Generated logo - ${image.category}`}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=400&h=400&fit=crop';
-                          }}
-                        />
-                        
-                        {/* Selection overlay */}
-                        <div 
-                          className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"
+                      <div className="flex items-center space-x-4">
+                        {/* Selection checkbox */}
+                        <button
                           onClick={() => toggleImageSelection(image.id)}
+                          className={`w-5 h-5 rounded border-2 ${
+                            isSelected 
+                              ? 'bg-indigo-500 border-indigo-500' 
+                              : 'border-gray-300 hover:border-indigo-400'
+                          } flex items-center justify-center transition-colors`}
                         >
-                          <div className={`w-6 h-6 rounded border-2 border-white ${
-                            isSelected ? 'bg-indigo-500' : 'bg-transparent'
-                          } flex items-center justify-center`}>
-                            {isSelected && <span className="text-white text-xs">✓</span>}
-                          </div>
+                          {isSelected && <span className="text-white text-xs">✓</span>}
+                        </button>
+
+                        {/* Thumbnail */}
+                        <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                          <img
+                            src={image.image_url}
+                            alt={`Generated logo - ${image.category}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=64&h=64&fit=crop';
+                            }}
+                          />
                         </div>
 
-                        {/* Status badges */}
-                        <div className="absolute top-2 left-2 flex flex-col space-y-1">
-                          {isHighQuality && (
-                            <div className="flex items-center space-x-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs">
-                              <Cloud className="h-3 w-3" />
-                              <span>HQ</span>
-                            </div>
-                          )}
-                          
-                          {isExpired && (
-                            <div className="flex items-center space-x-1 px-2 py-1 bg-red-500 text-white rounded-full text-xs">
-                              <AlertTriangle className="h-3 w-3" />
-                              <span>Expired</span>
-                            </div>
-                          )}
-                          
-                          {!isProUser && !isExpired && timeLeft && (
-                            <div className="flex items-center space-x-1 px-2 py-1 bg-orange-500 text-white rounded-full text-xs">
-                              <Clock className="h-3 w-3" />
-                              <span>{timeLeft}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content */}
-                      <div className="p-4">
-                        <div className="mb-3">
-                          <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
-                            {image.prompt.length > 50 ? `${image.prompt.substring(0, 50)}...` : image.prompt}
-                          </h3>
-                          <div className="flex items-center justify-between">
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-gray-900 truncate">{image.prompt}</h3>
+                          <div className="flex items-center space-x-4 mt-1">
                             <span className="text-sm text-gray-600 capitalize">{image.category}</span>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-sm text-gray-500">
                               {new Date(image.created_at).toLocaleDateString()}
                             </span>
+                            
+                            {/* Status badges */}
+                            <div className="flex items-center space-x-2">
+                              {isHighQuality && (
+                                <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                                  <Cloud className="h-3 w-3" />
+                                  <span>HQ</span>
+                                </div>
+                              )}
+                              
+                              {isExpired && (
+                                <div className="flex items-center space-x-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  <span>Expired</span>
+                                </div>
+                              )}
+                              
+                              {!isProUser && !isExpired && timeLeft && (
+                                <div className="flex items-center space-x-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{timeLeft}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex space-x-2">
+                        <div className="flex items-center space-x-2">
                           <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                             onClick={() => handleDownload(image)}
                             disabled={isExpired || isDeleting}
-                            className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center space-x-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Download className="h-3 w-3" />
                             <span>Download</span>
@@ -878,7 +824,7 @@ export const ImageLibrary: React.FC = () => {
                             whileTap={{ scale: 0.95 }}
                             onClick={() => handleDelete(image.id)}
                             disabled={isDeleting}
-                            className="flex items-center justify-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center justify-center p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {isDeleting ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -890,317 +836,7 @@ export const ImageLibrary: React.FC = () => {
                       </div>
                     </motion.div>
                   );
-                })
-              ) : (
-                // Video Grid View
-                filteredVideos.map((video, index) => (
-                  <motion.div
-                    key={video.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200"
-                  >
-                    {/* Video Preview */}
-                    <div className="relative aspect-video bg-gray-100">
-                      {video.video_url ? (
-                        <video
-                          src={video.video_url}
-                          className="w-full h-full object-cover"
-                          controls={false}
-                          muted
-                          onMouseEnter={(e) => e.currentTarget.play()}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.pause();
-                            e.currentTarget.currentTime = 0;
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                          {video.status === 'processing' ? (
-                            <div className="text-center">
-                              <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mx-auto mb-2" />
-                              <p className="text-sm text-gray-600">Processing...</p>
-                            </div>
-                          ) : (
-                            <div className="text-center">
-                              <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                              <p className="text-sm text-red-600">Failed</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Play overlay */}
-                      {video.video_url && (
-                        <div className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <Play className="h-12 w-12 text-white" />
-                        </div>
-                      )}
-
-                      {/* Status badge */}
-                      <div className="absolute top-2 left-2">
-                        {video.status === 'processing' && (
-                          <div className="flex items-center space-x-1 px-2 py-1 bg-blue-500 text-white rounded-full text-xs">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            <span>Processing</span>
-                          </div>
-                        )}
-                        {video.status === 'completed' && video.video_url && (
-                          <div className="flex items-center space-x-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs">
-                            <CheckCircle className="h-3 w-3" />
-                            <span>Ready</span>
-                          </div>
-                        )}
-                        {video.status === 'failed' && (
-                          <div className="flex items-center space-x-1 px-2 py-1 bg-red-500 text-white rounded-full text-xs">
-                            <AlertTriangle className="h-3 w-3" />
-                            <span>Failed</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-4">
-                      <div className="mb-3">
-                        <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
-                          {video.message.length > 50 ? `${video.message.substring(0, 50)}...` : video.message}
-                        </h3>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600 capitalize">{video.video_type}</span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(video.created_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex space-x-2">
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleVideoDownload(video)}
-                          disabled={!video.video_url}
-                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Download className="h-3 w-3" />
-                          <span>Download</span>
-                        </motion.button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))
-              )}
-            </div>
-          ) : (
-            /* List View */
-            <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/50 overflow-hidden">
-              <div className="divide-y divide-gray-200">
-                {activeTab === 'logos' ? (
-                  // Logo List View
-                  filteredImages.map((image, index) => {
-                    const isExpired = isImageExpired(image);
-                    const timeLeft = getTimeUntilExpiration(image);
-                    const isSelected = selectedImages.has(image.id);
-                    const isDeleting = deletingImages.has(image.id);
-                    const isHighQuality = image.image_url.includes('supabase.co');
-
-                    return (
-                      <motion.div
-                        key={image.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ delay: index * 0.02 }}
-                        className={`p-4 hover:bg-gray-50 transition-colors ${
-                          isSelected ? 'bg-indigo-50' : ''
-                        } ${isExpired ? 'opacity-60' : ''} ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
-                      >
-                        <div className="flex items-center space-x-4">
-                          {/* Selection checkbox */}
-                          <button
-                            onClick={() => toggleImageSelection(image.id)}
-                            className={`w-5 h-5 rounded border-2 ${
-                              isSelected 
-                                ? 'bg-indigo-500 border-indigo-500' 
-                                : 'border-gray-300 hover:border-indigo-400'
-                            } flex items-center justify-center transition-colors`}
-                          >
-                            {isSelected && <span className="text-white text-xs">✓</span>}
-                          </button>
-
-                          {/* Thumbnail */}
-                          <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                            <img
-                              src={image.image_url}
-                              alt={`Generated logo - ${image.category}`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=64&h=64&fit=crop';
-                              }}
-                            />
-                          </div>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium text-gray-900 truncate">{image.prompt}</h3>
-                            <div className="flex items-center space-x-4 mt-1">
-                              <span className="text-sm text-gray-600 capitalize">{image.category}</span>
-                              <span className="text-sm text-gray-500">
-                                {new Date(image.created_at).toLocaleDateString()}
-                              </span>
-                              
-                              {/* Status badges */}
-                              <div className="flex items-center space-x-2">
-                                {isHighQuality && (
-                                  <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-                                    <Cloud className="h-3 w-3" />
-                                    <span>HQ</span>
-                                  </div>
-                                )}
-                                
-                                {isExpired && (
-                                  <div className="flex items-center space-x-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    <span>Expired</span>
-                                  </div>
-                                )}
-                                
-                                {!isProUser && !isExpired && timeLeft && (
-                                  <div className="flex items-center space-x-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
-                                    <Clock className="h-3 w-3" />
-                                    <span>{timeLeft}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex items-center space-x-2">
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => handleDownload(image)}
-                              disabled={isExpired || isDeleting}
-                              className="flex items-center space-x-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <Download className="h-3 w-3" />
-                              <span>Download</span>
-                            </motion.button>
-                            
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => handleDelete(image.id)}
-                              disabled={isDeleting}
-                              className="flex items-center justify-center p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isDeleting ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-3 w-3" />
-                              )}
-                            </motion.button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })
-                ) : (
-                  // Video List View
-                  filteredVideos.map((video, index) => (
-                    <motion.div
-                      key={video.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      transition={{ delay: index * 0.02 }}
-                      className="p-4 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center space-x-4">
-                        {/* Video Thumbnail */}
-                        <div className="w-24 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 relative">
-                          {video.video_url ? (
-                            <video
-                              src={video.video_url}
-                              className="w-full h-full object-cover"
-                              muted
-                              onMouseEnter={(e) => e.currentTarget.play()}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.pause();
-                                e.currentTarget.currentTime = 0;
-                              }}
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                              {video.status === 'processing' ? (
-                                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-                              ) : (
-                                <AlertTriangle className="h-6 w-6 text-red-500" />
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* Play icon overlay */}
-                          {video.video_url && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity">
-                              <Play className="h-8 w-8 text-white" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-gray-900 truncate">{video.message}</h3>
-                          <div className="flex items-center space-x-4 mt-1">
-                            <span className="text-sm text-gray-600 capitalize">{video.video_type}</span>
-                            <span className="text-sm text-gray-500">
-                              {new Date(video.created_at).toLocaleDateString()}
-                            </span>
-                            
-                            {/* Status badge */}
-                            {video.status === 'processing' && (
-                              <div className="flex items-center space-x-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                <span>Processing</span>
-                              </div>
-                            )}
-                            {video.status === 'completed' && video.video_url && (
-                              <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-                                <CheckCircle className="h-3 w-3" />
-                                <span>Ready</span>
-                              </div>
-                            )}
-                            {video.status === 'failed' && (
-                              <div className="flex items-center space-x-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs">
-                                <AlertTriangle className="h-3 w-3" />
-                                <span>Failed</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex items-center space-x-2">
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => handleVideoDownload(video)}
-                            disabled={!video.video_url}
-                            className="flex items-center space-x-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Download className="h-3 w-3" />
-                            <span>Download</span>
-                          </motion.button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
+                })}
               </div>
             </div>
           )}

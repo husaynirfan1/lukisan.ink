@@ -21,38 +21,49 @@ const showcaseItems: MediaItem[] = [
     type: 'logo',
     src: '/assets/images/gallery/lukisan-logo.png',
     title: 'Lukisan Brand Identity',
-    description: 'Our banner logo representing innovation in AI-powered creative solutions',
+    description: 'Our banner logo representing innovation in AI-powered creative solutions.',
     aspectRatio: '2:1',
     featured: true
 
   },
    {
     id: 'brand-showcase-1',
-    type: 'image',
-    src: '/assets/images/gallery/sample-5.png',
-    title: 'Fishermen Friend',
-    description: 'Modern, clean and simple with natural blend.',
-    aspectRatio: '2:1'
+    type: 'video',
+    src: '/assets/videos/gallery/sample-berger.mp4',
+    title: 'BERGER Malaysia',
+    description: 'A local burger stall, "BERGER" showcasing burger.',
+    aspectRatio: '2:1',
+     featured: true
   },
    {
     id: 'brand-showcase-1',
-    type: 'image',
-    src: '/assets/images/gallery/sample-6.png',
-    title: 'Fishermen Friend',
-    description: 'Modern, clean and simple with natural blend.',
-    aspectRatio: '2:1'
+    type: 'video',
+    src: '/assets/videos/gallery/sample-johndoe.mp4',
+    title: 'Corporate Intro',
+    description: 'Modern, clean and simple with corporate feels.',
+    aspectRatio: '2:1',
+     featured: true
   },
-  {
+ {
     id: 'brand-showcase-1',
-    type: 'image',
-    src: '/assets/images/gallery/sample-1.png',
-    title: 'Fishermen Friend',
-    description: 'Modern, clean and simple with natural blend.',
-    aspectRatio: '1:1'
+    type: 'video',
+    src: '/assets/videos/gallery/sample-splash.mp4',
+    title: 'Corporate Intro',
+    description: 'Chaotic splash brand video.',
+    aspectRatio: '2:1',
+     featured: true
+  },
+   {
+    id: 'brand-showcase-1',
+    type: 'video',
+    src: '/assets/videos/gallery/sample-tech.mp4',
+    title: 'Corporate Intro',
+    description: 'Techy-feels videos introducing a product.',
+    aspectRatio: '2:1',
   },
   {
     id: 'brand-showcase-2',
-    type: 'image',
+    type: 'logo',
     src: '/assets/images/gallery/sample-2.png',
     title: 'Chicken Rice Shop',
     description: 'Mixed abstract design of a chicken rice shop.',
@@ -60,7 +71,7 @@ const showcaseItems: MediaItem[] = [
   },
   {
     id: 'brand-showcase-2',
-    type: 'image',
+    type: 'logo',
     src: '/assets/images/gallery/sample-4.png',
     title: 'Chicken Rice Shop',
     description: 'Tech company with futuristic looks.',
@@ -68,10 +79,10 @@ const showcaseItems: MediaItem[] = [
   },
   {
     id: 'brand-showcase-3',
-    type: 'image',
+    type: 'logo',
     src: '/assets/images/gallery/sample-3.png',
     title: 'Creative Industries',
-    description: 'Artistic and innovative logos for creative professionals',
+    description: 'Artistic and innovative logos for creative professionals.',
     aspectRatio: '1:1'
   }
 ];
@@ -90,25 +101,22 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ item, isHovered, onHover }) =
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+  const video = videoRef.current;
+  if (!video) return;
 
-    const handleLoadedData = () => setIsLoaded(true);
-    video.addEventListener('loadeddata', handleLoadedData);
+  const handleLoadedData = () => setIsLoaded(true);
+  video.addEventListener('loadeddata', handleLoadedData);
 
-    if (isHovered && !isPlaying && isLoaded) {
-      video.currentTime = 0;
-      video.play().catch(console.error);
-      setIsPlaying(true);
-    } else if (!isHovered && isPlaying) {
-      video.pause();
-      setIsPlaying(false);
-    }
+  // Play the video automatically once it's loaded
+  if (!isPlaying && isLoaded) {
+    video.play().catch(console.error);
+    setIsPlaying(true);
+  }
 
-    return () => {
-      video.removeEventListener('loadeddata', handleLoadedData);
-    };
-  }, [isHovered, isPlaying, isLoaded]);
+  return () => {
+    video.removeEventListener('loadeddata', handleLoadedData);
+  };
+}, [isPlaying, isLoaded]); // <-- Removed 'isHovered' from dependencies
 
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -174,19 +182,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ item, isHovered, onHover }) =
         className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-center justify-center"
       >
         <div className="flex items-center space-x-4">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={togglePlay}
-            className="p-4 bg-white/90 backdrop-blur-sm rounded-full shadow-xl hover:bg-white transition-all duration-200"
-            aria-label={isPlaying ? 'Pause video' : 'Play video'}
-          >
-            {isPlaying ? (
-              <Pause className="h-6 w-6 text-gray-900" />
-            ) : (
-              <Play className="h-6 w-6 text-gray-900 ml-1" />
-            )}
-          </motion.button>
+          
 
           <motion.button
             whileHover={{ scale: 1.1 }}
@@ -205,18 +201,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ item, isHovered, onHover }) =
       </motion.div>
 
       {/* Play indicator when not hovered */}
-      {!showControls && isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0.7 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="p-6 bg-white/20 backdrop-blur-sm rounded-full border border-white/30"
-          >
-            <Play className="h-10 w-10 text-white ml-1" />
-          </motion.div>
-        </div>
-      )}
+     
     </div>
   );
 };
@@ -430,7 +415,7 @@ export const MediaShowcase: React.FC = () => {
                 className="inline-flex items-center space-x-3 px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl button-text hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
               >
                 <Sparkles className="h-5 w-5" />
-                <span>Start Creating Now</span>
+                <span>Start Creating Now</span> 
                 <ExternalLink className="h-5 w-5" />
               </motion.button>
             </div>

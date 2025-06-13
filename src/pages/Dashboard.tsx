@@ -46,7 +46,7 @@ export const Dashboard: React.FC = () => {
     },
     {
       id: 'video' as DashboardTab,
-      name: 'Create Videos',
+      name: 'Generate Videos',
       icon: Video,
       description: 'Generate AI-powered marketing videos',
       proOnly: true,
