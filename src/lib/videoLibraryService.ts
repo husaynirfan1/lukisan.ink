@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase } from './supabase'; // Your regular client-side Supabase client instance
 import { videoProcessingService } from './videoProcessingService';
 import toast from 'react-hot-toast';
 
@@ -9,7 +9,7 @@ export interface VideoRecord {
   video_type: string;
   message: string;
   video_url: string | null;
-  thumbnail_url?: string;
+  logo_url?: string | null; // Corrected to logo_url and made optional as it might be null
   storage_path?: string;
   status: 'pending' | 'processing' | 'downloading' | 'storing' | 'completed' | 'failed';
   progress: number;
@@ -37,6 +37,7 @@ export interface VideoStats {
 
 /**
  * Service for managing video library data
+ * Implemented as a Singleton to ensure a single instance manages subscriptions and cache.
  */
 class VideoLibraryService {
   private static instance: VideoLibraryService;
@@ -56,7 +57,9 @@ class VideoLibraryService {
   }
 
   /**
-   * Initialize the service and set up realtime subscription
+   * Initialize the service and set up realtime subscription.
+   * Fetches initial video data and starts monitoring processing videos.
+   * @param userId The ID of the current authenticated user.
    */
   public async initialize(userId: string): Promise<void> {
     // Set up realtime subscription
@@ -70,12 +73,15 @@ class VideoLibraryService {
   }
 
   /**
-   * Set up realtime subscription for video updates
+   * Set up realtime subscription for video updates specific to the user.
+   * Cleans up any existing subscription first.
+   * @param userId The ID of the user for whom to subscribe to changes.
    */
   private setupRealtimeSubscription(userId: string): void {
     // Clean up existing subscription if any
     if (this.realtimeSubscription) {
       supabase.removeChannel(this.realtimeSubscription);
+      this.realtimeSubscription = null;
     }
     
     // Create new subscription
@@ -86,30 +92,36 @@ class VideoLibraryService {
           event: '*', 
           schema: 'public', 
           table: 'video_generations',
-          filter: `user_id=eq.${userId}`
+          filter: `user_id=eq.${userId}` // Filter for the current user's videos
         },
         (payload) => {
-          console.log('[VideoLibrary] Realtime update received:', payload);
+          console.log('[VideoLibraryService] Realtime update received:', payload);
           this.handleRealtimeUpdate(payload);
         }
       )
       .subscribe((status) => {
-        console.log('[VideoLibrary] Subscription status:', status);
+        console.log('[VideoLibraryService] Subscription status:', status);
       });
   }
 
   /**
-   * Handle realtime updates from Supabase
+   * Handles realtime updates from Supabase, updating the cached videos.
+   * @param payload The payload object received from the Supabase Realtime subscription.
    */
   private handleRealtimeUpdate(payload: any): void {
     const { eventType, new: newRecord, old: oldRecord } = payload;
     
     // Update cached videos based on the event type
     if (eventType === 'INSERT') {
-      this.cachedVideos = [newRecord, ...this.cachedVideos];
+      // Ensure newRecord is cast to VideoRecord and added to the front
+      this.cachedVideos = [{ ...newRecord, storage_path: newRecord.video_url ? this.extractStoragePath(newRecord.video_url) : undefined } as VideoRecord, ...this.cachedVideos];
     } else if (eventType === 'UPDATE') {
       this.cachedVideos = this.cachedVideos.map(video => 
-        video.id === newRecord.id ? { ...video, ...newRecord } : video
+        video.id === newRecord.id ? { 
+          ...video, 
+          ...newRecord, 
+          storage_path: newRecord.video_url ? this.extractStoragePath(newRecord.video_url) : undefined 
+        } as VideoRecord : video
       );
     } else if (eventType === 'DELETE') {
       this.cachedVideos = this.cachedVideos.filter(video => video.id !== oldRecord.id);
@@ -120,7 +132,10 @@ class VideoLibraryService {
   }
 
   /**
-   * Fetch videos from the database
+   * Fetches videos from the database. Can be forced to bypass cache.
+   * @param userId The ID of the user whose videos to fetch.
+   * @param force If true, bypasses the cache and fetches fresh data.
+   * @returns A promise resolving to an array of VideoRecord.
    */
   public async fetchVideos(userId: string, force: boolean = false): Promise<VideoRecord[]> {
     // Prevent concurrent fetches
@@ -128,7 +143,7 @@ class VideoLibraryService {
       return this.cachedVideos;
     }
     
-    // Use cache if available and not forced
+    // Use cache if available and not forced (cache invalidates after 30 seconds)
     const now = Date.now();
     if (!force && this.cachedVideos.length > 0 && now - this.lastFetchTime < 30000) {
       return this.cachedVideos;
@@ -139,7 +154,7 @@ class VideoLibraryService {
     try {
       const { data, error } = await supabase
         .from('video_generations')
-        .select('*')
+        .select('id, user_id, video_id, video_type, message, video_url, logo_url, storage_path, status, progress, file_size, error_message, created_at, updated_at') // Explicitly select logo_url
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
@@ -147,7 +162,20 @@ class VideoLibraryService {
         throw error;
       }
       
-      this.cachedVideos = data || [];
+      // Map and normalize status and storage_path
+      this.cachedVideos = (data || []).map(video => {
+        const validStatuses = ['pending', 'processing', 'downloading', 'storing', 'completed', 'failed'];
+        let currentStatus = video.status;
+        if (!currentStatus || !validStatuses.includes(currentStatus)) {
+          currentStatus = 'pending';
+        }
+        return {
+            ...video,
+            status: currentStatus,
+            storage_path: video.video_url ? this.extractStoragePath(video.video_url) : undefined
+        } as VideoRecord;
+      });
+
       this.lastFetchTime = now;
       
       // Notify subscribers
@@ -155,7 +183,7 @@ class VideoLibraryService {
       
       return this.cachedVideos;
     } catch (error) {
-      console.error('[VideoLibrary] Error fetching videos:', error);
+      console.error('[VideoLibraryService] Error fetching videos:', error);
       throw error;
     } finally {
       this.isFetching = false;
@@ -163,7 +191,22 @@ class VideoLibraryService {
   }
 
   /**
-   * Get videos with filtering and sorting
+   * Helper to extract storage path from a Supabase Storage public URL.
+   * @param url The public URL of the stored video.
+   * @returns The storage path or undefined if not a valid Supabase Storage URL.
+   */
+  private extractStoragePath(url: string): string | undefined {
+    if (!url || !url.includes('supabase.co/storage/v1/object/public/generated-videos/')) {
+      return undefined;
+    }
+    const parts = url.split('/generated-videos/');
+    return parts.length > 1 ? parts[1] : undefined;
+  }
+
+  /**
+   * Retrieves videos from the cache with optional filtering and sorting.
+   * @param filters An optional object containing filter and sort criteria.
+   * @returns An array of filtered and sorted VideoRecord.
    */
   public getVideos(filters?: VideoFilter): VideoRecord[] {
     let filteredVideos = [...this.cachedVideos];
@@ -186,7 +229,9 @@ class VideoLibraryService {
         const searchLower = filters.search.toLowerCase();
         filteredVideos = filteredVideos.filter(video => 
           video.message.toLowerCase().includes(searchLower) ||
-          video.video_type.toLowerCase().includes(searchLower)
+          video.video_type.toLowerCase().includes(searchLower) ||
+          (video as any).recipient_name?.toLowerCase().includes(searchLower) || // Cast to any to access optional fields
+          (video as any).company_name?.toLowerCase().includes(searchLower)
         );
       }
       
@@ -209,7 +254,8 @@ class VideoLibraryService {
   }
 
   /**
-   * Get video statistics
+   * Calculates and returns statistics about the videos in the library.
+   * @returns A VideoStats object.
    */
   public getVideoStats(): VideoStats {
     const total = this.cachedVideos.length;
@@ -233,57 +279,67 @@ class VideoLibraryService {
   }
 
   /**
-   * Delete a video
+   * Deletes a video record and its associated files from Supabase Storage and database
+   * by invoking a secure Edge Function.
+   * @param videoId The ID of the video record in the 'video_generations' table to delete.
+   * @throws An error if the deletion via Edge Function fails.
    */
   public async deleteVideo(videoId: string): Promise<void> {
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) {
+      throw new Error("User not authenticated for deletion.");
+    }
+
+    console.log(`[VideoLibraryService] Invoking Edge Function 'delete-video-and-data' for video DB ID: ${videoId}`);
+
     try {
-      // Get the video first to check if it has a storage path
-      const { data: video, error: fetchError } = await supabase
-        .from('video_generations')
-        .select('storage_path')
-        .eq('id', videoId)
-        .single();
-      
-      if (fetchError) {
-        throw fetchError;
+      // Invoke the Edge Function to handle deletion securely
+      const { data: rawData, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
+        body: { video_db_id: videoId },
+      });
+
+      if (efError) {
+        console.error(`[VideoLibraryService] Edge function delete error:`, efError);
+        throw new Error(efError.message);
       }
-      
-      // If the video has a storage path, delete the file from storage
-      if (video?.storage_path) {
-        const { error: storageError } = await supabase.storage
-          .from('generated-videos')
-          .remove([video.storage_path]);
-        
-        if (storageError) {
-          console.warn('[VideoLibrary] Failed to delete from storage:', storageError);
-          // Continue with database deletion even if storage deletion fails
+
+      // Parse the raw JSON string response from the Edge Function
+      let efResponse: any;
+      if (rawData) {
+        try {
+          efResponse = JSON.parse(rawData as string);
+        } catch (parseError) {
+          console.error('[VideoLibraryService] Failed to parse Edge Function response from delete function:', rawData, parseError);
+          throw new Error('Malformed response from deletion Edge Function.');
         }
+      } else {
+        throw new Error('No data received from deletion Edge Function.');
       }
-      
-      // Delete from database
-      const { error: deleteError } = await supabase
-        .from('video_generations')
-        .delete()
-        .eq('id', videoId);
-      
-      if (deleteError) {
-        throw deleteError;
+
+      if (!efResponse.success) {
+        console.error(`[VideoLibraryService] Deletion Edge Function reported failure:`, efResponse.error || efResponse.message);
+        throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
       }
-      
-      // Update cache
+
+      console.log(`[VideoLibraryService] Video ${videoId} successfully deleted via Edge Function. Storage deleted: ${efResponse.storageDeleted}, Logo deleted: ${efResponse.logoDeleted}`);
+
+      // The Realtime subscription should automatically update this.cachedVideos,
+      // so no direct manipulation of this.cachedVideos is strictly needed here for deletion.
+      // However, we can optimistically update for immediate UI feedback.
       this.cachedVideos = this.cachedVideos.filter(video => video.id !== videoId);
-      
-      // Notify subscribers
-      this.notifySubscribers();
-      
-    } catch (error) {
-      console.error('[VideoLibrary] Error deleting video:', error);
-      throw error;
+      this.notifySubscribers(); // Notify immediately for UI update
+
+    } catch (error: any) {
+      console.error(`[VideoLibraryService] Error in deleteVideo for ${videoId}:`, error);
+      throw error; // Re-throw to be caught by the calling handleDelete in component
     }
   }
 
   /**
-   * Download a video
+   * Downloads a video from a given URL.
+   * @param videoUrl The public URL of the video to download.
+   * @param filename The suggested filename for the download.
+   * @throws An error if the download fails.
    */
   public async downloadVideo(videoUrl: string, filename: string): Promise<void> {
     try {
@@ -303,44 +359,53 @@ class VideoLibraryService {
       link.click();
       document.body.removeChild(link);
       
-      // Clean up
+      // Clean up the object URL after a short delay
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       
     } catch (error) {
-      console.error('[VideoLibrary] Error downloading video:', error);
+      console.error('[VideoLibraryService] Error downloading video:', error);
       throw error;
     }
   }
 
   /**
-   * Start monitoring processing videos
+   * Starts monitoring any videos that are currently processing (e.g., pending, processing)
+   * by delegating to videoProcessingService.
+   * @param userId The ID of the user whose videos to monitor.
    */
   private startMonitoringProcessingVideos(userId: string): void {
     const processingVideos = this.cachedVideos.filter(video => 
-      ['pending', 'processing'].includes(video.status)
+      ['pending', 'processing', 'downloading', 'storing'].includes(video.status)
     );
     
-    console.log(`[VideoLibrary] Starting monitoring for ${processingVideos.length} processing videos`);
+    console.log(`[VideoLibraryService] Starting monitoring for ${processingVideos.length} processing videos`);
     
     for (const video of processingVideos) {
+      // videoProcessingService will handle the actual polling and DB updates
       videoProcessingService.startProcessing(video.video_id, video.id, userId);
     }
   }
 
   /**
-   * Force check the status of a video
+   * Force checks the status of a specific video by delegating to videoProcessingService.
+   * This is typically triggered by a manual "retry" action in the UI.
+   * @param videoId The database ID of the video to force check.
+   * @throws An error if the force check operation fails.
    */
   public async forceCheckStatus(videoId: string): Promise<void> {
     try {
       await videoProcessingService.forceCheckStatus(videoId);
     } catch (error) {
-      console.error('[VideoLibrary] Force check failed:', error);
+      console.error('[VideoLibraryService] Force check failed:', error);
       throw error;
     }
   }
 
   /**
-   * Subscribe to video updates
+   * Subscribes a component to video updates.
+   * @param id A unique identifier for the subscriber.
+   * @param callback The function to call when videos are updated.
+   * @returns An unsubscribe function.
    */
   public subscribe(id: string, callback: (videos: VideoRecord[]) => void): () => void {
     this.subscribers.set(id, callback);
@@ -355,7 +420,7 @@ class VideoLibraryService {
   }
 
   /**
-   * Notify all subscribers of updates
+   * Notifies all registered subscribers of updates to the video cache.
    */
   private notifySubscribers(): void {
     for (const callback of this.subscribers.values()) {
@@ -364,7 +429,7 @@ class VideoLibraryService {
   }
 
   /**
-   * Clean up resources
+   * Cleans up all active subscriptions and cached data.
    */
   public cleanup(): void {
     if (this.realtimeSubscription) {
@@ -374,6 +439,8 @@ class VideoLibraryService {
     
     this.subscribers.clear();
     this.cachedVideos = [];
+    this.lastFetchTime = 0; // Reset last fetch time
+    this.isFetching = false; // Reset fetching state
   }
 }
 
