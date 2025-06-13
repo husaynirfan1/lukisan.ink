@@ -552,7 +552,7 @@ export const EnhancedVideoLibrary: React.FC = () => {
   };
 
   // Handle delete 
-  // In your EnhancedVideoLibrary component (eclib.tsx)
+// In your EnhancedVideoLibrary component (eclib.tsx)
 
 const handleDelete = async (videoId: string) => {
   if (!user) return;
