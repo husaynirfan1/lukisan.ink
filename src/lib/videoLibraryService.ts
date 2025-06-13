@@ -240,7 +240,7 @@ class VideoLibraryService {
       // Get the video first to check if it has a storage path
       const { data: video, error: fetchError } = await supabase
         .from('video_generations')
-        .select('videos')
+        .select('id')
         .eq('id', videoId)
         .single();
       
