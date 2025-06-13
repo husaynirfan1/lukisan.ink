@@ -49,7 +49,7 @@ const showcaseItems: MediaItem[] = [
     type: 'video',
     src: '/assets/videos/gallery/sample-splash.mp4',
     title: 'Corporate Intro',
-    description: 'Modern, clean and simple with corporate feels.',
+    description: 'Chaotic splash brand video.',
     aspectRatio: '2:1',
      featured: true
   },
@@ -58,7 +58,7 @@ const showcaseItems: MediaItem[] = [
     type: 'video',
     src: '/assets/videos/gallery/sample-tech.mp4',
     title: 'Corporate Intro',
-    description: 'Modern, clean and simple with corporate feels.',
+    description: 'Techy-feels videos introducing a product.',
     aspectRatio: '2:1',
   },
   {
