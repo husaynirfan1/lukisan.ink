@@ -134,7 +134,7 @@ export const ListVideoCard: React.FC<Props> = ({
                 {!showPreview && (
                   <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                     <img
-                      src="https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+\n+to+Preview"
+                      src="https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+\nto+Preview"
                       alt="Video thumbnail"
                       className="w-full h-full object-cover"
                     />
