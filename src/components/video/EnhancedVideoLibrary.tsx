@@ -167,57 +167,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
     }
   };
 
-// In EnhancedVideoLibrary component
 
-// const handleDelete = async (videoId: string) => {
-//   if (!user) return;
-
-//   const videoToDelete = videos.find(v => v.id === videoId);
-//   if (!videoToDelete) {
-//     toast.error("Could not find video to delete.");
-//     return;
-//   }
-
-//   setDeletingVideos(prev => new Set(prev).add(videoId));
-//   const toastId = toast.loading('Deleting video...');
-
-//   try {
-//     // Stop monitoring if it's active
-//     videoStatusManager.stopMonitoring(videoId);
-
-//     // --- Invoke Edge Function for deletion ---
-//     console.log(`[VideoLibrary] Calling Edge Function 'delete-video-and-data' for DB ID: ${videoId}`);
-    
-//     // NOTE: This assumes 'supabase' is defined and accessible in this component's scope.
-//     // If not, you may need to import it or get it from a context.
-//     const { data, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
-//       body: { video_db_id: videoId },
-//     });
-
-//     if (efError) {
-//       throw new Error(efError.message);
-//     }
-
-//     const efResponse = data as { success: boolean; message: string; error?: string };
-
-//     if (efResponse.success) {
-//       toast.success('Video deleted successfully!', { id: toastId });
-//       // The UI will update via the realtime subscription, so no need to manually filter `videos` state.
-//     } else {
-//       throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
-//     }
-
-//   } catch (error: any) {
-//     toast.error(`Failed to delete video: ${error.message}`, { id: toastId });
-//     console.error('[VideoLibrary] Delete error:', error);
-//   } finally {
-//     setDeletingVideos(prev => {
-//       const newSet = new Set(prev);
-//       newSet.delete(videoId);
-//       return newSet;
-//     });
-//   }
-// };
   const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
     onRetry(video.id);
