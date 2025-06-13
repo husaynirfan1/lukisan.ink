@@ -14,31 +14,36 @@ serve(async (req) => {
 
   try {
     const requestBody = await req.json();
-    const dbVideoId = requestBody.video_id; // Renamed to avoid confusion with PiAPI's video_id
+    const dbVideoId = requestBody.video_id;
 
     if (!dbVideoId) {
-      // Use standard Error object for consistency
       throw new Error("Missing video_id in request body");
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    // Ensure environment variables are set
+    if (!supabaseUrl || !supabaseServiceKey) {
+        throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.");
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: videos, error: findError } = await supabase
       .from("video_generations")
-      .select("id, video_id, status, progress, storage_path, video_url, thumbnail_url") // Added thumbnail_url
+      .select("id, video_id, status, progress, storage_path, video_url, thumbnail_url")
       .eq("id", dbVideoId)
       .limit(1);
 
     if (findError) {
-        console.error(`Supabase find error for video_id ${dbVideoId}:`, findError);
-        throw new Error(`Failed to find video: ${findError.message}`);
+      console.error(`Supabase find error for video_id ${dbVideoId}:`, findError);
+      throw new Error(`Failed to find video: ${findError.message}`);
     }
     if (!videos || videos.length === 0) {
-      return new Response(JSON.stringify({ error: `Video not found for id: ${dbVideoId}` }), { 
+      return new Response(JSON.stringify({ error: `Video not found for id: ${dbVideoId}` }), {
         status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" } // Ensure headers are set
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
     const video = videos[0]; // video.video_id is the task_id for PiAPI
@@ -48,64 +53,74 @@ serve(async (req) => {
       throw new Error("PIAPI_API_KEY secret is not set.");
     }
 
-    // Use video.video_id (which is the task_id for PiAPI) for the API call
     const piapiResponse = await fetch(`https://api.piapi.ai/api/v1/task/${video.video_id}`, {
       headers: { "X-API-Key": PIAPI_API_KEY },
     });
 
     if (!piapiResponse.ok) {
-        const errorDetails = await piapiResponse.text(); // Get actual error from response body
-        console.error(`PiAPI HTTP error for task_id ${video.video_id}: ${piapiResponse.status} ${piapiResponse.statusText} - Details: ${errorDetails}`);
-        throw new Error(`PiAPI error for task_id ${video.video_id}: ${piapiResponse.status} ${piapiResponse.statusText}`);
+      const errorDetails = await piapiResponse.text();
+      console.error(`PiAPI HTTP error for task_id ${video.video_id}: ${piapiResponse.status} ${piapiResponse.statusText} - Details: ${errorDetails}`);
+      throw new Error(`PiAPI error for task_id ${video.video_id}: ${piapiResponse.status} ${piapiResponse.statusText}`);
     }
 
     const data = await piapiResponse.json();
     const taskData = data.data || data; // Handle cases where data might be nested or direct
+
     const status = (taskData.status || "processing").toLowerCase();
 
     let normalizedStatus;
     switch (status) {
-      case "completed": case "success": case "finished": case "99":
-        normalizedStatus = "completed"; break;
-      case "failed": case "error": case "cancelled":
-        normalizedStatus = "failed"; break;
-      case "pending": case "queued": case "waiting":
-        normalizedStatus = "pending"; break;
+      case "completed":
+      case "success":
+      case "finished":
+      case "99":
+        normalizedStatus = "completed";
+        break;
+      case "failed":
+      case "error":
+      case "cancelled":
+        normalizedStatus = "failed";
+        break;
+      case "pending":
+      case "queued":
+      case "waiting":
+        normalizedStatus = "pending";
+        break;
       default:
         normalizedStatus = "processing";
     }
 
-    // IMPROVED: More robust video URL extraction
-    let videoUrl;
-    let thumbnailUrl;
+    let videoUrl: string | undefined;
+    let thumbnailUrl: string | undefined;
 
-    // First check direct properties on the data object
-    if (taskData.video_url) {
-      videoUrl = taskData.video_url;
-      console.log(`Found video URL in data.video_url: ${videoUrl}`);
+    // --- Try to extract from 'output' structure first (per OpenAPI Example) ---
+    if (taskData.output && taskData.output.video_url) {
+      videoUrl = taskData.output.video_url;
+      console.log(`[PiAPI Extractor] Found video URL in data.output.video_url: ${videoUrl}`);
+    }
+    if (taskData.output && taskData.output.thumbnail_url) { // Assuming thumbnail might also be under output
+      thumbnailUrl = taskData.output.thumbnail_url;
+      console.log(`[PiAPI Extractor] Found thumbnail URL in data.output.thumbnail_url: ${thumbnailUrl}`);
     }
 
-    if (taskData.thumbnail_url) {
-      thumbnailUrl = taskData.thumbnail_url;
-      console.log(`Found thumbnail URL in data.thumbnail_url: ${thumbnailUrl}`);
-    }
-
-    // Then check the works array if available
+    // --- If not found, then try 'works' array structure (per OpenAPI Schema) ---
     if (!videoUrl && taskData.works && Array.isArray(taskData.works) && taskData.works.length > 0) {
       const work = taskData.works[0];
       if (work && work.resource) {
         videoUrl = work.resource.resourceWithoutWatermark || work.resource.resource;
-        console.log(`Found video URL in works[0].resource: ${videoUrl}`);
+        console.log(`[PiAPI Extractor] Found video URL in works[0].resource: ${videoUrl}`);
       }
-      if (work && work.cover) {
+      if (!thumbnailUrl && work && work.cover) { // Only update thumbnail if not already found
         thumbnailUrl = work.cover.resource;
-        console.log(`Found thumbnail URL in works[0].cover: ${thumbnailUrl}`);
+        console.log(`[PiAPI Extractor] Found thumbnail URL in works[0].cover: ${thumbnailUrl}`);
       }
     }
 
-    // Logic for handling status and video_url based on PiAPI response
+    // Add a final log to confirm what was actually extracted
+    console.log(`[PiAPI Extractor] Final extracted videoUrl: ${videoUrl || 'NOT FOUND'}, thumbnailUrl: ${thumbnailUrl || 'NOT FOUND'}`);
+
     let progress = video.progress; // Default to existing progress
-    const updateData: any = {
+    const updateData: Record<string, any> = { // Use Record<string, any> for dynamic keys
       updated_at: new Date().toISOString(),
     };
 
@@ -163,13 +178,13 @@ serve(async (req) => {
     }
 
     // Update the database only if there are meaningful changes beyond just updated_at
-    const keysToCompare = Object.keys(updateData).filter(k => k !== 'updated_at'); // Filter out updated_at for change detection
-    const hasMeaningfulChanges = keysToCompare.some(key => updateData[key] !== video[key as keyof typeof video]);
-    // Also, if the status is changing, it's always a meaningful change.
+    const keysToCompare = Object.keys(updateData).filter((k) => k !== 'updated_at');
+    let hasMeaningfulChanges = keysToCompare.some((key) => updateData[key] !== video[key as keyof typeof video]);
+
+    // Explicitly check status, video_url, thumbnail_url as key changes
     if (updateData.status && updateData.status !== video.status) {
         hasMeaningfulChanges = true;
     }
-    // If we're setting video_url for the first time, or changing it, it's a meaningful change.
     if (updateData.video_url && updateData.video_url !== video.video_url) {
         hasMeaningfulChanges = true;
     }
@@ -177,29 +192,29 @@ serve(async (req) => {
         hasMeaningfulChanges = true;
     }
 
-    if (hasMeaningfulChanges) { // Check if there are actual changes
+
+    if (hasMeaningfulChanges) {
       const { error: updateError } = await supabase
         .from("video_generations")
         .update(updateData)
-        .eq("id", video.id); // Use video.id (dbVideoId) for the DB update condition
+        .eq("id", video.id);
 
       if (updateError) {
         console.error(`DB update error for video.id ${video.id} (task_id ${video.video_id}):`, updateError);
         throw new Error(`Failed to update video status for video.id ${video.id}: ${updateError.message}`);
       }
 
-      // Return the processed status
       return new Response(
         JSON.stringify({
           message: "Status check complete, video updated.",
-          video_id: video.id, // Database ID
-          task_id: video.video_id, // PiAPI task ID
+          video_id: video.id,
+          task_id: video.video_id,
           old_status: video.status,
-          new_status: updateData.status || video.status, // Use new status if updated
+          new_status: updateData.status || video.status,
           old_progress: video.progress,
-          new_progress: updateData.progress || video.progress, // Use new progress if updated
-          video_url: updateData.video_url || video.video_url, // Reflect the final video_url state
-          thumbnail_url: updateData.thumbnail_url || video.thumbnail_url, // Reflect final thumbnail_url
+          new_progress: updateData.progress || video.progress,
+          video_url: updateData.video_url || video.video_url,
+          thumbnail_url: updateData.thumbnail_url || video.thumbnail_url,
           updated: true
         }),
         {
@@ -227,22 +242,20 @@ serve(async (req) => {
       );
     }
 
-  } catch (error) { // Combined and improved catch block
+  } catch (error) {
     console.error("[Edge Function Global Error]:", error);
     let errorMessage = `An unexpected error occurred.`;
     if (error instanceof Error) {
-        errorMessage = error.message;
+      errorMessage = error.message;
     } else if (typeof error === 'string') {
-        errorMessage = error;
+      errorMessage = error;
     }
-    // You might want to log more context here if available in the error object,
-    // e.g., error.status for HTTP errors.
 
     return new Response(
       JSON.stringify({ error: errorMessage }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500, // Return 500 for actual errors
+        status: 500,
       }
     );
   }
