@@ -10,7 +10,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { videoLibraryService, VideoRecord, VideoFilter, VideoStats } from '../../lib/videoLibraryService';
 import { videoProcessingService } from '../../lib/videoProcessingService';
 import toast from 'react-hot-toast';
-import { videoStatusManager } from '../../lib/videoStatusManager';
 import { supabase } from '../../lib/supabase';
 
 // IMPORT FIX: Add the import for videoStatusManager
