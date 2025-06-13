@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Video, Download, Trash2, Clock, Calendar, Search, Filter, 
   Grid3X3, List, AlertTriangle, Loader2, Cloud, RefreshCw, 
-  Play, Pause, CheckCircle, XCircle, RotateCcw, HardDrive, 
+  Play, Pause, CheckCircle, XCircle, RotateCcw, HardDrive,  
   Wifi, WifiOff, Database, Shield, Eye, EyeOff, Info
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
