@@ -166,61 +166,57 @@ const VideoCard: React.FC<VideoCardProps> = ({
     }
   };
 
-  const handleDelete = async (videoId: string) => {
+// In EnhancedVideoLibrary component
 
-    try {
-      // Stop monitoring if it's active
-      videoStatusManager.stopMonitoring(videoId);
+const handleDelete = async (videoId: string) => {
+  if (!user) return;
 
-      // --- NEW: Invoke Edge Function for deletion ---
-      console.log(`[VideoLibrary] Calling Edge Function 'delete-video-and-data' for DB ID: ${videoId}`);
-      const toastId = toast.loading('Deleting video...');
+  const videoToDelete = videos.find(v => v.id === videoId);
+  if (!videoToDelete) {
+    toast.error("Could not find video to delete.");
+    return;
+  }
 
-      const { data, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
-        body: { video_db_id: videoId },
-      });
+  setDeletingVideos(prev => new Set(prev).add(videoId));
+  const toastId = toast.loading('Deleting video...');
 
-      if (efError) {
-        console.error(`[VideoLibrary] Edge function delete error:`, efError);
-        throw new Error(efError.message);
-      }
+  try {
+    // Stop monitoring if it's active
+    videoStatusManager.stopMonitoring(videoId);
 
-      // Edge function response contains 'success', 'message', 'storageDeleted', 'logoDeleted'
-      const efResponse = data as { success: boolean; message: string; storageDeleted?: boolean; logoDeleted?: boolean; error?: string };
+    // --- Invoke Edge Function for deletion ---
+    console.log(`[VideoLibrary] Calling Edge Function 'delete-video-and-data' for DB ID: ${videoId}`);
+    
+    // NOTE: This assumes 'supabase' is defined and accessible in this component's scope.
+    // If not, you may need to import it or get it from a context.
+    const { data, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
+      body: { video_db_id: videoId },
+    });
 
-      if (efResponse.success) {
-        toast.success('Video deleted successfully!', { id: toastId });
-        console.log(`[VideoLibrary] Edge function reported: ${efResponse.message}. Storage deleted: ${efResponse.storageDeleted}, Logo deleted: ${efResponse.logoDeleted}`);
-        // The UI will likely update via Realtime, but we can optimistically remove it too
-        setVideos(prev => prev.filter(v => v.id !== videoId));
-      } else {
-        console.error(`[VideoLibrary] Edge function reported deletion failure:`, efResponse.error || efResponse.message);
-        throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
-      }
-      // --- END NEW: Invoke Edge Function ---
-
-      // No need for direct supabase.from(...).delete() here, the Edge Function handles it.
-      // No need for direct deleteVideoFromSupabase here, the Edge Function handles it.
-
-      // Update storage info (optimistic update, will be corrected by next fetch)
-      if (storageInfo) {
-        setStorageInfo(prev => prev ? {
-          ...prev,
-          used_space: prev.used_space - (videoToDelete.file_size || 0),
-          video_count: prev.video_count - 1
-        } : null);
-      }
-    } catch (error: any) {
-      toast.error(`Failed to delete video: ${error.message}`, { id: toast.loading }); // Use toastId if defined
-    } finally {
-      setDeletingVideos(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(videoId);
-        return newSet;
-      });
+    if (efError) {
+      throw new Error(efError.message);
     }
-  };
 
+    const efResponse = data as { success: boolean; message: string; error?: string };
+
+    if (efResponse.success) {
+      toast.success('Video deleted successfully!', { id: toastId });
+      // The UI will update via the realtime subscription, so no need to manually filter `videos` state.
+    } else {
+      throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
+    }
+
+  } catch (error: any) {
+    toast.error(`Failed to delete video: ${error.message}`, { id: toastId });
+    console.error('[VideoLibrary] Delete error:', error);
+  } finally {
+    setDeletingVideos(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(videoId);
+      return newSet;
+    });
+  }
+};
   const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
     onRetry(video.id);
@@ -367,7 +363,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={handleDelete}
+            onClick={() => onDelete(video.id)} // FIX HERE
             disabled={isDeleting}
             className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-lg disabled:opacity-50"
             title="Delete video"
@@ -427,7 +423,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
             )}
             
             <button 
-              onClick={handleDelete} 
+              onClick={() => onDelete(video.id)} // FIX HERE
               disabled={isDeleting}
               className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
               title="Delete video"
@@ -553,25 +549,25 @@ export const EnhancedVideoLibrary: React.FC = () => {
   };
 
   // Handle delete 
-  const handleDelete = async (videoId: string) => {
-    if (!user) return;
+  // const handleDelete = async (videoId: string) => {
+  //   if (!user) return;
     
-    setDeletingVideos(prev => new Set(prev).add(videoId));
+  //   setDeletingVideos(prev => new Set(prev).add(videoId));
     
-    try {
-      await videoLibraryService.deleteVideo(videoId);
-      toast.success('Video deleted successfully');
-    } catch (error) {
-      console.error('[VideoLibrary] Delete error:', error);
-      toast.error('Failed to delete video');
-    } finally {
-      setDeletingVideos(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(videoId);
-        return newSet;
-      });
-    }
-  }; 
+  //   try {
+  //     await videoLibraryService.deleteVideo(videoId);
+  //     toast.success('Video deleted successfully');
+  //   } catch (error) {
+  //     console.error('[VideoLibrary] Delete error:', error);
+  //     toast.error('Failed to delete video');
+  //   } finally {
+  //     setDeletingVideos(prev => {
+  //       const newSet = new Set(prev);
+  //       newSet.delete(videoId);
+  //       return newSet;
+  //     });
+  //   }
+  // }; 
 
   // Handle retry
   const handleRetry = async (videoId: string) => {
@@ -867,7 +863,7 @@ export const EnhancedVideoLibrary: React.FC = () => {
                     )}
                     
                     <button
-                      onClick={(e) => handleDelete(e)}
+                      onClick={() => onDelete(video.id)} // FIX HERE
                       disabled={deletingVideos.has(video.id)}
                       className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
                     >
