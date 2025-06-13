@@ -64,14 +64,6 @@ const showcaseItems: MediaItem[] = [
   {
     id: 'brand-showcase-2',
     type: 'image',
-    src: '/assets/images/gallery/sample-2.png',
-    title: 'Chicken Rice Shop',
-    description: 'Mixed abstract design of a chicken rice shop.',
-    aspectRatio: '1:1'
-  },
-  {
-    id: 'brand-showcase-2',
-    type: 'image',
     src: '/assets/images/gallery/sample-4.png',
     title: 'Chicken Rice Shop',
     description: 'Tech company with futuristic looks.',
