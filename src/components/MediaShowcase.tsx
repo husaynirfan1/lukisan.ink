@@ -21,7 +21,7 @@ const showcaseItems: MediaItem[] = [
     type: 'logo',
     src: '/assets/images/gallery/lukisan-logo.png',
     title: 'Lukisan Brand Identity',
-    description: 'Our banner logo representing innovation in AI-powered creative solutions',
+    description: 'Our banner logo representing innovation in AI-powered creative solutions.',
     aspectRatio: '2:1',
     featured: true
 
@@ -82,7 +82,7 @@ const showcaseItems: MediaItem[] = [
     type: 'logo',
     src: '/assets/images/gallery/sample-3.png',
     title: 'Creative Industries',
-    description: 'Artistic and innovative logos for creative professionals',
+    description: 'Artistic and innovative logos for creative professionals.',
     aspectRatio: '1:1'
   }
 ];
