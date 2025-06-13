@@ -10,6 +10,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { videoLibraryService, VideoRecord, VideoFilter, VideoStats } from '../../lib/videoLibraryService';
 import { videoProcessingService } from '../../lib/videoProcessingService';
 import toast from 'react-hot-toast';
+import { videoStatusManager } from '../../lib/videoStatusManager';
+import { supabase } from '../../lib/supabase';
 
 // IMPORT FIX: Add the import for videoStatusManager
 import { videoStatusManager } from '../../lib/videoStatusManager'; // <--- ADD THIS LINE
@@ -35,6 +37,8 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const [showPreview, setShowPreview] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
+  // Define a stable placeholder URL. This will ALWAYS be used for the thumbnail display.
+  const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; 
 
   const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; 
 
@@ -271,7 +275,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
           </div>
         )}
 
-        {/* Status badges */}
         {video.integrity_verified === false && (
           <div className="absolute top-2 left-2">
             <div className="flex items-center space-x-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
@@ -283,17 +286,17 @@ const VideoCard: React.FC<VideoCardProps> = ({
 
         {/* Action buttons overlay */}
         <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {canDownload && (
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={handleDownload}
-              className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-lg"
-              title="Download video"
-            >
-              <Download className="h-4 w-4" />
-            </motion.button>
-          )}
+  {canDownload && (
+    <motion.button
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.9 }}
+      onClick={handleDownload}
+      className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-lg"
+      title="Download video"
+    >
+      <Download className="h-4 w-4" />
+    </motion.button>
+  )}
           
           {isProcessing && (
             <motion.button
@@ -322,6 +325,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
               <Trash2 className="h-4 w-4" />
             )}
           </motion.button>
+
         </div>
       </div>
       
@@ -371,7 +375,8 @@ const VideoCard: React.FC<VideoCardProps> = ({
             )}
             
             <button 
-              onClick={() => onDelete(video.id)}
+              onClick={() => onDelete(video.id)} // FIX HERE
+
               disabled={isDeleting}
               className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
               title="Delete video"
@@ -490,8 +495,9 @@ export const EnhancedVideoLibrary: React.FC = () => {
     }
   };
 
-  // Handle delete - MODIFIED TO USE TOAST AND OPTIMISTIC UI UPDATES
- const handleDelete = async (videoId: string) => {
+
+  // Handle delete 
+  const handleDelete = async (videoId: string) => {
   if (!user) return;
 
   const videoToDelete = videos.find(v => v.id === videoId);
@@ -537,7 +543,6 @@ export const EnhancedVideoLibrary: React.FC = () => {
     });
   }
 };
-
 
   // Handle retry
   const handleRetry = async (videoId: string) => {
