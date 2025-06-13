@@ -128,7 +128,7 @@ export const ListVideoCard: React.FC<Props> = ({
                   muted
                   loop
                   playsInline
-                  poster="https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+\nto+Preview"
+                  poster="https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview"
                   style={{ display: showPreview ? 'block' : 'none' }}
                 />
                 {!showPreview && (
