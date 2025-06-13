@@ -167,8 +167,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
   };
 
    const handleDelete = async (videoId: string) => {
-    const videoToDelete = videos.find(v => v.id === videoId);
-    if (!videoToDelete || !user) return;
 
     setDeletingVideos(prev => new Set(prev).add(videoId));
     try {
