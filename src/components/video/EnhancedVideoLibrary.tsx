@@ -32,6 +32,9 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
 
+  // Define a stable placeholder URL. This will ALWAYS be used for the thumbnail display.
+  const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Video+Thumbnail'; 
+
   const getStatusDisplay = () => {
     const isRetryingThis = isRetrying;
     
@@ -98,7 +101,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
   };
 
   const statusDisplay = getStatusDisplay();
-  const isProcessing = ['pending', 'processing', 'downloading', 'storing'].includes(video.status);
+  const isProcessing = ['pending', 'processing', 'downloading', 'storing'].includes(video.status || '');
   const canDownload = video.status === 'completed' && video.video_url;
 
   const formatFileSize = (bytes?: number) => {
@@ -194,18 +197,15 @@ const VideoCard: React.FC<VideoCardProps> = ({
               muted 
               loop 
               playsInline 
-              poster={video.thumbnail_url}
+              poster={FALLBACK_PLACEHOLDER_URL}
               style={{ display: showPreview ? 'block' : 'none' }}
             />
             {!showPreview && (
               <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                 <img
-                  src={video.thumbnail_url || '/assets/images/video-placeholder.jpg'}
+                  src={FALLBACK_PLACEHOLDER_URL}
                   alt="Video thumbnail"
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = '/assets/images/video-placeholder.jpg';
-                  }}
                 />
                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                   <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
@@ -279,15 +279,15 @@ const VideoCard: React.FC<VideoCardProps> = ({
           </div>
         )}
 
-        {/* Status badges */}
-        <div className="absolute top-2 left-2 flex space-x-1">
-          {video.storage_path && (
-            <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-              <Cloud className="h-3 w-3" />
-              <span>Stored</span>
+        {/* Status badges - REMOVED STORAGE PATH BADGE TO FIX BLINKING ICON */}
+        {video.integrity_verified === false && (
+          <div className="absolute top-2 left-2">
+            <div className="flex items-center space-x-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
+              <AlertTriangle className="h-3 w-3" />
+              <span>Integrity Issue</span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Action buttons overlay */}
         <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -736,12 +736,9 @@ export const EnhancedVideoLibrary: React.FC = () => {
                 <div className="md:w-64 h-40 bg-gray-900 relative">
                   {video.status === 'completed' && video.video_url ? (
                     <img
-                      src={video.thumbnail_url || '/assets/images/video-placeholder.jpg'}
+                      src={FALLBACK_PLACEHOLDER_URL}
                       alt="Video thumbnail"
                       className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = '/assets/images/video-placeholder.jpg';
-                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
