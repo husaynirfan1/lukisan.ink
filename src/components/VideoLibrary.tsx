@@ -231,7 +231,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
                   src={FALLBACK_PLACEHOLDER_URL} // Always use the placeholder for the img src
                   alt="Video thumbnail"
                   className="w-full h-full object-cover"
-                  // The onError handler is now removed as the src is always a static, assumed-to-be-valid URL
                 />
                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                   <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
@@ -279,7 +278,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
               {/* Enhanced progress display */}
               {isProcessing && (
                 <div className="mt-3 space-y-2">
-                  {/* Overall progress */}
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300"
@@ -306,27 +304,23 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
           </div>
         )}
 
-        {/* Status badges */}
-        <div className="absolute top-2 left-2 flex space-x-1">
-          {video.storage_path && (
-            <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-              <Cloud className="h-3 w-3" />
-              <span>Stored</span>
-            </div>
-          )}
-          {hasIntegrityIssue && (
+        {/* Status badges - REMOVED STORAGE PATH BADGE TO FIX BLINKING ICON */}
+        {hasIntegrityIssue && (
+          <div className="absolute top-2 left-2">
             <div className="flex items-center space-x-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
               <AlertTriangle className="h-3 w-3" />
               <span>Integrity Issue</span>
             </div>
-          )}
-          {video.integrity_verified === true && (
+          </div>
+        )}
+        {video.integrity_verified === true && (
+          <div className="absolute top-2 left-2">
             <div className="flex items-center space-x-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
               <Shield className="h-3 w-3" />
               <span>Verified</span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Action buttons overlay */}
         <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
