@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
-import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '../lib/videoStorage';
+import { downloadVideoFromSupabase } from '../lib/videoStorage';
 import { videoStatusManager } from '../lib/videoStatusManager';
 import toast from 'react-hot-toast';
 
