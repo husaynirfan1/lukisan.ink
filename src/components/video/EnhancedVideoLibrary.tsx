@@ -817,48 +817,106 @@ const handleVideoClick = (e: React.MouseEvent) => {
         key={video.id}
         className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg"
       >
-       <div
-  className="md:w-64 h-40 bg-gray-900 relative cursor-pointer"
-  onMouseEnter={handleMouseEnter}
-  onMouseLeave={handleMouseLeave}
-  onClick={handleVideoClick}
->
-  {canDownload ? (
-    <>
-      <video
-        ref={videoRef}
-        src={video.video_url || undefined}
-        className="w-full h-full object-cover"
-        muted
-        loop
-        playsInline
-        poster="https://placehold.co/400x225/E0E0E0/333333/png?text=Preview"
-        style={{ display: showPreview ? 'block' : 'none' }}
-      />
-      {!showPreview && (
-        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-          <img
-            src="https://placehold.co/400x225/E0E0E0/333333/png?text=Preview"
-            alt="Video thumbnail"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-            <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
-              <Play className="h-6 w-6 text-gray-900 ml-1" />
+        <div className="flex flex-col md:flex-row">
+          <div className="md:w-64 h-40 bg-gray-900 relative">
+            {video.status === 'completed' && video.video_url ? (
+              <img
+                src="https://placehold.co/400x225/E0E0E0/333333/png?text=Preview"
+                alt="Video thumbnail"
+                className="w-full h-full object-cover"
+              />
+            ) : ( 
+              <div className="w-full h-full flex items-center justify-center">
+                <div className={`w-12 h-12 flex items-center justify-center rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+                  {statusDisplay.icon}
+                </div>
+              </div>
+            )} 
+            {isProcessing && (
+              <div className="absolute bottom-0 left-0 right-0 bg-black/50 p-2">
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${video.progress || 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-white text-center mt-1">{video.progress || 0}%</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1" title={video.message}>
+                  {video.message.length > 100 ? `${video.message.substring(0, 100)}...` : video.message}
+                </h3>
+                <div className="flex items-center space-x-3 text-sm text-gray-500">
+                  <span>{new Date(video.created_at).toLocaleDateString()}</span>
+                  <span>•</span>
+                  <span className="capitalize">{video.video_type}</span>
+                  {video.file_size && (
+                    <>
+                      <span>•</span>
+                      <span>{formatFileSize(video.file_size)}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className={`flex items-center space-x-2 text-sm px-3 py-1 rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+                {statusDisplay.icon}
+                <span>{statusDisplay.text}</span>
+              </div>
+            </div>
+
+            {video.status === 'failed' && video.error_message && (
+              <div className="mt-2 p-2 bg-red-50 rounded-lg">
+                <p className="text-xs text-red-600">{video.error_message}</p>
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center justify-end space-x-2">
+              {canDownload && (
+                <button
+                  onClick={() => video.video_url && videoLibraryService.downloadVideo(video.video_url, `video-${video.video_type}-${Date.now()}.mp4`)}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Download</span>
+                </button>
+              )}
+
+              {isProcessing && (
+                <button
+                  onClick={() => handleRetry(video.id)}
+                  disabled={checkingStatus.has(video.id)}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm disabled:opacity-50"
+                >
+                  <RotateCcw className={`h-4 w-4 ${checkingStatus.has(video.id) ? 'animate-spin' : ''}`} />
+                  <span>Check Status</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => handleDelete(video.id)}
+                disabled={deletingVideos.has(video.id)}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
+              >
+                {deletingVideos.has(video.id) ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                <span>Delete</span>
+              </button>
             </div>
           </div>
         </div>
-      )}
-    </>
-  ) : (
-    <div className="w-full h-full flex items-center justify-center">
-      <div className={`w-12 h-12 flex items-center justify-center rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
-        {statusDisplay.icon}
-      </div>
-    </div>
-  )}
+      </motion.div>
+    );
+  })}
 </div>
-
 
           
       )}
