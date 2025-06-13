@@ -101,25 +101,22 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ item, isHovered, onHover }) =
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+  const video = videoRef.current;
+  if (!video) return;
 
-    const handleLoadedData = () => setIsLoaded(true);
-    video.addEventListener('loadeddata', handleLoadedData);
+  const handleLoadedData = () => setIsLoaded(true);
+  video.addEventListener('loadeddata', handleLoadedData);
 
-    if (isHovered && !isPlaying && isLoaded) {
-      video.currentTime = 0;
-      video.play().catch(console.error);
-      setIsPlaying(true);
-    } else if (!isHovered && isPlaying) {
-      video.pause();
-      setIsPlaying(false);
-    }
+  // Play the video automatically once it's loaded
+  if (!isPlaying && isLoaded) {
+    video.play().catch(console.error);
+    setIsPlaying(true);
+  }
 
-    return () => {
-      video.removeEventListener('loadeddata', handleLoadedData);
-    };
-  }, [isHovered, isPlaying, isLoaded]);
+  return () => {
+    video.removeEventListener('loadeddata', handleLoadedData);
+  };
+}, [isPlaying, isLoaded]); // <-- Removed 'isHovered' from dependencies
 
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
