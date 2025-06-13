@@ -22,7 +22,7 @@ interface StoredVideo {
   company_name?: string;
   video_id: string; // This is the task_id from PiAPI
   video_url: string;
-  logo_url?: string; // Keep as optional, as it exists in DB but we'll use placeholder if not ideal
+  logo_url?: string; // Still in the interface because it's in the DB, but not used for display here
   created_at: string;
   storage_path?: string;
   status?: 'pending' | 'processing' | 'running' | 'downloading' | 'storing' | 'completed' | 'failed';
@@ -37,9 +37,9 @@ interface StoredVideo {
 interface VideoCardProps {
   video: StoredVideo;
   onDelete: (videoId: string) => void;
-  onRetry: (video: StoredVideo) => void; // This prop still exists, but its implementation will change
+  onRetry: (video: StoredVideo) => void;
   isDeleting: boolean;
-  isRetrying: boolean; // This state is now managed slightly differently
+  isRetrying: boolean;
 }
 
 const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDeleting, isRetrying }) => {
@@ -49,10 +49,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
 
+  // Define a stable placeholder URL. This will ALWAYS be used for the thumbnail display.
   const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Video+Thumbnail'; 
 
   const getStatusDisplay = () => {
-    const isRetryingThis = isRetrying; // `isRetrying` is passed as a prop now
+    const isRetryingThis = isRetrying;
     
     if (isRetryingThis) {
       return { 
@@ -212,7 +213,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
       <div className="relative aspect-video bg-gray-900 cursor-pointer" onClick={handleVideoClick}>
         {canDownload ? (
           <>
-            {/* The video element with a stable poster, always using fallback if logo_url is invalid */}
+            {/* The video element's poster will NOW ALWAYS be the placeholder URL */}
             <video 
               ref={videoRef}
               src={video.video_url} 
@@ -220,25 +221,17 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
               muted 
               loop 
               playsInline 
-              poster={video.logo_url || FALLBACK_PLACEHOLDER_URL} // Ensure poster always has a fallback
+              poster={FALLBACK_PLACEHOLDER_URL} // Always use the placeholder for the video poster
               style={{ display: showPreview ? 'block' : 'none' }}
             />
-            {/* The image overlay when not showing preview, always using fallback if logo_url is invalid */}
+            {/* The image overlay when not showing preview will NOW ALWAYS be the placeholder URL */}
             {!showPreview && (
               <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                 <img
-                  src={video.logo_url || FALLBACK_PLACEHOLDER_URL} // Ensure img src always has a fallback
+                  src={FALLBACK_PLACEHOLDER_URL} // Always use the placeholder for the img src
                   alt="Video thumbnail"
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    // This onError will catch issues with the actual video.logo_url AND the FALLBACK_PLACEHOLDER_URL
-                    // If the FALLBACK_PLACEHOLDER_URL itself fails, it prevents an infinite loop
-                    const target = e.target as HTMLImageElement;
-                    if (target.src !== FALLBACK_PLACEHOLDER_URL) {
-                      target.onerror = null; // Prevent infinite loop if fallback also fails
-                      target.src = FALLBACK_PLACEHOLDER_URL; // Fallback to the defined placeholder
-                    }
-                  }}
+                  // The onError handler is now removed as the src is always a static, assumed-to-be-valid URL
                 />
                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                   <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
@@ -453,7 +446,7 @@ export function VideoLibrary() {
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set()); 
   const [deletingVideos, setDeletingVideos] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
-  const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set()); // This state is now managed slightly differently
+  const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set()); 
   const [storageInfo, setStorageInfo] = useState<{
     used_space: number;
     total_space: number;
@@ -588,7 +581,7 @@ export function VideoLibrary() {
     return parts.length > 1 ? parts[1] : undefined;
   };
 
-  // The handleForceCheckStatus function is now simplified to just trigger re-monitoring.
+  // The handleForceCheckStatus function is simplified to just trigger re-monitoring.
   const handleForceCheckStatus = useCallback(async (video: StoredVideo) => {
     if (!user) return; // Ensure user is available before proceeding
     
@@ -600,10 +593,7 @@ export function VideoLibrary() {
     setCheckingStatus(prev => new Set(prev).add(video.id)); 
 
     try {
-      // Instead of invoking the Edge Function directly here,
-      // we'll rely on the existing videoStatusManager to re-initiate polling.
-      // This will indirectly lead to the Edge Function being called by the polling mechanism
-      // (as setup in videoProcessingService.ts).
+      // Rely on videoStatusManager to re-initiate polling, which will eventually call the Edge Function
       videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
       toast.success('Re-check initiated. Status will update shortly.', { id: toastId });
 
@@ -707,11 +697,7 @@ export function VideoLibrary() {
           </div>
           
           {/* Connection status indicator */}
-          <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
-            connectionStatus === 'online' 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-red-100 text-red-800'
-          }`}>
+          <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-sm bg-green-100 text-green-800">
             {connectionStatus === 'online' ? (
               <Wifi className="h-4 w-4" />
             ) : (
@@ -823,7 +809,7 @@ export function VideoLibrary() {
                 key={video.id}
                 video={video}
                 onDelete={handleDelete}
-                onRetry={handleForceCheckStatus} // Still calls handleForceCheckStatus
+                onRetry={handleForceCheckStatus} 
                 isDeleting={deletingVideos.has(video.id)}
                 isRetrying={checkingStatus.has(video.id)}
               />
