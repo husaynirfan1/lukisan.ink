@@ -506,7 +506,7 @@ public async deleteVideo(videoId: string): Promise<void> {
     // Re-throw the error so the calling component can display a notification.
     throw error;
   }
-}
+};
   /**
    * Download a video
    */
