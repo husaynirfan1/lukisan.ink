@@ -11,6 +11,10 @@ import { videoLibraryService, VideoRecord, VideoFilter, VideoStats } from '../..
 import { videoProcessingService } from '../../lib/videoProcessingService';
 import toast from 'react-hot-toast';
 
+// IMPORT FIX: Add the import for videoStatusManager
+import { videoStatusManager } from '../../lib/videoStatusManager'; // <--- ADD THIS LINE
+
+
 interface VideoCardProps {
   video: VideoRecord;
   onDelete: (videoId: string) => void;
@@ -154,7 +158,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (canDownload && video.video_url) {
-      const filename = `video-<span class="math-inline">\{video\.video\_type\}\-</span>{Date.now()}.mp4`;
+      const filename = `video-${video.video_type}-${Date.now()}.mp4`;
       videoLibraryService.downloadVideo(video.video_url, filename)
         .then(() => {
           toast.success('Download started!');
