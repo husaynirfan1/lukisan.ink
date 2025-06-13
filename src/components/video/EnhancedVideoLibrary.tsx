@@ -536,7 +536,7 @@ export const EnhancedVideoLibrary: React.FC = () => {
       return newSet;
     });
   }
-};
+}
 
 
   // Handle retry
