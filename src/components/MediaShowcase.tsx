@@ -71,7 +71,7 @@ const showcaseItems: MediaItem[] = [
   },
   {
     id: 'brand-showcase-2',
-    type: 'image',
+    type: 'logo',
     src: '/assets/images/gallery/sample-4.png',
     title: 'Chicken Rice Shop',
     description: 'Tech company with futuristic looks.',
@@ -79,7 +79,7 @@ const showcaseItems: MediaItem[] = [
   },
   {
     id: 'brand-showcase-3',
-    type: 'image',
+    type: 'logo',
     src: '/assets/images/gallery/sample-3.png',
     title: 'Creative Industries',
     description: 'Artistic and innovative logos for creative professionals',
