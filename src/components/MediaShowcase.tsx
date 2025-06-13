@@ -37,10 +37,10 @@ const showcaseItems: MediaItem[] = [
   },
    {
     id: 'brand-showcase-1',
-    type: 'image',
-    src: '/assets/images/gallery/sample-6.png',
-    title: 'Fishermen Friend',
-    description: 'Modern, clean and simple with natural blend.',
+    type: 'video',
+    src: '/assets/videos/gallery/sample-johndoe.mp4',
+    title: 'Corporate Intro',
+    description: 'Modern, clean and simple with corporate feels.',
     aspectRatio: '2:1'
   },
   {
