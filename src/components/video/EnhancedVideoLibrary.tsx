@@ -37,8 +37,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
   // Define a stable placeholder URL. This will ALWAYS be used for the thumbnail display.
   const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; 
 
-  const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; 
-
   const getStatusDisplay = () => {
     const isRetryingThis = isRetrying;
     
