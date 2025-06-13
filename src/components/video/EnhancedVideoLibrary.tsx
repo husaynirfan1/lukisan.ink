@@ -857,7 +857,7 @@ const handleVideoClick = (e: React.MouseEvent) => {
       </div>
     </div>
   )}
-</div>
+
 
             {isProcessing && (
               <div className="absolute bottom-0 left-0 right-0 bg-black/50 p-2">
