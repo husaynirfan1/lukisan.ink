@@ -13,7 +13,7 @@ import toast from 'react-hot-toast';
 
 // IMPORT FIX: Add the import for videoStatusManager
 import { videoStatusManager } from '../../lib/videoStatusManager'; // <--- ADD THIS LINE
-
+import { supabase } from "../../supabase"
 
 interface VideoCardProps {
   video: VideoRecord;
