@@ -128,13 +128,13 @@ export const ListVideoCard: React.FC<Props> = ({
                   muted
                   loop
                   playsInline
-                  poster="https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview"
+                  poster="https://placehold.co/400x225/E0E0E0/333333/png?text=Preview"
                   style={{ display: showPreview ? 'block' : 'none' }}
                 />
                 {!showPreview && (
                   <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                     <img
-                      src="https://placehold.co/400x225/E0E0E0/333333/png?text=Preview"
+                      src="https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+\n+to+Preview"
                       alt="Video thumbnail"
                       className="w-full h-full object-cover"
                     />
