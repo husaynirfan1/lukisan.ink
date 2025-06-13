@@ -230,7 +230,7 @@ class VideoLibraryService {
       failed,
       totalSize
     };
-  };
+  }
 
   /**
    * Delete a video
