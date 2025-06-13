@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
-import { downloadVideoFromSupabase, deleteVideoFromSupabase } from '../lib/videoStorage';
+import { downloadVideoFromSupabase } from '../lib/videoStorage';
 import { videoStatusManager } from '../lib/videoStatusManager';
 import toast from 'react-hot-toast';
 
@@ -50,7 +50,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Define a stable placeholder URL. This will ALWAYS be used for the thumbnail display.
-  const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Video+Thumbnail'; 
+  const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; 
 
   const getStatusDisplay = () => {
     const isRetryingThis = isRetrying;
@@ -231,7 +231,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
                   src={FALLBACK_PLACEHOLDER_URL} // Always use the placeholder for the img src
                   alt="Video thumbnail"
                   className="w-full h-full object-cover"
-                  // The onError handler is now removed as the src is always a static, assumed-to-be-valid URL
                 />
                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                   <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
@@ -279,7 +278,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
               {/* Enhanced progress display */}
               {isProcessing && (
                 <div className="mt-3 space-y-2">
-                  {/* Overall progress */}
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300"
@@ -306,27 +304,23 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
           </div>
         )}
 
-        {/* Status badges */}
-        <div className="absolute top-2 left-2 flex space-x-1">
-          {video.storage_path && (
-            <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-              <Cloud className="h-3 w-3" />
-              <span>Stored</span>
-            </div>
-          )}
-          {hasIntegrityIssue && (
+        {/* Status badges - REMOVED STORAGE PATH BADGE TO FIX BLINKING ICON */}
+        {hasIntegrityIssue && (
+          <div className="absolute top-2 left-2">
             <div className="flex items-center space-x-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
               <AlertTriangle className="h-3 w-3" />
               <span>Integrity Issue</span>
             </div>
-          )}
-          {video.integrity_verified === true && (
+          </div>
+        )}
+        {video.integrity_verified === true && (
+          <div className="absolute top-2 left-2">
             <div className="flex items-center space-x-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
               <Shield className="h-3 w-3" />
               <span>Verified</span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Action buttons overlay */}
         <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -620,24 +614,37 @@ export function VideoLibrary() {
     try {
       // Stop monitoring if it's active
       videoStatusManager.stopMonitoring(videoId);
-      
-      if (videoToDelete.storage_path) {
-        // Assume deleteVideoFromSupabase can handle both video and logo_url if needed
-        await deleteVideoFromSupabase(videoToDelete.storage_path);
-        // If logo_url is stored separately in storage, you might need another delete call here
-        // e.g., if (videoToDelete.logo_url && extractStoragePath(videoToDelete.logo_url)) {
-        //   await deleteVideoFromSupabase(extractStoragePath(videoToDelete.logo_url));
-        // }
+
+      // --- NEW: Invoke Edge Function for deletion ---
+      console.log(`[VideoLibrary] Calling Edge Function 'delete-video-and-data' for DB ID: ${videoId}`);
+      const toastId = toast.loading('Deleting video...');
+
+      const { data, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
+        body: { video_db_id: videoId },
+      });
+
+      if (efError) {
+        console.error(`[VideoLibrary] Edge function delete error:`, efError);
+        throw new Error(efError.message);
       }
-      const { error: dbError } = await supabase
-        .from('video_generations')
-        .delete()
-        .eq('id', videoId)
-        .eq('user_id', user.id);
-      if (dbError) throw new Error(dbError.message);
-      toast.success('Video deleted successfully');
-      // No need to setVideos here, realtime subscription should handle it
-      
+
+      // Edge function response contains 'success', 'message', 'storageDeleted', 'logoDeleted'
+      const efResponse = data as { success: boolean; message: string; storageDeleted?: boolean; logoDeleted?: boolean; error?: string };
+
+      if (efResponse.success) {
+        toast.success('Video deleted successfully!', { id: toastId });
+        console.log(`[VideoLibrary] Edge function reported: ${efResponse.message}. Storage deleted: ${efResponse.storageDeleted}, Logo deleted: ${efResponse.logoDeleted}`);
+        // The UI will likely update via Realtime, but we can optimistically remove it too
+        setVideos(prev => prev.filter(v => v.id !== videoId));
+      } else {
+        console.error(`[VideoLibrary] Edge function reported deletion failure:`, efResponse.error || efResponse.message);
+        throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
+      }
+      // --- END NEW: Invoke Edge Function ---
+
+      // No need for direct supabase.from(...).delete() here, the Edge Function handles it.
+      // No need for direct deleteVideoFromSupabase here, the Edge Function handles it.
+
       // Update storage info (optimistic update, will be corrected by next fetch)
       if (storageInfo) {
         setStorageInfo(prev => prev ? {
@@ -647,7 +654,7 @@ export function VideoLibrary() {
         } : null);
       }
     } catch (error: any) {
-      toast.error(`Failed to delete video: ${error.message}`);
+      toast.error(`Failed to delete video: ${error.message}`, { id: toast.loading }); // Use toastId if defined
     } finally {
       setDeletingVideos(prev => {
         const newSet = new Set(prev);
