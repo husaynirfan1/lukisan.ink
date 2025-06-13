@@ -31,7 +31,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const [showPreview, setShowPreview] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
-  const [deletingVideos, setDeletingVideos] = useState<Set<string>>(new Set());
   // Define a stable placeholder URL. This will ALWAYS be used for the thumbnail display.
   const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; 
 
