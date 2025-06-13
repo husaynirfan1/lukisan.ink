@@ -817,8 +817,7 @@ const handleVideoClick = (e: React.MouseEvent) => {
         key={video.id}
         className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg"
       >
-        <div
-  className="md:w-64 h-40 bg-gray-900 relative cursor-pointer"
+        <div className="md:w-64 h-40 bg-gray-900 relative cursor-pointer"
   onMouseEnter={handleMouseEnter}
   onMouseLeave={handleMouseLeave}
   onClick={handleVideoClick}
