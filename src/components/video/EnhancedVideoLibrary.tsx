@@ -11,7 +11,7 @@ import { videoLibraryService, VideoRecord, VideoFilter } from '../../lib/videoLi
 import { videoProcessingService } from '../../lib/videoProcessingService';
 import toast from 'react-hot-toast';
 import { videoStatusManager } from '../../lib/videoStatusManager';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../lib/supabase';
 
 interface VideoCardProps {
   video: VideoRecord;
