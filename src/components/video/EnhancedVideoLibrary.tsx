@@ -512,15 +512,12 @@ export const EnhancedVideoLibrary: React.FC = () => {
   setDeletingVideos(prev => new Set(prev).add(videoId));
   const toastId = toast.loading('Deleting video...');
 
+  // 👉 Optimistically update UI
+  setVideos(prev => prev.filter(v => v.id !== videoId));
+
   try {
-    // Stop monitoring if it's active
     videoStatusManager.stopMonitoring(videoId);
 
-    // --- Invoke Edge Function for deletion ---
-    console.log(`[VideoLibrary] Calling Edge Function 'delete-video-and-data' for DB ID: ${videoId}`);
-    
-    // NOTE: This assumes 'supabase' is defined and accessible in this component's scope.
-    // If not, you may need to import it or get it from a context.
     const { data, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
       body: { video_db_id: videoId },
     });
@@ -533,14 +530,14 @@ export const EnhancedVideoLibrary: React.FC = () => {
 
     if (efResponse.success) {
       toast.success('Video deleted successfully!', { id: toastId });
-      // The UI will update via the realtime subscription, so no need to manually filter `videos` state.
     } else {
       throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
     }
-
   } catch (error: any) {
     toast.error(`Failed to delete video: ${error.message}`, { id: toastId });
-    console.error('[VideoLibrary] Delete error:', error);
+    
+    // ❗ Rollback UI if deletion fails
+    setVideos(prev => [videoToDelete, ...prev]);
   } finally {
     setDeletingVideos(prev => {
       const newSet = new Set(prev);
@@ -549,6 +546,7 @@ export const EnhancedVideoLibrary: React.FC = () => {
     });
   }
 };
+
 
 
   // Handle retry
