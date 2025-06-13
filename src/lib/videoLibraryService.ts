@@ -235,7 +235,6 @@ class VideoLibraryService {
   /**
    * Delete a video
    */
-
   public async deleteVideo(videoId: string): Promise<void> {
     try {
       // Get the video first to check if it has a storage path
@@ -260,32 +259,28 @@ class VideoLibraryService {
           // Continue with database deletion even if storage deletion fails
         }
       }
-    );
-
-    // 2. Handle any errors from the function invocation itself (e.g., network issues)
-    if (functionError) {
-      throw functionError;
+      
+      // Delete from database
+      const { error: deleteError } = await supabase
+        .from('video_generations')
+        .delete()
+        .eq('id', videoId);
+      
+      if (deleteError) {
+        throw deleteError;
+      }
+      
+      // Update cache
+      this.cachedVideos = this.cachedVideos.filter(video => video.id !== videoId);
+      
+      // Notify subscribers
+      this.notifySubscribers();
+      
+    } catch (error) {
+      console.error('[VideoLibrary] Error deleting video:', error);
+      throw error;
     }
-
-    // 3. The Edge Function might return a specific error message in its response.
-    // We check for this and throw an error to be caught by the UI.
-    const responseData = functionResponse as { success: boolean; error?: string; message?: string };
-    if (!responseData.success) {
-      throw new Error(responseData.error || responseData.message || 'An unknown error occurred during deletion.');
-    } 
-    
-    // 4. On successful deletion, update the local cache and notify subscribers,
-    // just like the original function did. This ensures the UI updates instantly.
-    console.log(`[VideoLibrary] Successfully triggered deletion for video ${videoId}.`);
-    this.cachedVideos = this.cachedVideos.filter(v => v.id !== videoId);
-    this.notifySubscribers();
-
-  } catch (error) {
-    console.error(`[VideoLibrary] Error deleting video:`, error);
-    // Re-throw the error so the calling component can display a notification.
-    throw error;
   }
-}
 
   /**
    * Download a video
