@@ -1,15 +1,14 @@
-import { supabase } from './supabase'; // Assuming this is your regular client-side Supabase client
+import { supabase } from './supabase'; // Assuming this is your regular client-side Supabase client instance
 import { checkVideoStatus, VideoStatusPoller, showVideoCompleteNotification } from './piapi';
 import toast from 'react-hot-toast';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // !! URGENT SECURITY CONCERN !!
 // If this code runs in the browser, exposing SUPABASE_SERVICE_KEY is a severe security vulnerability.
-// This key grants full admin admin access to your database.
+// This key grants full admin access to your database.
 // All sensitive database operations (like updates via service_role key) should go through a Supabase Edge Function
 // or leverage Row Level Security (RLS) with the regular client-side supabase client.
-// For the purpose of fixing the current bug, I'll proceed, but please prioritize this.
-const supabaseAdmin = createClient(
+const supabaseAdmin: SupabaseClient = createClient(
   import.meta.env.VITE_SUPABASE_URL as string,
   import.meta.env.VITE_SUPABASE_SERVICE_KEY as string
 );
@@ -31,7 +30,7 @@ interface VideoRecord {
   progress: number;
   storage_path: string | null;
   video_url: string | null;
-  logo_url: string | null; // Changed from thumbnail_url to logo_url
+  logo_url: string | null; // Corrected to logo_url based on your database schema
   error_message: string | null;
   updated_at: string;
 }
@@ -41,9 +40,16 @@ class VideoProcessingService {
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 5000; // 5 seconds
 
-  startProcessing(taskId: string, videoDbId: string, userId: string) {
+  /**
+   * Initiates the processing workflow for a video task.
+   * @param taskId PiAPI's task ID.
+   * @param videoDbId The UUID of the video record in your Supabase 'video_generations' table.
+   * @param userId The ID of the user who owns the video.
+   */
+  startProcessing(taskId: string, videoDbId: string, userId: string): void {
     console.log(`[VideoProcessor] Starting processing for task: ${taskId}`);
 
+    // Stop any existing processing for this task to prevent duplicates
     this.stopProcessing(taskId);
 
     const task: VideoProcessingTask = {
@@ -58,7 +64,11 @@ class VideoProcessingService {
     this.processVideoWorkflow(task);
   }
 
-  stopProcessing(taskId: string) {
+  /**
+   * Stops processing for a given task ID.
+   * @param taskId PiAPI's task ID.
+   */
+  stopProcessing(taskId: string): void {
     const task = this.activeTasks.get(taskId);
     if (task?.poller) {
       task.poller.stop();
@@ -67,7 +77,11 @@ class VideoProcessingService {
     console.log(`[VideoProcessor] Stopped processing for task: ${taskId}`);
   }
 
-  private async processVideoWorkflow(task: VideoProcessingTask) {
+  /**
+   * Main workflow for processing a video task.
+   * @param task The video processing task object.
+   */
+  private async processVideoWorkflow(task: VideoProcessingTask): Promise<void> {
     try {
       console.log(`[VideoProcessor] Processing workflow for task: ${task.taskId} (attempt ${task.retryCount + 1}/${task.maxRetries + 1})`);
 
@@ -79,7 +93,7 @@ class VideoProcessingService {
       // 1. Fetch current video status from DB to get the latest state including video_url and logo_url
       const { data: currentVideos, error: fetchError } = await supabase
         .from('video_generations')
-        .select('id, video_id, status, progress, storage_path, video_url, logo_url, error_message, updated_at') // Changed thumbnail_url to logo_url
+        .select('id, video_id, status, progress, storage_path, video_url, logo_url, error_message, updated_at') // Corrected to logo_url
         .eq('id', task.videoDbId)
         .single();
 
@@ -90,27 +104,27 @@ class VideoProcessingService {
       const currentVideoRecord: VideoRecord = currentVideos as VideoRecord;
       console.log(`[VideoProcessor] Initial DB record for task ${task.taskId}:`, currentVideoRecord);
 
-
-      // The `checkVideoStatus` function (from piapi.ts) should directly query PiAPI
+      // Check PiAPI status directly (this function is external, assumed to be in piapi.ts)
       const initialPiApiStatus = await checkVideoStatus(task.taskId);
       console.log(`[VideoProcessor] Initial PiAPI status for task ${task.taskId}:`, initialPiApiStatus);
 
-      let videoUrlToUseForInitialUpdate = currentVideoRecord.video_url;
-      let logoUrlToUseForInitialUpdate = currentVideoRecord.logo_url; // Use logo_url
+      let videoUrlToUseForInitialUpdate: string | null = currentVideoRecord.video_url;
+      let logoUrlToUseForInitialUpdate: string | null = currentVideoRecord.logo_url; // Corrected to logo_url
 
       if (initialPiApiStatus.status === 'completed' && initialPiApiStatus.video_url) {
         videoUrlToUseForInitialUpdate = initialPiApiStatus.video_url;
-        logoUrlToUseForInitialUpdate = initialPiApiStatus.thumbnail_url || null; // PiAPI gives thumbnail_url, map to logo_url
+        logoUrlToUseForInitialUpdate = initialPiApiStatus.thumbnail_url || null; // PiAPI provides thumbnail_url, map to logo_url
       } else if (['failed', 'error', 'cancelled'].includes(initialPiApiStatus.status)) {
         videoUrlToUseForInitialUpdate = null;
         logoUrlToUseForInitialUpdate = null; // Clear logo_url on failure
       }
 
+      // Update database with this *current* PiAPI status and any existing valid URLs from DB
       await this.updateVideoStatus(
         task.videoDbId,
         initialPiApiStatus.status,
         initialPiApiStatus.progress || 0,
-        null, // No error on initial update
+        null, // No error message for initial update from PiAPI
         videoUrlToUseForInitialUpdate, // Pass the determined video URL
         logoUrlToUseForInitialUpdate // Pass the determined logo URL
       );
@@ -132,21 +146,22 @@ class VideoProcessingService {
     }
   }
 
-  private async handleWorkflowError(task: VideoProcessingTask, error: any) {
+  /**
+   * Handles errors that occur during the video processing workflow, implementing retry logic.
+   * @param task The video processing task object.
+   * @param error The error object.
+   */
+  private async handleWorkflowError(task: VideoProcessingTask, error: any): Promise<void> {
     const errorMessage = error.message || 'Unknown error';
 
-    // Fetch current record to get existing video_url and logo_url before setting to 'failed'
+    // Fetch current record to determine existing URLs before setting to 'failed'
     const { data: currentRecord } = await supabase
       .from('video_generations')
-      .select('video_url, logo_url') // Changed thumbnail_url to logo_url
+      .select('video_url, logo_url') // Corrected to logo_url
       .eq('id', task.videoDbId)
       .single();
 
-    const existingVideoUrl = currentRecord?.video_url || null;
-    const existingLogoUrl = currentRecord?.logo_url || null;
-
-
-    // Handle specific error types
+    // Specific error handling for known PiAPI issues
     if (errorMessage.includes('failed to find task')) {
       console.error(`[VideoProcessor] Task not found on PiAPI: ${task.taskId}`);
       await this.updateVideoStatus(task.videoDbId, 'failed', 0, 'Video generation task not found on PiAPI. The task may have expired or was never created.', null, null);
@@ -191,20 +206,24 @@ class VideoProcessingService {
     }
   }
 
-  // status parameter here is from piapi.ts poller (TaskStatusResponse)
-  private async handleStatusUpdate(task: VideoProcessingTask, piapiStatus: any) {
+  /**
+   * Handles status updates received from the PiAPI poller.
+   * @param task The video processing task object.
+   * @param piapiStatus The status object received from PiAPI.
+   */
+  private async handleStatusUpdate(task: VideoProcessingTask, piapiStatus: any): Promise<void> {
     console.log(`[VideoProcessor] Status update for task ${task.taskId} from PiAPI:`, piapiStatus);
 
     try {
       // Fetch current video record from DB to get the latest video_url and logo_url
       const { data: currentRecord } = await supabase
         .from('video_generations')
-        .select('video_url, logo_url') // Changed thumbnail_url to logo_url
+        .select('video_url, logo_url') // Corrected to logo_url
         .eq('id', task.videoDbId)
         .single();
 
-      let videoUrlToUpdate: string | null | undefined = currentRecord?.video_url || null;
-      let logoUrlToUpdate: string | null | undefined = currentRecord?.logo_url || null;
+      let videoUrlToUpdate: string | null = currentRecord?.video_url || null;
+      let logoUrlToUpdate: string | null = currentRecord?.logo_url || null; // Corrected to logo_url
 
       // If PiAPI's new status is 'completed' and it has a URL, use it.
       if (piapiStatus.status === 'completed' && piapiStatus.video_url) {
@@ -229,11 +248,17 @@ class VideoProcessingService {
     }
   }
 
-  private async handleCompletion(task: VideoProcessingTask, piapiStatus: any) {
+  /**
+   * Handles the completion of a video task as reported by the poller.
+   * @param task The video processing task object.
+   * @param piapiStatus The final status object received from PiAPI.
+   */
+  private async handleCompletion(task: VideoProcessingTask, piapiStatus: any): Promise<void> {
     console.log(`[VideoProcessor] Task ${task.taskId} (DB ID: ${task.videoDbId}) reported as completed by poller with video_url: ${piapiStatus.video_url}`);
 
     try {
       // Call our Edge Function `force-check-status` to get the *definitive* status and URL from the DB.
+      // This function will download the video from PiAPI, upload to Supabase Storage, and update DB.
       const videoConfirmationResult = await this.downloadAndStoreVideo(piapiStatus.video_url, task.taskId, task.userId, task.videoDbId);
 
       if (videoConfirmationResult && videoConfirmationResult.new_status === 'pending_url') {
@@ -263,6 +288,7 @@ class VideoProcessingService {
           window.dispatchEvent(new PopStateEvent('popstate', { state: { tab: 'video-library' } }));
         });
       } else {
+        // This case implies an unexpected result from downloadAndStoreVideo (e.g., null, or unexpected status)
         console.error(`[VideoProcessor] Task ${task.taskId} (DB ID: ${task.videoDbId}): Failed to get definitive completed status or video URL from Edge Function. Result:`, videoConfirmationResult);
         throw new Error('Failed to confirm video status or retrieve video URL via Edge Function.');
       }
@@ -277,7 +303,12 @@ class VideoProcessingService {
     }
   }
 
-  private async handleError(task: VideoProcessingTask, error: string) {
+  /**
+   * Handles errors reported by the poller for a specific task.
+   * @param task The video processing task object.
+   * @param error The error string from the poller.
+   */
+  private async handleError(task: VideoProcessingTask, error: string): Promise<void> {
     console.error(`[VideoProcessor] Task error from poller for ${task.taskId} (DB ID: ${task.videoDbId}): ${error}`);
 
     try {
@@ -292,12 +323,29 @@ class VideoProcessingService {
     }
   }
 
-  // Refactored to ensure video_url and logo_url are always handled correctly
-  private async updateVideoStatus(videoDbId: string, status: string, progress: number, errorMsg: string | null = null, newVideoUrl?: string | null, newLogoUrl?: string | null) { // Changed newThumbnailUrl to newLogoUrl
+  /**
+   * Updates the video status and related fields in the Supabase database.
+   * This is a central function for all DB updates from VideoProcessingService.
+   * @param videoDbId The database ID of the video record.
+   * @param status The new status for the video.
+   * @param progress The new progress percentage.
+   * @param errorMsg An optional error message to store.
+   * @param newVideoUrl An optional new video URL to set (can be null to clear).
+   * @param newLogoUrl An optional new logo URL to set (can be null to clear).
+   */
+  private async updateVideoStatus(
+    videoDbId: string,
+    status: string,
+    progress: number,
+    errorMsg: string | null = null,
+    newVideoUrl?: string | null,
+    newLogoUrl?: string | null // Changed newThumbnailUrl to newLogoUrl
+  ): Promise<void> {
 
+    // Fetch the current state of the record from DB to ensure we don't accidentally clear an existing valid URL/logo_url
     const { data: currentRecord, error: fetchError } = await supabase
         .from('video_generations')
-        .select('video_url, logo_url, status, progress, error_message') // Changed thumbnail_url to logo_url
+        .select('video_url, logo_url, status, progress, error_message') // Corrected to logo_url
         .eq('id', videoDbId)
         .single();
 
@@ -310,6 +358,8 @@ class VideoProcessingService {
       updated_at: new Date().toISOString(),
     };
 
+    // Only add fields to updateData if they are actually changing or being explicitly set.
+
     // Status logic:
     if (status !== currentRecord?.status) {
         updateData.status = status;
@@ -321,54 +371,81 @@ class VideoProcessingService {
     }
 
     // Video URL logic:
-    if (newVideoUrl !== undefined) {
+    if (newVideoUrl !== undefined) { // If newVideoUrl param was explicitly provided (even as null)
         if (newVideoUrl !== currentRecord?.video_url) {
             updateData.video_url = newVideoUrl;
+            // Consider if storage_path needs to be updated here too, if it's tied to video_url
+            // updateData.storage_path = newVideoUrl;
         }
-    } else {
+    } else { // If newVideoUrl param was UNDEFINED (not provided by caller)
+        // Carry over the existing video_url from the DB, unless status is changing to 'failed'
         if (currentRecord?.video_url && status !== 'failed') {
             updateData.video_url = currentRecord.video_url;
+            // updateData.storage_path = currentRecord.storage_path;
         } else if (status === 'completed' && !currentRecord?.video_url) {
+            // This is a critical state - attempting to mark as completed without a URL from DB.
+            // This path should ideally not be hit if EF already set status to 'pending_url'.
             console.error(`[VideoProcessor] ALERT: Attempting to mark video ${videoDbId} as 'completed' without a video_url, even though currentRecord has none. This will likely cause a constraint violation.`);
         }
     }
 
-    // Logo URL logic (changed from thumbnail_url):
-    if (newLogoUrl !== undefined) { // Check if parameter was explicitly provided
-        if (newLogoUrl !== currentRecord?.logo_url) { // Compare with current logo_url
-            updateData.logo_url = newLogoUrl; // Set logo_url
+    // Logo URL logic (corrected from thumbnail_url):
+    if (newLogoUrl !== undefined) { // If newLogoUrl param was explicitly provided (even as null)
+        if (newLogoUrl !== currentRecord?.logo_url) {
+            updateData.logo_url = newLogoUrl;
         }
-    } else {
-        if (currentRecord?.logo_url && status !== 'failed') { // Carry over existing logo_url unless failing
+    } else { // If newLogoUrl param was UNDEFINED (not provided by caller)
+        // Carry over the existing logo_url from the DB, unless status is changing to 'failed'
+        if (currentRecord?.logo_url && status !== 'failed') {
             updateData.logo_url = currentRecord.logo_url;
         }
     }
-
 
     // Error message logic:
     if (errorMsg !== currentRecord?.error_message) {
         updateData.error_message = errorMsg;
     }
 
-    // Only proceed with update if there are meaningful changes
+    // Determine if there are any meaningful changes (excluding updated_at)
     let hasMeaningfulChanges = false;
     for (const key in updateData) {
-        if (key !== 'updated_at' && updateData[key] !== currentRecord?.[key as keyof VideoRecord]) {
-            hasMeaningfulChanges = true;
-            break;
+        if (key !== 'updated_at') {
+            const oldValue = currentRecord?.[key as keyof VideoRecord];
+            const newValue = updateData[key];
+
+            // Compare for changes, handling null/undefined consistency
+            if (oldValue !== newValue) {
+                // If a value is changing from null/undefined to a non-null value, it's a change
+                if ((oldValue === null || oldValue === undefined) && (newValue !== null && newValue !== undefined)) {
+                    hasMeaningfulChanges = true;
+                    break;
+                }
+                // If a value is changing from a value to null/undefined, it's a change
+                else if ((oldValue !== null && oldValue !== undefined) && (newValue === null || newValue === undefined)) {
+                    hasMeaningfulChanges = true;
+                    break;
+                }
+                // If a value is changing between two non-null/undefined values, it's a change
+                else if (oldValue !== null && oldValue !== undefined && newValue !== null && newValue !== undefined && oldValue !== newValue) {
+                    hasMeaningfulChanges = true;
+                    break;
+                }
+            }
         }
     }
-    // Explicitly check for video_url/logo_url being set from null to value (which is a meaningful change)
-    if (currentRecord?.video_url === null && updateData.video_url !== undefined && updateData.video_url !== null) {
+
+    // Special case: if status itself is changing, it's always a meaningful change
+    if (updateData.status && updateData.status !== currentRecord?.status) {
         hasMeaningfulChanges = true;
     }
-    if (currentRecord?.logo_url === null && updateData.logo_url !== undefined && updateData.logo_url !== null) { // Changed thumbnail_url to logo_url
+    // Also consider progress changes as meaningful
+    if (updateData.progress !== undefined && updateData.progress !== currentRecord?.progress) {
         hasMeaningfulChanges = true;
     }
 
 
     console.log(`[VideoProcessor] Updating DB for ${videoDbId} (DB ID) with payload:`, updateData);
-    console.log(`[VideoProcessor] (Pre-update values for comparison: status=${currentRecord?.status}, progress=${currentRecord?.progress}, video_url=${currentRecord?.video_url || 'null'}, logo_url=${currentRecord?.logo_url || 'null'})`); // Changed thumbnail_url to logo_url
+    console.log(`[VideoProcessor] (Pre-update values for comparison: status=${currentRecord?.status}, progress=${currentRecord?.progress}, video_url=${currentRecord?.video_url || 'null'}, logo_url=${currentRecord?.logo_url || 'null'})`);
 
 
     if (hasMeaningfulChanges) {
@@ -387,50 +464,70 @@ class VideoProcessingService {
     }
   }
 
-// The main purpose of this function is to confirm status and URL via Edge Function.
+/**
+ * Calls the Supabase Edge Function to confirm video status, download from PiAPI,
+ * upload to Supabase Storage, and update the database.
+ * @param videoUrlFromPoller The video URL received directly from the PiAPI poller (for logging/comparison).
+ * @param piApiTaskId The task ID from PiAPI.
+ * @param userId The user ID associated with the video.
+ * @param videoDbId The database ID of the video record.
+ * @returns A promise resolving to an object with new_status, final_video_url, etc., or null if unsuccessful.
+ */
 private async downloadAndStoreVideo(
   videoUrlFromPoller: string,
   piApiTaskId: string,
   userId: string,
   videoDbId: string
-): Promise<{ new_status: string; final_video_url?: string; final_logo_url?: string; error_message?: string } | null> { // Changed final_thumbnail_url to final_logo_url
+): Promise<{ new_status: string; final_video_url?: string; final_logo_url?: string; error_message?: string } | null> {
   try {
     console.log(`[VideoProcessor] Confirming status via 'force-check-status' for PiAPI Task ID: ${piApiTaskId} (DB ID: ${videoDbId}). URL from poller: ${videoUrlFromPoller}`);
 
-    const { data: edgeFunctionResponse, error: efError } = await supabase.functions.invoke('force-check-status', {
+    // Invoke the Edge Function. The 'data' property in the response object
+    // will contain the raw JSON string returned by the Edge Function.
+    const { data: rawEdgeFunctionResponseData, error: efError } = await supabase.functions.invoke('force-check-status', {
       body: {
         video_id: videoDbId,
       },
     });
-    console.log(`[VideoProcessor] RAW INVOKE RESPONSE OBJECT:`, { data: edgeFunctionResponse, error: efError });
 
     if (efError) {
       console.error(`[VideoProcessor] Edge function 'force-check-status' error for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}):`, efError.message);
       throw new Error(`Edge function call failed for ${piApiTaskId}: ${efError.message}`);
     }
 
-    if (!edgeFunctionResponse) {
-      console.error(`[VideoProcessor] Edge function 'force-check-status' returned NO DATA (empty or malformed JSON body) for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}).`);
-      throw new Error(`Edge function returned empty or malformed response for ${piApiTaskId}.`);
+    let edgeFunctionResponse: any;
+    if (rawEdgeFunctionResponseData) {
+        try {
+            // CRITICAL FIX: Parse the JSON string from the 'data' property
+            edgeFunctionResponse = JSON.parse(rawEdgeFunctionResponseData);
+        } catch (parseError: any) {
+            console.error(`[VideoProcessor] Edge function 'force-check-status' returned malformed JSON:`, rawEdgeFunctionResponseData, `Parse error:`, parseError);
+            throw new Error(`Edge function returned malformed JSON response for ${piApiTaskId}.`);
+        }
+    } else {
+        console.error(`[VideoProcessor] Edge function 'force-check-status' returned NO DATA (empty or null body) for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}).`);
+        throw new Error(`Edge function returned empty response for ${piApiTaskId}.`);
     }
 
-    console.log(`[VideoProcessor] Parsed EF response before destructuring:`, edgeFunctionResponse);
+    // Now, edgeFunctionResponse is the actual parsed JSON object
+    console.log(`[VideoProcessor] Parsed EF response after JSON.parse:`, edgeFunctionResponse);
 
 
-    // Destructure expected fields directly from edgeFunctionResponse. Changed thumbnail_url to logo_url
-    const { new_status, video_url: final_video_url_from_ef, error_message, task_id: ef_piapi_task_id, thumbnail_url: final_logo_url_from_ef } = edgeFunctionResponse; // PiAPI returns thumbnail_url, mapping to final_logo_url
+    // Destructure expected fields directly from the parsed edgeFunctionResponse.
+    // PiAPI returns 'thumbnail_url', which we map to 'final_logo_url' in our DB.
+    const { new_status, video_url: final_video_url_from_ef, error_message, task_id: ef_piapi_task_id, thumbnail_url: final_logo_url_from_ef } = edgeFunctionResponse;
 
     if (ef_piapi_task_id && ef_piapi_task_id !== piApiTaskId) {
         console.warn(`[VideoProcessor] Mismatch in PiAPI task ID. Expected ${piApiTaskId}, Edge Function responded for ${ef_piapi_task_id} (DB ID ${videoDbId}). Proceeding with EF data.`);
     }
 
     if (new_status === 'pending_url') {
-      console.warn(`[VideoProcessor] Edge function reported 'pending_url' for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}). Final URL from EF: ${final_video_url_from_ef}. Logo from EF: ${final_logo_url_from_ef}`); // Changed Thumbnail to Logo
+      console.warn(`[VideoProcessor] Edge function reported 'pending_url' for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}). Final URL from EF: ${final_video_url_from_ef}. Logo from EF: ${final_logo_url_from_ef}`);
       return { new_status: 'pending_url', final_video_url: final_video_url_from_ef, error_message: error_message || 'Video URL is pending confirmation.', final_logo_url: final_logo_url_from_ef };
     }
 
     if (new_status === 'completed' && final_video_url_from_ef) {
-      console.log(`[VideoProcessor] Edge function reported 'completed' for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}) with video URL: ${final_video_url_from_ef}. Logo: ${final_logo_url_from_ef}`); // Changed Thumbnail to Logo
+      console.log(`[VideoProcessor] Edge function reported 'completed' for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}) with video URL: ${final_video_url_from_ef}. Logo: ${final_logo_url_from_ef}`);
       return { new_status: 'completed', final_video_url: final_video_url_from_ef, error_message, final_logo_url: final_logo_url_from_ef };
     }
 
@@ -439,6 +536,7 @@ private async downloadAndStoreVideo(
        throw new Error(error_message || `Video processing failed as reported by status check for ${piApiTaskId}.`);
     }
 
+    // This block should ideally not be hit if the EF always returns one of the above statuses.
     console.error(`[VideoProcessor] Edge function 'force-check-status' for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}) returned unhandled status/URL combination: Status='${new_status}', URL='${final_video_url_from_ef}'. Error message: '${error_message}'`);
     throw new Error(`Edge function returned unexpected state ('${new_status}') or missing URL for ${piApiTaskId}.`);
 
@@ -447,10 +545,19 @@ private async downloadAndStoreVideo(
     throw err;
   }
 }
+  /**
+   * Returns a list of active task IDs for debugging purposes.
+   * @returns An array of active task IDs.
+   */
   getActiveTasks(): string[] {
     return Array.from(this.activeTasks.keys());
   }
 
+  /**
+   * Checks if a specific task is currently being processed.
+   * @param taskId PiAPI's task ID.
+   * @returns True if the task is active, false otherwise.
+   */
   isProcessing(taskId: string): boolean {
     return this.activeTasks.has(taskId);
   }
