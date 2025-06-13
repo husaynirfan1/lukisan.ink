@@ -53,6 +53,14 @@ const showcaseItems: MediaItem[] = [
     aspectRatio: '2:1',
      featured: true
   },
+   {
+    id: 'brand-showcase-1',
+    type: 'video',
+    src: '/assets/videos/gallery/sample-tech.mp4',
+    title: 'Corporate Intro',
+    description: 'Modern, clean and simple with corporate feels.',
+    aspectRatio: '2:1',
+  },
   {
     id: 'brand-showcase-2',
     type: 'image',
