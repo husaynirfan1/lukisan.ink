@@ -31,7 +31,7 @@ const showcaseItems: MediaItem[] = [
     type: 'video',
     src: '/assets/videos/gallery/sample-berger.mp4',
     title: 'BERGER Malaysia',
-    description: 'Modern, clean and simple with natural blend.',
+    description: 'A local burger stall, "BERGER" showcasing burger.',
     aspectRatio: '2:1'
   },
    {
