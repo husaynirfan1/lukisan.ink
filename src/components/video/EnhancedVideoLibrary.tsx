@@ -857,7 +857,7 @@ const handleVideoClick = (e: React.MouseEvent) => {
       </div>
     </div>
   )}
-</div>
+
 
       
       {videoStats.processing > 0 && (
