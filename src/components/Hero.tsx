@@ -11,7 +11,7 @@ export const Hero: React.FC = () => {
       {/* Maintenance Banner */}
       <div className="bg-orange-500 text-white text-center p-2 flex items-center justify-center space-x-2">
         <AlertTriangle className="h-5 w-5" />
-        <span className="font-medium">Video feature is currently under maintenance. We will be back shortly.</span>
+        <span className="font-medium">We're performing improvements on our video services. Video generation is unaffected, but you may experience minor issues.</span>
       </div>
 
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-purple-50">
