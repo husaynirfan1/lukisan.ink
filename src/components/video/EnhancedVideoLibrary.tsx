@@ -553,26 +553,26 @@ export const EnhancedVideoLibrary: React.FC = () => {
     }
   };
 
-  // Handle delete
-  const handleDelete = async (videoId: string) => {
-    if (!user) return;
+  // Handle delete 
+  // const handleDelete = async (videoId: string) => {
+  //   if (!user) return;
     
-    setDeletingVideos(prev => new Set(prev).add(videoId));
+  //   setDeletingVideos(prev => new Set(prev).add(videoId));
     
-    try {
-      await videoLibraryService.deleteVideo(videoId);
-      toast.success('Video deleted successfully');
-    } catch (error) {
-      console.error('[VideoLibrary] Delete error:', error);
-      toast.error('Failed to delete video');
-    } finally {
-      setDeletingVideos(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(videoId);
-        return newSet;
-      });
-    }
-  };
+  //   try {
+  //     await videoLibraryService.deleteVideo(videoId);
+  //     toast.success('Video deleted successfully');
+  //   } catch (error) {
+  //     console.error('[VideoLibrary] Delete error:', error);
+  //     toast.error('Failed to delete video');
+  //   } finally {
+  //     setDeletingVideos(prev => {
+  //       const newSet = new Set(prev);
+  //       newSet.delete(videoId);
+  //       return newSet;
+  //     });
+  //   }
+  // };
 
   // Handle retry
   const handleRetry = async (videoId: string) => {
