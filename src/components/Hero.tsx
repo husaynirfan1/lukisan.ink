@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Zap, Download, Video, Users, Megaphone } from 'lucide-react';
+import { Sparkles, Zap, Download, Video, Users, Megaphone, AlertTriangle } from 'lucide-react'; // Import AlertTriangle
 import { AnimatedTagline } from './AnimatedTagline';
 import { GuestLogoGenerator } from './GuestLogoGenerator';
 import { MediaShowcase } from './MediaShowcase';
@@ -8,6 +8,12 @@ import { MediaShowcase } from './MediaShowcase';
 export const Hero: React.FC = () => {
   return (
     <>
+      {/* Maintenance Banner */}
+      <div className="bg-orange-500 text-white text-center p-2 flex items-center justify-center space-x-2">
+        <AlertTriangle className="h-5 w-5" />
+        <span className="font-medium">Video feature is currently under maintenance. We will be back shortly.</span>
+      </div>
+
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-purple-50">
         {/* Background decoration */}
         <div className="absolute inset-0">
