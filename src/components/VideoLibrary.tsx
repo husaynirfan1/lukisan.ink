@@ -22,7 +22,7 @@ interface StoredVideo {
   company_name?: string;
   video_id: string; // This is the task_id from PiAPI
   video_url: string;
-  logo_url?: string; // Corrected to logo_url
+  logo_url?: string; // Keep as optional, as it exists in DB but we'll use placeholder if not ideal
   created_at: string;
   storage_path?: string;
   status?: 'pending' | 'processing' | 'running' | 'downloading' | 'storing' | 'completed' | 'failed';
@@ -50,9 +50,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Define a stable placeholder URL. This should be a URL to a real, static image.
-  // IMPORTANT: Replace this with an actual path to a placeholder image in your project
-  // e.g., '/images/video-placeholder.png' or 'https://via.placeholder.com/400x225?text=Video+Thumbnail'
-  const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Hover+to+Preview'; // Example, replace with your actual path!
+  // Replace with your actual path! e.g., '/images/video-placeholder.png' or a reliable online service
+  const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Video+Thumbnail'; 
 
   const getStatusDisplay = () => {
     const isRetryingThis = isRetrying;
@@ -213,7 +212,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
       <div className="relative aspect-video bg-gray-900 cursor-pointer" onClick={handleVideoClick}>
         {canDownload ? (
           <>
-            {/* The video element with a stable poster */}
+            {/* The video element with a stable poster, always using fallback if logo_url is invalid */}
             <video 
               ref={videoRef}
               src={video.video_url} 
@@ -221,14 +220,14 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
               muted 
               loop 
               playsInline 
-              poster={video.logo_url || FALLBACK_PLACEHOLDER_URL} // Use fallback for poster
+              poster={video.logo_url || FALLBACK_PLACEHOLDER_URL} // Ensure poster always has a fallback
               style={{ display: showPreview ? 'block' : 'none' }}
             />
-            {/* The image overlay when not showing preview */}
+            {/* The image overlay when not showing preview, always using fallback if logo_url is invalid */}
             {!showPreview && (
               <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                 <img
-                  src={video.logo_url || FALLBACK_PLACEHOLDER_URL} // Use fallback for img src
+                  src={video.logo_url || FALLBACK_PLACEHOLDER_URL} // Ensure img src always has a fallback
                   alt="Video thumbnail"
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -237,7 +236,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
                     const target = e.target as HTMLImageElement;
                     if (target.src !== FALLBACK_PLACEHOLDER_URL) {
                       target.onerror = null; // Prevent infinite loop if fallback also fails
-                      target.src = FALLBACK_PLACEHOLDER_URL;
+                      target.src = FALLBACK_PLACEHOLDER_URL; // Fallback to the defined placeholder
                     }
                   }}
                 />
