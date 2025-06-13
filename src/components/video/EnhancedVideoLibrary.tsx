@@ -552,26 +552,37 @@ export const EnhancedVideoLibrary: React.FC = () => {
   };
 
   // Handle delete 
-  const handleDelete = async (videoId: string) => {
-    if (!user) return;
-    
-    setDeletingVideos(prev => new Set(prev).add(videoId));
-    
-    try {
-      await videoLibraryService.deleteVideo(videoId);
-      toast.success('Video deleted successfully');
-    } catch (error) {
-      console.error('[VideoLibrary] Delete error:', error);
-      toast.error('Failed to delete video');
-    } finally {
-      setDeletingVideos(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(videoId);
-        return newSet;
-      });
-    }
-  }; 
+  // In your EnhancedVideoLibrary component (eclib.tsx)
 
+const handleDelete = async (videoId: string) => {
+  if (!user) return;
+
+  // Set the deleting state to show a spinner on the card
+  setDeletingVideos(prev => new Set(prev).add(videoId));
+
+  try {
+    // This calls your service, which should invoke the Edge Function
+    await videoLibraryService.deleteVideo(videoId);
+
+    // --- FIX: Update the UI immediately on success ---
+    // Filter out the deleted video from the local state array.
+    // This will cause React to re-render the list without the deleted card.
+    setVideos(currentVideos => currentVideos.filter(video => video.id !== videoId));
+
+    toast.success('Video deleted successfully');
+
+  } catch (error) {
+    console.error('[VideoLibrary] Delete error:', error);
+    toast.error('Failed to delete video');
+  } finally {
+    // Remove the video ID from the deleting set to hide the spinner
+    setDeletingVideos(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(videoId);
+      return newSet;
+    });
+  }
+};
   // Handle retry
   const handleRetry = async (videoId: string) => {
     if (!user || checkingStatus.has(videoId)) return;
