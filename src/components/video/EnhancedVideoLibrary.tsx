@@ -491,46 +491,53 @@ export const EnhancedVideoLibrary: React.FC = () => {
   };
 
   // Handle delete - MODIFIED TO USE TOAST AND OPTIMISTIC UI UPDATES
-  const handleDelete = async (videoId: string) => {
-    // Ensure user is available before proceeding and find the video to get its file_size
-    const videoToDelete = videos.find(v => v.id === videoId);
-    if (!videoToDelete || !user) return; 
+ const handleDelete = async (videoId: string) => {
+  if (!user) return;
 
-    setDeletingVideos(prev => new Set(prev).add(videoId)); // Set deleting state for the specific video
-    const toastId = toast.loading('Deleting video...', { id: `delete-${videoId}` }); // Show loading toast
+  const videoToDelete = videos.find(v => v.id === videoId);
+  if (!videoToDelete) {
+    toast.error("Could not find video to delete.");
+    return;
+  }
 
-    try {
-      // Delegate the actual deletion (Storage + DB via Edge Function) to videoLibraryService
-      await videoLibraryService.deleteVideo(videoId); 
-      
-      toast.success('Video deleted successfully!', { id: toastId });
-      
-      // Optimistic UI update: immediately remove from local state
-      // This is crucial for immediate UI feedback. Realtime will eventually correct if needed.
-      setVideos(prev => prev.filter(v => v.id !== videoId));
+  setDeletingVideos(prev => new Set(prev).add(videoId));
+  const toastId = toast.loading('Deleting video...');
 
-      // Optimistic update for videoStats
-      if (videoToDelete.file_size !== undefined) { 
-          setVideoStats(prevStats => ({
-              total: prevStats.total - 1,
-              completed: videoToDelete.status === 'completed' ? prevStats.completed - 1 : prevStats.completed,
-              processing: ['pending', 'processing', 'downloading', 'storing'].includes(videoToDelete.status || '') ? prevStats.processing - 1 : prevStats.processing,
-              failed: videoToDelete.status === 'failed' ? prevStats.failed - 1 : prevStats.failed,
-              totalSize: prevStats.totalSize - (videoToDelete.file_size || 0)
-          }));
-      }
+  // 👉 Optimistically update UI
+  setVideos(prev => prev.filter(v => v.id !== videoId));
 
-    } catch (error: any) {
-      console.error('[VideoLibrary] Delete error:', error);
-      toast.error(`Failed to delete video: ${error.message}`, { id: toastId }); // Use toastId if defined
-    } finally {
-      setDeletingVideos(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(videoId);
-        return newSet;
-      });
+  try {
+    videoStatusManager.stopMonitoring(videoId);
+
+    const { data, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
+      body: { video_db_id: videoId },
+    });
+
+    if (efError) {
+      throw new Error(efError.message);
     }
-  };
+
+    const efResponse = data as { success: boolean; message: string; error?: string };
+
+    if (efResponse.success) {
+      toast.success('Video deleted successfully!', { id: toastId });
+    } else {
+      throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
+    }
+  } catch (error: any) {
+    toast.error(`Failed to delete video: ${error.message}`, { id: toastId });
+    
+    // ❗ Rollback UI if deletion fails
+    setVideos(prev => [videoToDelete, ...prev]);
+  } finally {
+    setDeletingVideos(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(videoId);
+      return newSet;
+    });
+  }
+};
+
 
   // Handle retry
   const handleRetry = async (videoId: string) => {
