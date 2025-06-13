@@ -402,6 +402,7 @@ private async downloadAndStoreVideo(
         video_id: videoDbId,
       },
     });
+    console.log(`[VideoProcessor] RAW INVOKE RESPONSE OBJECT:`, { data: edgeFunctionResponse, error: efError });
 
     if (efError) {
       console.error(`[VideoProcessor] Edge function 'force-check-status' error for DB ID ${videoDbId} (PiAPI Task ${piApiTaskId}):`, efError.message);
