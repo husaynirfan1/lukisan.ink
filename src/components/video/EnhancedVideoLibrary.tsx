@@ -311,7 +311,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={handleDelete}
+            onClick={() => onDelete(video.id)}
             disabled={isDeleting}
             className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-lg disabled:opacity-50"
             title="Delete video"
@@ -371,7 +371,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
             )}
             
             <button 
-              onClick={handleDelete} 
+              onClick={() => onDelete(video.id)}
               disabled={isDeleting}
               className="p-2 text-gray-500 hover:text-red-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
               title="Delete video"
@@ -492,52 +492,45 @@ export const EnhancedVideoLibrary: React.FC = () => {
 
   // Handle delete - MODIFIED TO USE TOAST AND OPTIMISTIC UI UPDATES
   const handleDelete = async (videoId: string) => {
-  if (!user) return;
+    // Ensure user is available before proceeding and find the video to get its file_size
+    const videoToDelete = videos.find(v => v.id === videoId);
+    if (!videoToDelete || !user) return; 
 
-  const videoToDelete = videos.find(v => v.id === videoId);
-  if (!videoToDelete) {
-    toast.error("Could not find video to delete.");
-    return;
-  }
+    setDeletingVideos(prev => new Set(prev).add(videoId)); // Set deleting state for the specific video
+    const toastId = toast.loading('Deleting video...', { id: `delete-${videoId}` }); // Show loading toast
 
-  setDeletingVideos(prev => new Set(prev).add(videoId));
-  const toastId = toast.loading('Deleting video...');
-
-  // 👉 Optimistically update UI
-  setVideos(prev => prev.filter(v => v.id !== videoId));
-
-  try {
-    videoStatusManager.stopMonitoring(videoId);
-
-    const { data, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
-      body: { video_db_id: videoId },
-    });
-
-    if (efError) {
-      throw new Error(efError.message);
-    }
-
-    const efResponse = data as { success: boolean; message: string; error?: string };
-
-    if (efResponse.success) {
+    try {
+      // Delegate the actual deletion (Storage + DB via Edge Function) to videoLibraryService
+      await videoLibraryService.deleteVideo(videoId); 
+      
       toast.success('Video deleted successfully!', { id: toastId });
-    } else {
-      throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
-    }
-  } catch (error: any) {
-    toast.error(`Failed to delete video: ${error.message}`, { id: toastId });
-    
-    // ❗ Rollback UI if deletion fails
-    setVideos(prev => [videoToDelete, ...prev]);
-  } finally {
-    setDeletingVideos(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(videoId);
-      return newSet;
-    });
-  }
-}
+      
+      // Optimistic UI update: immediately remove from local state
+      // This is crucial for immediate UI feedback. Realtime will eventually correct if needed.
+      setVideos(prev => prev.filter(v => v.id !== videoId));
 
+      // Optimistic update for videoStats
+      if (videoToDelete.file_size !== undefined) { 
+          setVideoStats(prevStats => ({
+              total: prevStats.total - 1,
+              completed: videoToDelete.status === 'completed' ? prevStats.completed - 1 : prevStats.completed,
+              processing: ['pending', 'processing', 'downloading', 'storing'].includes(videoToDelete.status || '') ? prevStats.processing - 1 : prevStats.processing,
+              failed: videoToDelete.status === 'failed' ? prevStats.failed - 1 : prevStats.failed,
+              totalSize: prevStats.totalSize - (videoToDelete.file_size || 0)
+          }));
+      }
+
+    } catch (error: any) {
+      console.error('[VideoLibrary] Delete error:', error);
+      toast.error(`Failed to delete video: ${error.message}`, { id: toastId }); // Use toastId if defined
+    } finally {
+      setDeletingVideos(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(videoId);
+        return newSet;
+      });
+    }
+  };
 
   // Handle retry
   const handleRetry = async (videoId: string) => {
@@ -840,7 +833,7 @@ export const EnhancedVideoLibrary: React.FC = () => {
                     )}
                     
                     <button
-                      onClick={(e) => handleDelete(e)}
+                      onClick={() => onDelete(video.id)}
                       disabled={deletingVideos.has(video.id)}
                       className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
                     >
