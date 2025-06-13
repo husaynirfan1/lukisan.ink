@@ -818,48 +818,20 @@ const handleVideoClick = (e: React.MouseEvent) => {
         className="bg-white rounded-xl shadow-md overflow-hidden border transition-all duration-200 hover:shadow-lg"
       >
         <div className="flex flex-col md:flex-row">
-          <div
-  className="md:w-64 h-40 bg-gray-900 relative cursor-pointer"
-  onMouseEnter={handleMouseEnter}
-  onMouseLeave={handleMouseLeave}
-  onClick={handleVideoClick}
->
-  {canDownload ? (
-    <>
-      <video
-        ref={videoRef}
-        src={video.video_url || undefined}
-        className="w-full h-full object-cover"
-        muted
-        loop
-        playsInline
-        poster="https://placehold.co/400x225/E0E0E0/333333/png?text=Preview"
-        style={{ display: showPreview ? 'block' : 'none' }}
-      />
-      {!showPreview && (
-        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-          <img
-            src="https://placehold.co/400x225/E0E0E0/333333/png?text=Preview"
-            alt="Video thumbnail"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-            <div className="bg-white/90 rounded-full p-3 group-hover:scale-110 transition-transform">
-              <Play className="h-6 w-6 text-gray-900 ml-1" />
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  ) : (
-    <div className="w-full h-full flex items-center justify-center">
-      <div className={`w-12 h-12 flex items-center justify-center rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
-        {statusDisplay.icon}
-      </div>
-    </div>
-  )}
-</div>
-
+          <div className="md:w-64 h-40 bg-gray-900 relative">
+            {video.status === 'completed' && video.video_url ? (
+              <img
+                src="https://placehold.co/400x225/E0E0E0/333333/png?text=Preview"
+                alt="Video thumbnail"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className={`w-12 h-12 flex items-center justify-center rounded-full ${statusDisplay.bg} ${statusDisplay.color}`}>
+                  {statusDisplay.icon}
+                </div>
+              </div>
+            )} 
             {isProcessing && (
               <div className="absolute bottom-0 left-0 right-0 bg-black/50 p-2">
                 <div className="w-full bg-gray-200 rounded-full h-1.5">
