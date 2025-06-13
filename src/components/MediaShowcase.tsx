@@ -185,19 +185,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ item, isHovered, onHover }) =
         className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-center justify-center"
       >
         <div className="flex items-center space-x-4">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={togglePlay}
-            className="p-4 bg-white/90 backdrop-blur-sm rounded-full shadow-xl hover:bg-white transition-all duration-200"
-            aria-label={isPlaying ? 'Pause video' : 'Play video'}
-          >
-            {isPlaying ? (
-              <Pause className="h-6 w-6 text-gray-900" />
-            ) : (
-              <Play className="h-6 w-6 text-gray-900 ml-1" />
-            )}
-          </motion.button>
+          
 
           <motion.button
             whileHover={{ scale: 1.1 }}
@@ -216,18 +204,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ item, isHovered, onHover }) =
       </motion.div>
 
       {/* Play indicator when not hovered */}
-      {!showControls && isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0.7 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="p-6 bg-white/20 backdrop-blur-sm rounded-full border border-white/30"
-          >
-            <Play className="h-10 w-10 text-white ml-1" />
-          </motion.div>
-        </div>
-      )}
+     
     </div>
   );
 };
