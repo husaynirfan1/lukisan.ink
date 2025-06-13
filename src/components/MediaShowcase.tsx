@@ -32,7 +32,7 @@ const showcaseItems: MediaItem[] = [
     src: '/assets/videos/gallery/sample-berger.mp4',
     title: 'BERGER Malaysia',
     description: 'A local burger stall, "BERGER" showcasing burger.',
-    aspectRatio: '2:1'
+    aspectRatio: '16:9'
   },
    {
     id: 'brand-showcase-1',
