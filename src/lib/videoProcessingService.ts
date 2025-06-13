@@ -31,7 +31,7 @@ interface VideoRecord {
   progress: number;
   storage_path: string | null;
   video_url: string | null;
-  thumbnail_url: string | null; // Re-added thumbnail_url as it should now exist in DB
+  logo_url: string | null; // Re-added thumbnail_url as it should now exist in DB
   error_message: string | null;
   updated_at: string;
 }
