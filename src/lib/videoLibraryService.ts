@@ -230,12 +230,12 @@ class VideoLibraryService {
       failed,
       totalSize
     };
-  }
+  };
 
   /**
    * Delete a video
    */
- import { supabase } from './supabase';
+import { supabase } from './supabase';
 import { videoProcessingService } from './videoProcessingService';
 import toast from 'react-hot-toast';
 
