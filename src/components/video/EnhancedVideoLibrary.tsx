@@ -361,20 +361,20 @@ const VideoCard: React.FC<VideoCardProps> = ({
             </motion.button>
           )}
           
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => onDelete(video.id)} // FIX HERE
-            disabled={isDeleting}
-            className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-lg disabled:opacity-50"
-            title="Delete video"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </motion.button>
+         <motion.button
+    whileHover={{ scale: 1.1 }}
+    whileTap={{ scale: 0.9 }}
+    onClick={() => onDelete(video.id)}
+    disabled={isDeleting}
+    className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-lg disabled:opacity-50"
+    title="Delete video"
+  >
+    {isDeleting ? (
+      <Loader2 className="h-4 w-4 animate-spin" />
+    ) : (
+      <Trash2 className="h-4 w-4" />
+    )}
+  </motion.button>
         </div>
       </div>
       
