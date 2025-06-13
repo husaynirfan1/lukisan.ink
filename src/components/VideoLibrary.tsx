@@ -37,9 +37,9 @@ interface StoredVideo {
 interface VideoCardProps {
   video: StoredVideo;
   onDelete: (videoId: string) => void;
-  onRetry: (video: StoredVideo) => void;
+  onRetry: (video: StoredVideo) => void; // This prop still exists, but its implementation will change
   isDeleting: boolean;
-  isRetrying: boolean;
+  isRetrying: boolean; // This state is now managed slightly differently
 }
 
 const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDeleting, isRetrying }) => {
@@ -49,12 +49,10 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Define a stable placeholder URL. This should be a URL to a real, static image.
-  // Replace with your actual path! e.g., '/images/video-placeholder.png' or a reliable online service
   const FALLBACK_PLACEHOLDER_URL = 'https://placehold.co/400x225/E0E0E0/333333/png?text=Video+Thumbnail'; 
 
   const getStatusDisplay = () => {
-    const isRetryingThis = isRetrying;
+    const isRetryingThis = isRetrying; // `isRetrying` is passed as a prop now
     
     if (isRetryingThis) {
       return { 
@@ -197,7 +195,9 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDelete, onRetry, isDelet
 
   const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onRetry(video);
+    // This will now trigger the videoStatusManager to re-monitor,
+    // which will eventually lead to the Edge Function being called.
+    onRetry(video); 
   };
 
   return (
@@ -453,7 +453,7 @@ export function VideoLibrary() {
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set()); 
   const [deletingVideos, setDeletingVideos] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
-  const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set());
+  const [checkingStatus, setCheckingStatus] = useState<Set<string>>(new Set()); // This state is now managed slightly differently
   const [storageInfo, setStorageInfo] = useState<{
     used_space: number;
     total_space: number;
@@ -588,64 +588,39 @@ export function VideoLibrary() {
     return parts.length > 1 ? parts[1] : undefined;
   };
 
-  // New function that correctly calls the Edge Function
-  const handleForceCheckStatus = async (video: StoredVideo) => {
-    if (!user || checkingStatus.has(video.id)) return;
-
-    console.log(`[VideoLibrary] Invoking edge function to check status for video ${video.id}`);
+  // The handleForceCheckStatus function is now simplified to just trigger re-monitoring.
+  const handleForceCheckStatus = useCallback(async (video: StoredVideo) => {
+    if (!user) return; // Ensure user is available before proceeding
+    
+    console.log(`[VideoLibrary] Manual re-check initiated for video ${video.id}. Starting monitoring.`);
     const toastId = `status-check-${video.id}`;
-    toast.loading('Checking video status...', { id: toastId });
+    toast.loading('Re-checking video status...', { id: toastId });
 
-    setCheckingStatus(prev => new Set(prev).add(video.id));
+    // Use a local state to indicate individual video retrying status
+    setCheckingStatus(prev => new Set(prev).add(video.id)); 
 
     try {
-      // The `supabase.functions.invoke` call should return a { data, error } object.
-      // The 'data' property contains the raw JSON string from the Edge Function response.
-      const { data: rawData, error: efError } = await supabase.functions.invoke('force-check-status', {
-        body: { video_id: video.id },
-      });
-
-      if (efError) {
-        throw new Error(efError.message);
-      }
-      
-      let efResponse: any;
-      if (rawData) {
-        try {
-          efResponse = JSON.parse(rawData as string); // Parse the raw JSON string
-        } catch (parseError) {
-          console.error('[VideoLibrary] Failed to parse Edge Function response:', rawData, parseError);
-          throw new Error('Malformed response from Edge Function.');
-        }
-      } else {
-        throw new Error('No data received from Edge Function.');
-      }
-
-      // Check for an 'error' property within the parsed response from the Edge Function
-      if (efResponse.error) {
-        throw new Error(efResponse.details?.message || efResponse.error);
-      }
-
-      console.log('[VideoLibrary] Edge function response:', efResponse);
-      toast.success('Status check complete.', { id: toastId });
-
-      // Trigger a re-fetch of videos to update the UI with the latest status and URLs from DB
-      // This is crucial because the Edge Function updated the DB, but our component's state needs to reflect it.
-      fetchAndMonitorVideos(false);
+      // Instead of invoking the Edge Function directly here,
+      // we'll rely on the existing videoStatusManager to re-initiate polling.
+      // This will indirectly lead to the Edge Function being called by the polling mechanism
+      // (as setup in videoProcessingService.ts).
+      videoStatusManager.startMonitoring(video.id, video.video_id, user.id);
+      toast.success('Re-check initiated. Status will update shortly.', { id: toastId });
 
     } catch (error: any) {
-      console.error(`[VideoLibrary] Force status check failed:`, error);
-      toast.error(`Status check failed: ${error.message}`, { id: toastId });
+      console.error(`[VideoLibrary] Failed to initiate re-check:`, error);
+      toast.error(`Failed to initiate re-check: ${error.message}`, { id: toastId });
     } finally {
-      setTimeout(() => {
+      setTimeout(() => { // Remove the checking status after a short delay
         setCheckingStatus(prev => {
           const newSet = new Set(prev);
           newSet.delete(video.id);
           return newSet;
         });
-      }, 1000);
+      }, 1000); // Give some time for monitoring to start
     }
-  };
+  }, [user]); // Depend on user for useCallback
+
   
   const handleDelete = async (videoId: string) => {
     const videoToDelete = videos.find(v => v.id === videoId);
@@ -848,7 +823,7 @@ export function VideoLibrary() {
                 key={video.id}
                 video={video}
                 onDelete={handleDelete}
-                onRetry={handleForceCheckStatus}
+                onRetry={handleForceCheckStatus} // Still calls handleForceCheckStatus
                 isDeleting={deletingVideos.has(video.id)}
                 isRetrying={checkingStatus.has(video.id)}
               />
