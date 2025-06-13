@@ -614,24 +614,37 @@ export function VideoLibrary() {
     try {
       // Stop monitoring if it's active
       videoStatusManager.stopMonitoring(videoId);
-      
-      if (videoToDelete.storage_path) {
-        // Assume deleteVideoFromSupabase can handle both video and logo_url if needed
-        await deleteVideoFromSupabase(videoToDelete.storage_path);
-        // If logo_url is stored separately in storage, you might need another delete call here
-        // e.g., if (videoToDelete.logo_url && extractStoragePath(videoToDelete.logo_url)) {
-        //   await deleteVideoFromSupabase(extractStoragePath(videoToDelete.logo_url));
-        // }
+
+      // --- NEW: Invoke Edge Function for deletion ---
+      console.log(`[VideoLibrary] Calling Edge Function 'delete-video-and-data' for DB ID: ${videoId}`);
+      const toastId = toast.loading('Deleting video...');
+
+      const { data, error: efError } = await supabase.functions.invoke('delete-video-and-data', {
+        body: { video_db_id: videoId },
+      });
+
+      if (efError) {
+        console.error(`[VideoLibrary] Edge function delete error:`, efError);
+        throw new Error(efError.message);
       }
-      const { error: dbError } = await supabase
-        .from('video_generations')
-        .delete()
-        .eq('id', videoId)
-        .eq('user_id', user.id);
-      if (dbError) throw new Error(dbError.message);
-      toast.success('Video deleted successfully');
-      // No need to setVideos here, realtime subscription should handle it
-      
+
+      // Edge function response contains 'success', 'message', 'storageDeleted', 'logoDeleted'
+      const efResponse = data as { success: boolean; message: string; storageDeleted?: boolean; logoDeleted?: boolean; error?: string };
+
+      if (efResponse.success) {
+        toast.success('Video deleted successfully!', { id: toastId });
+        console.log(`[VideoLibrary] Edge function reported: ${efResponse.message}. Storage deleted: ${efResponse.storageDeleted}, Logo deleted: ${efResponse.logoDeleted}`);
+        // The UI will likely update via Realtime, but we can optimistically remove it too
+        setVideos(prev => prev.filter(v => v.id !== videoId));
+      } else {
+        console.error(`[VideoLibrary] Edge function reported deletion failure:`, efResponse.error || efResponse.message);
+        throw new Error(efResponse.error || efResponse.message || 'Deletion failed in Edge Function.');
+      }
+      // --- END NEW: Invoke Edge Function ---
+
+      // No need for direct supabase.from(...).delete() here, the Edge Function handles it.
+      // No need for direct deleteVideoFromSupabase here, the Edge Function handles it.
+
       // Update storage info (optimistic update, will be corrected by next fetch)
       if (storageInfo) {
         setStorageInfo(prev => prev ? {
@@ -641,7 +654,7 @@ export function VideoLibrary() {
         } : null);
       }
     } catch (error: any) {
-      toast.error(`Failed to delete video: ${error.message}`);
+      toast.error(`Failed to delete video: ${error.message}`, { id: toast.loading }); // Use toastId if defined
     } finally {
       setDeletingVideos(prev => {
         const newSet = new Set(prev);
