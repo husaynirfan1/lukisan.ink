@@ -336,17 +336,17 @@ const VideoCard: React.FC<VideoCardProps> = ({
 
         {/* Action buttons overlay */}
         <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {canDownload && (
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={handleDownload}
-              className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-lg"
-              title="Download video"
-            >
-              <Download className="h-4 w-4" />
-            </motion.button>
-          )}
+  {canDownload && (
+    <motion.button
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.9 }}
+      onClick={handleDownload}
+      className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-lg"
+      title="Download video"
+    >
+      <Download className="h-4 w-4" />
+    </motion.button>
+  )}
           
           {isProcessing && (
             <motion.button
