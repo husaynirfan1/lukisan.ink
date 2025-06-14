@@ -184,51 +184,27 @@ export const generateTextToVideo = async (request: TextToVideoRequest): Promise<
 };
 
 export interface ImageToVideoRequest {
-    imageUrl: string | File; // This now accepts a string OR a File object
-    prompt?: string;
-    aspectRatio?: AspectRatio;
-    negativePrompt?: string;
+    imageUrl: string;
+    prompt?: string;
+    aspectRatio?: AspectRatio;
+    negativePrompt?: string; 
 }
 
 export const generateImageToVideo = async (request: ImageToVideoRequest): Promise<CreateTaskResponse> => {
-    console.log("Building Image-to-Video request:", request);
+    console.log("Building Image-to-Video request:", request);
 
-    // This variable will hold the final string for the API (URL or base64)
-    let imagePayload: string; 
-
-    // Check if imageUrl is a File object that needs processing
-    if (request.imageUrl instanceof File) {
-        console.log("imageUrl is a File object. Validating and converting to base64...");
-        
-        // 1. Validate the file
-        const validation = validateImageFile(request.imageUrl);
-        if (!validation.valid) {
-            throw new Error(validation.error); // Stop execution if the file is invalid
+    const payload: ApidogRequestPayload = {
+        model: API_MODEL,
+        task_type: TaskType.Img2Video,
+        input: {
+            prompt: request.prompt || 'Animate this image with natural motion',
+            image: request.imageUrl,
+            aspect_ratio: request.aspectRatio || AspectRatio.The169,
+            negative_prompt: request.negativePrompt,
         }
-        
-        // 2. Convert the file to base64
-        imagePayload = await fileToBase64(request.imageUrl);
-    } else if (typeof request.imageUrl === 'string') {
-        // If it's already a string (URL or pre-converted base64), use it directly
-        console.log("imageUrl is a string. Using it directly.");
-        imagePayload = request.imageUrl;
-    } else {
-        // Handle unexpected types
-        throw new Error("Invalid imageUrl type. Must be a string or a File object.");
-    }
+    };
 
-    const payload: ApidogRequestPayload = {
-        model: API_MODEL,
-        task_type: TaskType.Img2Video,
-        input: {
-            prompt: request.prompt || 'Animate this image with natural motion',
-            image: imagePayload, // Use the processed image string
-            aspect_ratio: request.aspectRatio || AspectRatio.The169,
-            negative_prompt: request.negativePrompt,
-        }
-    };
-
-    return postToApi(payload);
+    return postToApi(payload);
 };
 
 /**
