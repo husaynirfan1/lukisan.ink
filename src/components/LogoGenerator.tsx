@@ -660,20 +660,14 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                   <span>Upgrade Plan</span>
                 </motion.button>
               ) : (
-                <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  // TODO: Add your logic to show a subscription management page
-                  // onClick={() => navigateToAccountPage()} 
-                  className="w-full sm:w-auto bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
-                >
+            
                    <PaymentButton
                     productId="prod_SUxt63tLx3WTzh"
                     className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-700"
                   >
             
                   </PaymentButton> 
-                </motion.button>
+     
               )}
             </div>
           </div>
