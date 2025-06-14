@@ -763,9 +763,7 @@ export const VideoGenerator: React.FC = () => {
                     disabled={status !== 'idle' && status !== 'failed'}
                   />
                   <div className="flex justify-between items-center mt-2">
-                    <p className="text-sm text-gray-500">
-                      Leave empty for automatic animation detection
-                    </p>
+                 
                     <span className="text-sm text-gray-400">
                       {imagePrompt.length}/500
                     </span>
