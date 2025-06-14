@@ -274,7 +274,7 @@ export const VideoGenerator: React.FC = () => {
                 negativePrompt: negativePrompt || undefined,
             };
             createTaskResponse = await generateImageToVideo(request);
-         
+        }
 
         // Validate the task_id
         const validTaskId = createTaskResponse.task_id.trim();
