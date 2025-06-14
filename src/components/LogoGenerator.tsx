@@ -671,8 +671,7 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                     productId="prod_SUxt63tLx3WTzh"
                     className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-700"
                   >
-                    <CreditCard className="h-5 w-5" />
-                    <span>Add Credits</span>
+            
                   </PaymentButton>
                 </motion.button>
               )}
