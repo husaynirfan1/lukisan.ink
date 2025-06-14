@@ -177,9 +177,9 @@ export const LogoGenerator: React.FC = () => {
   const currentPlaceholder = selectedCategoryData?.placeholder || 'e.g., A modern tech company specializing in cloud computing solutions...';
 
   // Calculate total credits needed
-  const creditsNeeded = selectedAspectRatios.length;
-  const remainingCredits = getRemainingGenerations();
-  const canGenerateAll = remainingCredits >= creditsNeeded;
+const creditsNeeded = selectedAspectRatios.length;
+// The line below was removed because 'remainingCredits' is already defined above
+const canGenerateAll = remainingCredits >= creditsNeeded;
 
   const handleRefinePrompt = async () => {
     if (!prompt.trim()) {
