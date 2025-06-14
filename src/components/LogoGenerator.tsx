@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Download, Loader2, Crown, Video, Wand2, RefreshCw, Lock, CreditCard, CheckSquare, Square, Cloud, Scissors, AlertTriangle, Info } from 'lucide-react';
+import { Sparkles, Download, Loader2, Crown, Video, Wand2, RefreshCw, Lock, CreditCard, CheckSquare, Square, Cloud, Settings, Scissors, AlertTriangle, Info } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
 import { supabase } from '../lib/supabase';
