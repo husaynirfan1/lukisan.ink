@@ -654,6 +654,7 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                 productId="prod_SUxt63tLx3WTzh"
                 className="w-full sm:w-auto"
               >
+                <span>Coming soon</span>
                 {/* You might want to add the icon/text back in here if needed */}
               </PaymentButton> 
             )}
