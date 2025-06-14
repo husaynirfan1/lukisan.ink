@@ -672,7 +672,7 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                     className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-700"
                   >
             
-                  </PaymentButton>
+                  </PaymentButton> 
                 </motion.button>
               )}
             </div>
