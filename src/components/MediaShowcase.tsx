@@ -48,7 +48,7 @@ const showcaseItems: MediaItem[] = [
     id: 'brand-showcase-1',
     type: 'video',
     src: '/assets/videos/gallery/sample-splash.mp4',
-    title: 'Corporate Intro',
+    title: 'Brand Splash',
     description: 'Chaotic splash brand video.',
     aspectRatio: '2:1',
      featured: true
@@ -57,7 +57,7 @@ const showcaseItems: MediaItem[] = [
     id: 'brand-showcase-1',
     type: 'video',
     src: '/assets/videos/gallery/sample-tech.mp4',
-    title: 'Corporate Intro',
+    title: 'Technology',
     description: 'Techy-feels videos introducing a product.',
     aspectRatio: '2:1',
   },
