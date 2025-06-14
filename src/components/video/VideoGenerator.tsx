@@ -263,17 +263,31 @@ export const VideoGenerator: React.FC = () => {
             };
             createTaskResponse = await generateTextToVideo(request);
         } else {
-            if (!selectedImage) throw new Error("Image not selected for image-to-video");
+            // if (!selectedImage) throw new Error("Image not selected for image-to-video");
             
-            const imageUrl = await uploadImageForVideo(selectedImage);
+            // const imageUrl = await uploadImageForVideo(selectedImage);
 
-            const request: ImageToVideoRequest = {
-                imageUrl: imageUrl,
-                prompt: imagePrompt || 'Animate this image with natural motion',
-                aspectRatio: aspectRatio,
-                negativePrompt: negativePrompt || undefined,
-            };
-            createTaskResponse = await generateImageToVideo(request);
+            // const request: ImageToVideoRequest = {
+            //     imageUrl: imageUrl,
+            //     prompt: imagePrompt || 'Animate this image with natural motion',
+            //     aspectRatio: aspectRatio,
+            //     negativePrompt: negativePrompt || undefined,
+            // };
+            // createTaskResponse = await generateImageToVideo(request);
+          if (!selectedImage) throw new Error("Image not selected for image-to-video");
+
+          // The 'uploadImageForVideo' call is no longer needed.
+          
+          const request: ImageToVideoRequest = {
+              // Pass the File object directly instead of a URL string.
+              imageUrl: selectedImage, 
+              prompt: imagePrompt || 'Animate this image with natural motion',
+              aspectRatio: aspectRatio,
+              negativePrompt: negativePrompt || undefined,
+          };
+          
+          // The function now accepts the File object and handles it automatically.
+          createTaskResponse = await generateImageToVideo(request); 
         }
 
         // Validate the task_id
