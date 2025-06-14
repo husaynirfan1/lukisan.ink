@@ -623,7 +623,7 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                   <Info className="h-5 w-5 text-gray-400 cursor-help" />
                   <div className="absolute bottom-full mb-2 w-64 bg-gray-800 text-white text-sm rounded-lg py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
                     {isProUser 
-                      ? 'Your monthly credits reset on the 1st of each month.' 
+                      ? 'Your monthly credits reset after each month.' 
                       : 'Your daily free generations reset at midnight.'
                     }
                     <br />
