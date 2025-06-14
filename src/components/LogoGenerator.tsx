@@ -649,16 +649,7 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
             {/* Right Side: Action Button */}
             <div className="w-full sm:w-auto flex-shrink-0">
               {!isProUser ? (
-                <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  // TODO: Add your logic to show the subscription modal
-                  // onClick={() => setShowSubscriptionModal(true)} 
-                  className="w-full sm:w-auto bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
-                >
-                  <Crown className="h-5 w-5" />
-                  <span>Upgrade Plan</span>
-                </motion.button>
+                
               ) : (
             
                    <PaymentButton
