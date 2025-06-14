@@ -7,7 +7,7 @@ import { stripeProducts } from '../stripe-config';
 import toast from 'react-hot-toast';
 
 interface PaymentButtonProps {
-  productId: 'creator-plan' | 'add-credits'; // Make this required
+  productId: 'creator-plan' | 'add-credits'; // Make this required 
   className?: string;
   children?: React.ReactNode;
   variant?: 'primary' | 'secondary';
