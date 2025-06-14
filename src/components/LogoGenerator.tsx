@@ -13,6 +13,7 @@ import { VideoCreator } from './video/VideoCreator';
 import { AuthModal } from './auth/AuthModal';
 import { BackgroundRemovalModal } from './BackgroundRemovalModal';
 import toast from 'react-hot-toast';
+import { PaymentButton } from './PaymentButton';
 
 const categories = [
   { 
@@ -666,8 +667,13 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                   // onClick={() => navigateToAccountPage()} 
                   className="w-full sm:w-auto bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
                 >
-                  <CreditCard className="h-5 w-5" />
-                  <span>Add Credits</span>
+                   <PaymentButton
+                    productId="add-credits"
+                    className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    <CreditCard className="h-5 w-5" />
+                    <span>Add Credits</span>
+                  </PaymentButton>
                 </motion.button>
               )}
             </div>
