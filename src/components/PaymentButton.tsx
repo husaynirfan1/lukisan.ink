@@ -26,11 +26,11 @@ export const PaymentButton: React.FC<PaymentButtonProps> = ({
 
   const product = stripeProducts.find(p => p.id === productId);
 
-    if (!product) {
+  if (!product) {
       toast.error('Invalid product selected.');
       console.error(`Product with ID "${productId}" not found.`);
       return;
-    }
+  }
 
   const handlePaymentClick = async () => {
     if (!user) {
