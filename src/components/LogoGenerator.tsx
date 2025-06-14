@@ -649,7 +649,12 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
             {/* Right Side: Action Button */}
             <div className="w-full sm:w-auto flex-shrink-0">
               {!isProUser ? (
-                
+                    <PaymentButton
+                    productId="prod_SUxt63tLx3WTzh"
+                    className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+            
+                  </PaymentButton> 
               ) : (
             
                    <PaymentButton
