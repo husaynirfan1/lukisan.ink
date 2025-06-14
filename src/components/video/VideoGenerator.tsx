@@ -263,18 +263,18 @@ export const VideoGenerator: React.FC = () => {
             };
             createTaskResponse = await generateTextToVideo(request);
         } else {
-            // if (!selectedImage) throw new Error("Image not selected for image-to-video");
+            if (!selectedImage) throw new Error("Image not selected for image-to-video");
             
-            // const imageUrl = await uploadImageForVideo(selectedImage);
+            const imageUrl = await uploadImageForVideo(selectedImage);
 
-            // const request: ImageToVideoRequest = {
-            //     imageUrl: imageUrl,
-            //     prompt: imagePrompt || 'Animate this image with natural motion',
-            //     aspectRatio: aspectRatio,
-            //     negativePrompt: negativePrompt || undefined,
-            // };
-            // createTaskResponse = await generateImageToVideo(request);
-        
+            const request: ImageToVideoRequest = {
+                imageUrl: imageUrl,
+                prompt: imagePrompt || 'Animate this image with natural motion',
+                aspectRatio: aspectRatio,
+                negativePrompt: negativePrompt || undefined,
+            };
+            createTaskResponse = await generateImageToVideo(request);
+         
 
         // Validate the task_id
         const validTaskId = createTaskResponse.task_id.trim();
