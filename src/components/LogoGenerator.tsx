@@ -635,14 +635,14 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
               <p className="text-5xl font-extrabold text-gray-900">{remainingCredits}</p>
               <p className="text-gray-500 mt-1">out of {totalCredits} remaining</p>
               
-              <div className="mt-4">
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out" 
-                    style={{ width: `${progressPercentage}%` }}
-                  ></div>
-                </div>
+             <div className="mt-4">
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div 
+                  className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out" 
+                  style={{ width: `${progressPercentage}%` }}
+                ></div>
               </div>
+            </div>
             </div>
 
             {/* Right Side: Action Button */}
