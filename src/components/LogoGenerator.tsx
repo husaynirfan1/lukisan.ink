@@ -667,7 +667,7 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                   className="w-full sm:w-auto bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
                 >
                   <Settings className="h-5 w-5" />
-                  <span>Manage Plan</span>
+                  <span>Add Credit</span>
                 </motion.button>
               )}
             </div>
