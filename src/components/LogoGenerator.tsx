@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Download, Loader2, Crown, Video, Wand2, RefreshCw, Lock, Settings, CheckSquare, Square, Cloud, Scissors, AlertTriangle, Info } from 'lucide-react';
+import { Sparkles, Download, Loader2, Crown, Video, Wand2, RefreshCw, Lock, CreditCard, CheckSquare, Square, Cloud, Scissors, AlertTriangle, Info } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
 import { supabase } from '../lib/supabase';
@@ -666,8 +666,8 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                   // onClick={() => navigateToAccountPage()} 
                   className="w-full sm:w-auto bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
                 >
-                  <Settings className="h-5 w-5" />
-                  <span>Add Credit</span>
+                  <CreditCard className="h-5 w-5" />
+                  <span>Add Credits</span>
                 </motion.button>
               )}
             </div>
