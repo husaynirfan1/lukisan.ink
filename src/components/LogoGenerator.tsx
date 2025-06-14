@@ -608,7 +608,7 @@ export const LogoGenerator: React.FC = () => {
   return (
     <>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        
+        <div className="space-y-8"> 
          {/* --- NEW, IMPROVED ACCOUNT CARD --- */}
         <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
