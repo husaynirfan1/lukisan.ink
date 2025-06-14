@@ -7,12 +7,14 @@ import { stripeProducts } from '../stripe-config';
 import toast from 'react-hot-toast';
 
 interface PaymentButtonProps {
+  productId: 'creator-plan' | 'add-credits'; // Make this required
   className?: string;
   children?: React.ReactNode;
   variant?: 'primary' | 'secondary';
 }
 
 export const PaymentButton: React.FC<PaymentButtonProps> = ({ 
+  productId, // Destructure the new prop
   className = '', 
   children,
   variant = 'primary'
@@ -22,7 +24,13 @@ export const PaymentButton: React.FC<PaymentButtonProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
-  const product = stripeProducts[0]; // Pro product
+  const product = stripeProducts.find(p => p.id === productId);
+
+    if (!product) {
+      toast.error('Invalid product selected.');
+      console.error(`Product with ID "${productId}" not found.`);
+      return;
+    }
 
   const handlePaymentClick = async () => {
     if (!user) {
