@@ -73,7 +73,7 @@ const showcaseItems: MediaItem[] = [
     id: 'brand-showcase-2',
     type: 'logo',
     src: '/assets/images/gallery/sample-4.png',
-    title: 'Chicken Rice Shop',
+    title: 'Company Logo',
     description: 'Tech company with futuristic looks.',
     aspectRatio: '1:1'
   },
