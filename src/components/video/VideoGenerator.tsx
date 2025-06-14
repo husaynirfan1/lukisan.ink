@@ -746,7 +746,7 @@ export const VideoGenerator: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <label className="block text-sm font-medium text-gray-700">
-                      Animation Description (Optional)
+                      Animation Description
                     </label>
                     <AIPromptRefiner
                       currentPrompt={imagePrompt}
