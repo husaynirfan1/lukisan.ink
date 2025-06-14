@@ -132,7 +132,7 @@ export const Hero: React.FC = () => {
           >
             <div className="text-center mb-8">
               <h2 className="heading-secondary text-gray-900 mb-4">
-                Try It Now - No Sign Up Required
+                Try It Now Free - No Sign Up Required
               </h2>
               <p className="body-large text-gray-600 max-w-2xl mx-auto">
                 Experience the power of AI logo generation instantly. Create your first logo and see the magic happen!
