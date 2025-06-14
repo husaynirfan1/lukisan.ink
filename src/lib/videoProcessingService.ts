@@ -308,20 +308,31 @@ class VideoProcessingService {
    * @param task The video processing task object.
    * @param error The error string from the poller.
    */
-  private async handleError(task: VideoProcessingTask, error: string): Promise<void> {
-    console.error(`[VideoProcessor] Task error from poller for ${task.taskId} (DB ID: ${task.videoDbId}): ${error}`);
-
-    try {
-      // When an error occurs and we're setting status to 'failed', explicitly nullify video_url and logo_url
-      await this.updateVideoStatus(task.videoDbId, 'failed', 0, error, null, null);
-      toast.error(`Video generation failed: ${error}`);
-    } catch (updateError) {
-      console.error(`[VideoProcessor] Error updating failed status for task ${task.taskId} (DB ID: ${task.videoDbId}):`, updateError);
-    } finally {
-      this.activeTasks.delete(task.taskId);
-      console.log(`[VideoProcessor] Task ${task.taskId} (DB ID: ${task.videoDbId}) removed from active processing due to error.`);
-    }
+  // New/Fixed Code
+private async handleError(task: VideoProcessingTask, error: any): Promise<void> {
+  // 1. Safely extract the error message string, whether it's an object or a string.
+  let errorMessage: string;
+  if (error && typeof error === 'object' && error.message) {
+    errorMessage = error.message; // It's an object, get the .message property
+  } else if (typeof error === 'string') {
+    errorMessage = error; // It's already a string
+  } else {
+    errorMessage = 'An unknown polling error occurred.'; // Fallback for other cases
   }
+
+  console.error(`[VideoProcessor] Task error from poller for ${task.taskId} (DB ID: ${task.videoDbId}): ${errorMessage}`);
+
+  try {
+    // 2. Use the clean errorMessage string for all subsequent operations.
+    await this.updateVideoStatus(task.videoDbId, 'failed', 0, errorMessage, null, null);
+    toast.error(`Video generation failed: ${errorMessage}`);
+  } catch (updateError: any) {
+    console.error(`[VideoProcessor] Error updating failed status for task ${task.taskId} (DB ID: ${task.videoDbId}):`, updateError.message);
+  } finally {
+    this.activeTasks.delete(task.taskId);
+    console.log(`[VideoProcessor] Task ${task.taskId} (DB ID: ${task.videoDbId}) removed from active processing due to error.`);
+  }
+}
 
   /**
    * Updates the video status and related fields in the Supabase database.
