@@ -394,7 +394,32 @@ export const MediaShowcase: React.FC = () => {
             ))}
           </div>
 
-         
+          {/* Call to Action */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+            transition={{ duration: 0.8, delay: 1.2 }}
+            className="text-center"
+          >
+            <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-8 md:p-12 border border-gray-200/50 shadow-xl">
+              <h3 className="heading-secondary text-gray-900 mb-4">
+                Ready to Create Something Amazing?
+              </h3> 
+              <p className="body-large text-gray-600 mb-8 max-w-2xl mx-auto">
+                Join thousands of creators who trust our AI-powered platform to bring their visions to life.
+              </p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleStartCreating}
+                className="inline-flex items-center space-x-3 px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl button-text hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                <Sparkles className="h-5 w-5" />
+                <span>Start Creating Now</span> 
+                <ExternalLink className="h-5 w-5" />
+              </motion.button>
+            </div>
+          </motion.div>
         </div>
       </section>
       
