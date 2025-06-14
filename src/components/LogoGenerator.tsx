@@ -664,7 +664,7 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                   whileTap={{ scale: 0.95 }}
                   // TODO: Add your logic to show a subscription management page
                   // onClick={() => navigateToAccountPage()} 
-                  className="w-full sm:w-auto bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
+                  className="w-full sm:w-auto bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
                 >
                   <CreditCard className="h-5 w-5" />
                   <span>Add Credits</span>
