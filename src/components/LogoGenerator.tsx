@@ -611,7 +611,7 @@ export const LogoGenerator: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Your Account</h3>
                 <p className="text-gray-600">
                   {isProUser 
-                    ? `${getRemainingGenerations()} credits remaining this smonth`
+                    ? `${getRemainingGenerations()} credits remaining this month`
                     : `${getRemainingGenerations()} generations remaining today`
                   }
                 </p>
