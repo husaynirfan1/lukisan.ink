@@ -1009,7 +1009,7 @@ export const LogoGenerator: React.FC = () => {
                 <>
                   <Sparkles className="h-5 w-5" />
                   <span>
-                    Generate {selectedAspectRatios.length} Logo{selectedAspectRatios.length > 1 ? 's' : ''} 
+                    Generate {selectedAspectRatios.length} Logo {selectedAspectRatios.length > 1 ? 's' : ''} 
                      ({creditsNeeded} credit{creditsNeeded > 1 ? 's' : ''})
                   </span>
                 </>
