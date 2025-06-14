@@ -647,7 +647,7 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
             </div>
 
             {/* Right Side: Action Button */}
-      //TODO ADD PAYMENTBUTTON ADD CREDITS
+      {/* //TODO ADD PAYMENTBUTTON ADD CREDITS */} 
           </div>
         </div>
 
