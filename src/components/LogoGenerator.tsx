@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Download, Loader2, Crown, Video, Wand2, RefreshCw, Lock, Settings, CheckSquare, Square, Cloud, Scissors, AlertTriangle } from 'lucide-react';
+import { Sparkles, Download, Loader2, Crown, Video, Wand2, RefreshCw, Lock, Settings, CheckSquare, Square, Cloud, Scissors, AlertTriangle, Info } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { generateLogo, refinePrompt } from '../lib/fireworks';
 import { supabase } from '../lib/supabase';
@@ -138,6 +138,11 @@ export const LogoGenerator: React.FC = () => {
   const userTier = getUserTier();
   const isProUser = userTier === 'pro';
   const isBgRemovalAvailable = isBackgroundRemovalAvailable();
+
+  //credit ui update 
+  const totalCredits = isProUser ? 30 : 3; // Example: 500 for pro, 5 daily for free
+  const remainingCredits = getRemainingGenerations();
+  const progressPercentage = totalCredits > 0 ? (remainingCredits / totalCredits) * 100 : 0;
 
   // Check user credits when user changes
   useEffect(() => {
@@ -604,18 +609,70 @@ export const LogoGenerator: React.FC = () => {
     <>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="space-y-8">
-          {/* Stats */}
+              {/* --- NEW, IMPROVED ACCOUNT CARD --- */}
           <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Your Account</h3>
-                <p className="text-gray-600">
-                  {isProUser 
-                    ? `${getRemainingGenerations()} credits remaining this month`
-                    : `${getRemainingGenerations()} generations remaining today`
-                  }
-                </p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+              
+              {/* Left Side: Info and Progress */}
+              <div className="w-full sm:w-2/3">
+                <div className="flex items-center space-x-2 mb-1">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    {isProUser ? 'Monthly Credits' : 'Daily Generations'}
+                  </h3>
+                  <div className="relative group">
+                    <Info className="h-5 w-5 text-gray-400 cursor-help" />
+                    <div className="absolute bottom-full mb-2 w-64 bg-gray-800 text-white text-sm rounded-lg py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
+                      {isProUser 
+                        ? 'Your monthly credits reset on the 1st of each month.' 
+                        : 'Your daily free generations reset at midnight.'
+                      }
+                      <br />1 credit is used per aspect ratio.
+                      <svg className="absolute text-gray-800 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xmlSpace="preserve"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
+                    </div>
+                  </div>
+                </div>
+                
+                <p className="text-5xl font-extrabold text-gray-900">{remainingCredits}</p>
+                <p className="text-gray-500 mt-1">out of {totalCredits} remaining</p>
+                
+                <div className="mt-4">
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out" 
+                      style={{ width: `${progressPercentage}%` }}
+                    ></div>
+                  </div>
+                </div>
               </div>
+
+            {/* Right Side: Action Button */}
+            <div className="w-full sm:w-auto flex-shrink-0">
+              {!isProUser ? (
+                <motion.button 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  // TODO: Add your logic to show the subscription modal
+                  // onClick={() => setShowSubscriptionModal(true)} 
+                  className="w-full sm:w-auto bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Crown className="h-5 w-5" />
+                  <span>Upgrade Plan</span>
+                </motion.button>
+              ) : (
+                <motion.button 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  // TODO: Add your logic to show a subscription management page
+                  // onClick={() => navigateToAccountPage()} 
+                  className="w-full sm:w-auto bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Settings className="h-5 w-5" />
+                  <span>Manage Plan</span>
+                </motion.button>
+              )}
+            </div>
+          </div>
+        </div>
               
               {/* Credits needed indicator */}
               {selectedAspectRatios.length > 1 && (
