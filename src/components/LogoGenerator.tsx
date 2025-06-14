@@ -648,25 +648,15 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
 
             {/* Right Side: Action Button */}
             <div className="w-full sm:w-auto flex-shrink-0">
-              {!isProUser ? (
-      //Upgrade
-                  <PaymentButton
-                    productId="prod_SSwR3x2OKd1ISe"
-                    className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-700"
-                  >
-            
-                  </PaymentButton> 
-              ) : (
-
-      //ADD CREDITS
-                   <PaymentButton
-                    productId="prod_SUxt63tLx3WTzh"
-                    className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-700"
-                  >
-            
-                  </PaymentButton> 
-     
-              )}
+             {isProUser && (
+              // This will ONLY render if the user is a Pro user
+              <PaymentButton
+                productId="prod_SUxt63tLx3WTzh"
+                className="w-full sm:w-auto"
+              >
+                {/* You might want to add the icon/text back in here if needed */}
+              </PaymentButton> 
+            )}
             </div>
           </div>
         </div>
