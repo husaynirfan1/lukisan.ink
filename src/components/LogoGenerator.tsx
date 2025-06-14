@@ -609,41 +609,41 @@ export const LogoGenerator: React.FC = () => {
     <>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="space-y-8">
-              {/* --- NEW, IMPROVED ACCOUNT CARD --- */}
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-              
-              {/* Left Side: Info and Progress */}
-              <div className="w-full sm:w-2/3">
-                <div className="flex items-center space-x-2 mb-1">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    {isProUser ? 'Monthly Credits' : 'Daily Generations'}
-                  </h3>
-                  <div className="relative group">
-                    <Info className="h-5 w-5 text-gray-400 cursor-help" />
-                    <div className="absolute bottom-full mb-2 w-64 bg-gray-800 text-white text-sm rounded-lg py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
-                      {isProUser 
-                        ? 'Your monthly credits reset on the 1st of each month.' 
-                        : 'Your daily free generations reset at midnight.'
-                      }
-                      <br />1 credit is used per aspect ratio.
-                      <svg className="absolute text-gray-800 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xmlSpace="preserve"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
-                    </div>
-                  </div>
-                </div>
-                
-                <p className="text-5xl font-extrabold text-gray-900">{remainingCredits}</p>
-                <p className="text-gray-500 mt-1">out of {totalCredits} remaining</p>
-                
-                <div className="mt-4">
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div 
-                      className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out" 
-                      style={{ width: `${progressPercentage}%` }}
-                    ></div>
+            {/* --- NEW, IMPROVED ACCOUNT CARD --- */}
+        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+            
+            {/* Left Side: Info and Progress */}
+            <div className="w-full sm:w-2/3">
+              <div className="flex items-center space-x-2 mb-1">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {isProUser ? 'Monthly Credits' : 'Daily Generations'}
+                </h3>
+                <div className="relative group">
+                  <Info className="h-5 w-5 text-gray-400 cursor-help" />
+                  <div className="absolute bottom-full mb-2 w-64 bg-gray-800 text-white text-sm rounded-lg py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
+                    {isProUser 
+                      ? 'Your monthly credits reset on the 1st of each month.' 
+                      : 'Your daily free generations reset at midnight.'
+                    }
+                    <br />1 credit is used per aspect ratio.
+                    <svg className="absolute text-gray-800 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xmlSpace="preserve"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
                   </div>
                 </div>
               </div>
+              
+              <p className="text-5xl font-extrabold text-gray-900">{remainingCredits}</p>
+              <p className="text-gray-500 mt-1">out of {totalCredits} remaining</p>
+              
+              <div className="mt-4">
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div 
+                    className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out" 
+                    style={{ width: `${progressPercentage}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
 
             {/* Right Side: Action Button */}
             <div className="w-full sm:w-auto flex-shrink-0">
@@ -673,32 +673,6 @@ export const LogoGenerator: React.FC = () => {
             </div>
           </div>
         </div>
-              
-              {/* Credits needed indicator */}
-              {selectedAspectRatios.length > 1 && (
-                <div className={`px-3 py-2 rounded-lg ${
-                  canGenerateAll 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  <p className="text-sm font-medium">
-                    {creditsNeeded} credit{creditsNeeded > 1 ? 's' : ''} needed
-                  </p>
-                  <p className="text-xs">
-                    {canGenerateAll ? '✓ Sufficient credits' : '✗ Insufficient credits'}
-                  </p>
-                </div>
-              )}
-
-              {/* No credits warning */}
-              {userCredits && !userCredits.canGenerate && (
-                <div className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span className="text-sm font-medium">No credits available</span>
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* Subscription Card for Free Users */}
           {!isProUser && <SubscriptionCard />}
