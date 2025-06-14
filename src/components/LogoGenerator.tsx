@@ -643,12 +643,22 @@ const canGenerateAll = remainingCredits >= creditsNeeded;
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
-            </div>
+            </div> 
             </div>
 
             {/* Right Side: Action Button */}
-            
-            </div>
+            {/* <div className="w-full sm:w-auto flex-shrink-0">
+             {isProUser && (
+              // This will ONLY render if the user is a Pro user
+              <PaymentButton
+                productId="prod_SUxt63tLx3WTzh"
+                className="w-full sm:w-auto"
+              >
+                <span>Coming soon</span>
+                {/* You might want to add the icon/text back in here if needed */}
+              </PaymentButton> 
+            )}
+            </div> */}
           </div>
         </div>
 
