@@ -119,7 +119,11 @@ export const Hero: React.FC = () => {
             </motion.div>
           </div>
 
-          {/* Try It Now Section */}
+         
+
+      {/* Media Showcase Section */}
+      <MediaShowcase />
+           {/* Try It Now Section */}
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
@@ -140,9 +144,6 @@ export const Hero: React.FC = () => {
           </motion.div>
         </div>
       </div>
-
-      {/* Media Showcase Section */}
-      <MediaShowcase />
     </>
   );
 };
