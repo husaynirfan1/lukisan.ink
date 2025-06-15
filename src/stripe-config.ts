@@ -10,7 +10,7 @@ export interface StripeProduct {
 
 export const stripeProducts: StripeProduct[] = [
   {
-    id: 'prod_SSwR3x2OKd1ISe',
+    id: 'prod_SUz7y9asE6cLYf',
     priceId: 'price_1RY1ClRpbZohf2L5sr9q1E4P',
     name: 'Creator',
     description: '30 credits of content generation, no expiry and watermark.',
@@ -19,7 +19,7 @@ export const stripeProducts: StripeProduct[] = [
     currency: 'MYR'
   },
   {
-    id: 'prod_SUxt63tLx3WTzh',
+    id: 'prod_SUz7y9asE6cLYf',
     priceId: 'price_1RZxy5RpbZohf2L5s3WCttH0',
     name: 'Creator',
     description: '10 extra credits.',
