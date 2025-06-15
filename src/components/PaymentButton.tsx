@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 
 interface PaymentButtonProps {
   // Using actual Stripe Product IDs for type safety
-  productId: 'prod_SUz7y9asE6cLYf' | 'prod_SUz7y9asE6cLYf';
+  productId: 'prod_SSwR3x2OKd1ISe' | 'prod_SUz7y9asE6cLYf';
   className?: string;
   children?: React.ReactNode;
   variant?: 'primary' | 'secondary';
