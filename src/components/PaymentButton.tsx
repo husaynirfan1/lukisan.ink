@@ -14,7 +14,7 @@ interface PaymentButtonProps {
   variant?: 'primary' | 'secondary';
 }
 
-export const PaymentButton: React.FC<PaymentButtonProps> = ({
+export const PaymentButton: React.FC<PaymentButtonProps> = ({ 
   productId,
   className = '',
   children,
