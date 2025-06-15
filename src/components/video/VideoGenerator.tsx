@@ -544,7 +544,6 @@ export const VideoGenerator: React.FC = () => {
             </div>
  */}
 
-        <div className="space-y-8"> 
          {/* --- NEW, IMPROVED ACCOUNT CARD --- */}
         <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
