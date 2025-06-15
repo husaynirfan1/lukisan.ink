@@ -528,80 +528,66 @@ export const VideoGenerator: React.FC = () => {
           </div>
         </div>
 
-        {/* Credits Display */}
+         {/* Credits Display */}
         <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-    
-    {/* Left Side: Info and Progress */}
-    <div className="w-full sm:w-2/3">
-      <div className="flex items-center space-x-2 mb-1">
-        <h3 className="text-lg font-semibold text-gray-800">
-          {isProUser ? 'Monthly Credits' : 'Daily Generations'}
-        </h3>
-        <div className="relative group">
-          <Info className="h-5 w-5 text-gray-400 cursor-help" />
-          <div className="absolute bottom-full mb-2 w-64 bg-gray-800 text-white text-sm rounded-lg py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
-            {isProUser 
-              ? 'Your monthly credits reset after each month.' 
-              : 'Your daily free generations reset at midnight.'
-            }
-            <br />
-            <svg className="absolute text-gray-800 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xmlSpace="preserve"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
-          </div>
-        </div>
-      </div>
-      
-      <p className="text-5xl font-extrabold text-gray-900">{remainingCredits}</p>
-      <p className="text-gray-500 mt-1">out of {totalCredits} remaining</p>
-      
-     <div className="mt-4">
-       <div className="w-full bg-gray-200 rounded-full h-3">
-         <div 
-           className="bg-indigo-600 h-3 rounded-full transition-all duration-500 ease-out" 
-           style={{ width: `${progressPercentage}%` }}
-         ></div>
-       </div>
-     </div> 
-    </div>
-  </div>
-
-
-
-        {/*------------*/}
-        
-         
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
             
-            <div className="flex items-center space-x-2">
-              {/* Notification Toggle */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleNotificationToggle}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                  notificationsEnabled 
-                    ? 'bg-green-100 text-green-800 border border-green-300' 
-                    : 'bg-gray-100 text-gray-600 border border-gray-300'
-                }`}
-              >
-                {notificationsEnabled ? (
-                  <Bell className="h-4 w-4" />
-                ) : (
-                  <BellOff className="h-4 w-4" />
-                )}
-                <span className="text-sm font-medium">
-                  {notificationsEnabled ? 'Notifications On' : 'Enable Notifications'}
-                </span>
-              </motion.button>
-
-              {debugAllowVideoTabForFree && (
-                <div className="flex items-center space-x-2 px-3 py-2 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
-                  <span className="text-sm">🔓</span>
-                  <span className="font-medium text-sm">Debug Mode</span>
+            {/* Left Side: Info and Progress */}
+            <div className="w-full sm:w-2/3">
+              <div className="flex items-center space-x-2 mb-1">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {isProUser ? 'Monthly Credits' : 'Daily Generations'}
+                </h3>
+                {/* This is the info icon with the tooltip from your previous code */}
+              </div>
+              
+              <p className="text-5xl font-extrabold text-gray-900">{getRemainingGenerations()}</p>
+              <p className="text-gray-500 mt-1">out of {isProUser ? 30 : 5} remaining</p>
+              
+              <div className="mt-4">
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div 
+                    className="bg-indigo-600 h-3 rounded-full transition-all duration-500 ease-out" 
+                    style={{ width: `${(getRemainingGenerations() / (isProUser ? 30 : 5)) * 100}%` }}
+                  ></div>
                 </div>
-              )}
+              </div> 
+            </div>
+
+            {/* Right Side: Actions and Status */}
+            <div className="w-full sm:w-auto flex flex-col items-stretch sm:items-end gap-3">
+              <div className="flex items-center justify-end space-x-2">
+                {/* Notification Toggle */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleNotificationToggle}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                    notificationsEnabled 
+                      ? 'bg-green-100 text-green-800 border border-green-300' 
+                      : 'bg-gray-100 text-gray-600 border border-gray-300'
+                  }`}
+                >
+                  {notificationsEnabled ? (
+                    <Bell className="h-4 w-4" />
+                  ) : (
+                    <BellOff className="h-4 w-4" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {notificationsEnabled ? 'Notifications On' : 'Enable Notifications'}
+                  </span>
+                </motion.button>
+
+                {debugAllowVideoTabForFree && (
+                  <div className="flex items-center space-x-2 px-3 py-2 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
+                    <span className="text-sm">🔓</span>
+                    <span className="font-medium text-sm">Debug Mode</span>
+                  </div>
+                )}
+              </div>
               
               {/* Credits needed indicator */}
-              <div className={`px-3 py-2 rounded-lg ${
+              <div className={`px-3 py-2 rounded-lg text-center ${
                 hasEnoughCredits() 
                   ? 'bg-green-100 text-green-800' 
                   : 'bg-red-100 text-red-800'
