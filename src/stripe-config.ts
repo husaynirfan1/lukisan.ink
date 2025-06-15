@@ -19,9 +19,9 @@ export const stripeProducts: StripeProduct[] = [
     currency: 'MYR'
   },
   {
-    id: 'prod_SUz7y9asE6cLYf',
-    priceId: 'price_1RZz8zRpjJ1Aj1byvX5NLc7u',
-    name: 'Creator',
+    id: 'prod_SUxt63tLx3WTzh',
+    priceId: 'price_1RZxy5RpbZohf2L5s3WCttH0',
+    name: '10 Additional Credits.',
     description: '10 extra credits.',
     mode: 'payment',
     price: 2.99,
