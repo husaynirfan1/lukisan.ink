@@ -110,7 +110,8 @@ export const SubscriptionCard: React.FC = () => {
       {!isActive && (
         <PaymentButton 
           productId="prod_SUz7y9asE6cLYf"
-          className="w-full py-4 text-lg">
+          className="w-full py-4 text-lg"
+          variant='secondary'>
           <span>Upgrade to Creator</span>
         </PaymentButton>
       )}
