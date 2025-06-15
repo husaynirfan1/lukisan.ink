@@ -530,7 +530,7 @@ export const VideoGenerator: React.FC = () => {
 
         {/* Credits Display */}
         <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
-           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
     
     {/* Left Side: Info and Progress */}
     <div className="w-full sm:w-2/3">
@@ -564,7 +564,6 @@ export const VideoGenerator: React.FC = () => {
      </div> 
     </div>
   </div>
-            </div>
 
 
 
