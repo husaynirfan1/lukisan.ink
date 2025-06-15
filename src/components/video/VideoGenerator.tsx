@@ -576,7 +576,8 @@ export const VideoGenerator: React.FC = () => {
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
-          
+            </div> 
+            </div> 
             
             <div className="flex items-center space-x-2">
               {/* Notification Toggle */}
