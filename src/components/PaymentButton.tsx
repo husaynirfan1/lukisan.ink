@@ -4,7 +4,7 @@ import { Crown, Mail, AlertCircle, X, CreditCard } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { createCheckoutSession } from '../lib/stripe';
 import { stripeProducts } from '../stripe-config';
-import toast from 'react-hot-toast';
+import toast from 'react-hot-toast'; 
 
 interface PaymentButtonProps {
   // Using actual Stripe Product IDs for type safety
