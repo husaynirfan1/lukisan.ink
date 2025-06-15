@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Video, Upload, Play, Download, Loader2, FileVideo, Image as ImageIcon,
   Type, Settings, Sparkles, Clock, Monitor, Smartphone, Square, 
-  AlertTriangle, CheckCircle, RefreshCw, Wand2, Crown, Bell, BellOff
+  AlertTriangle, CheckCircle, RefreshCw, Wand2, Crown, Bell, BellOff, Info, CreditCard
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
