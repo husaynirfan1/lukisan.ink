@@ -72,7 +72,7 @@ export const SubscriptionCard: React.FC = () => {
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
               <Check className="h-3 w-3 text-green-600" />
             </div>
-            <span className="body-regular">100 AI logo generation credits per month</span>
+            <span className="body-regular">30 AI logo generation credits per month</span>
           </li>
           <li className="flex items-center space-x-3">
             <div className="flex-shrink-0 w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
