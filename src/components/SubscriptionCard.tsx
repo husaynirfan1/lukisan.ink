@@ -111,7 +111,7 @@ export const SubscriptionCard: React.FC = () => {
         <PaymentButton 
           productId="prod_SUz7y9asE6cLYf"
           className="w-full py-4 text-lg"
-          variant="secondary"'>
+          variant="primary">
           <span>Upgrade to Creator</span>
         </PaymentButton>
       )}
