@@ -105,15 +105,15 @@ export const SubscriptionCard: React.FC = () => {
             <span className="body-regular">Unlock all premium options</span>
           </li>
         </ul>
-      </div> 
+      </div>
 
-      {/* {!isActive && (
-        <PaymentButton
+      {!isActive && (
+        <PaymentButton 
           productId="prod_SUz7y9asE6cLYf"
           className="w-full py-4 text-lg">
           <span>Upgrade to Creator</span>
         </PaymentButton>
-      )} */}
+      )}
 
       {isActive && subscription && (
         <div className="text-center text-gray-600 bg-white/50 rounded-lg p-4">
