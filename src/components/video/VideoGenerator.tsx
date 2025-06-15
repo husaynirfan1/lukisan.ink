@@ -529,7 +529,7 @@ export const VideoGenerator: React.FC = () => {
         </div>
 
         {/* Credits Display */}
-        {/* <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
+        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Your Account</h3>
@@ -540,8 +540,8 @@ export const VideoGenerator: React.FC = () => {
                     ? `${getRemainingGenerations()} credits remaining this month`
                     : `${getRemainingGenerations()} generations remaining today`
                 }
-              </p>
-            </div> */}
+              </p> 
+            </div>
 
         
          
