@@ -580,6 +580,8 @@ export const VideoGenerator: React.FC = () => {
             </div> 
             </div>
           </div>
+        </div>
+      </div>
 
 
 
