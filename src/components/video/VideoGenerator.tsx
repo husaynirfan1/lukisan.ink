@@ -579,7 +579,6 @@ export const VideoGenerator: React.FC = () => {
      </div> 
     </div>
   </div>
-</div> {/* This was the missing closing tag */}
 
         {/*------------*/}
         
