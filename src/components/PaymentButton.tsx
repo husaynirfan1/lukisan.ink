@@ -26,7 +26,7 @@ export const PaymentButton: React.FC<PaymentButtonProps> = ({
   const [isResending, setIsResending] = useState(false);
 
   // Replace 'prod_SUxt63tLx3WTzh' with your actual product ID for credits
-  const isCreditProduct = productId === 'prod_SUxt63tLx3WTzh';
+  const isCreditProduct = productId === 'prod_SUz7y9asE6cLYf';
 
   const product = stripeProducts.find(p => p.id === productId);
 
