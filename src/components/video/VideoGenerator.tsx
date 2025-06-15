@@ -631,7 +631,7 @@ export const VideoGenerator: React.FC = () => {
           </div>
         </div>
 
-        {/* Mode Selection */}
+
         <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Generation Mode</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
