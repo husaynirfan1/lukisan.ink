@@ -15,7 +15,7 @@ export const stripeProducts: StripeProduct[] = [
     name: 'Creator',
     description: '30 credits of content generation, no expiry and watermark.',
     mode: 'subscription',
-    price: 29.99,
+    price: 29.90,
     currency: 'MYR'
   },
   {
@@ -24,7 +24,7 @@ export const stripeProducts: StripeProduct[] = [
     name: '10 Additional Credits.',
     description: '10 extra credits.',
     mode: 'payment',
-    price: 2.99,
+    price: 2.90,
     currency: 'MYR'
   }
 ];
