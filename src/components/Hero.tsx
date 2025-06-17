@@ -280,7 +280,7 @@ return (
 
   </div>
 </motion.div>
-    </AuroraBackground>
+    </AuroraBackground> 
 </>
 
 );
