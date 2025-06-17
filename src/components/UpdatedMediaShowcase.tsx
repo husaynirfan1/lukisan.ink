@@ -82,7 +82,7 @@ export const MediaShowcase: React.FC = () => {
           <div className="flex flex-col items-center justify-around h-full gap-4 py-2">
            {/* Duplicate videos for seamless looping */}
            {[...videoUrls, ...videoUrls].map((url, index) => (
-             <div key={`video-${index}`} className="w-52 h-32 flex-shrink-0 bg-gray-900 rounded-2xl border-2 border-gray-700/80 overflow-hidden">
+             <div key={`video-${index}`} className="w-52 h-32 flex-shrink-0 bg-gray-900 rounded-2xl overflow-hidden">
                 <video
                   src={url}
                   autoPlay
