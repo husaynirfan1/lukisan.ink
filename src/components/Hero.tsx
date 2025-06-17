@@ -6,7 +6,7 @@ import { GuestLogoGenerator } from './GuestLogoGenerator';
 import { MediaShowcase } from './MediaShowcase';
 
 export const Hero: React.FC = () => {
-  return ( 
+  return (
     <>
       {/* Maintenance Banner */} 
       <div className="bg-orange-500 text-white text-center p-2 flex items-center justify-center space-x-2">
