@@ -763,6 +763,7 @@ export const GuestLogoGenerator: React.FC = () => {
         isOpen={showAuthModal} 
         onClose={() => setShowAuthModal(false)}
         onSuccess={handleAuthSuccess}
+        initialMode="signup"
       />
     </>
   );
