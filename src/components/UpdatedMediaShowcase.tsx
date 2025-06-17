@@ -19,6 +19,8 @@ const videoUrls = [
     '/assets/videos/gallery/sample-johndoe.mp4',
    '/assets/videos/gallery/sample-splash.mp4',
    '/assets/videos/gallery/sample-tech.mp4',
+  '/assets/videos/gallery/sample-marketing.mp4',
+  '/assets/videos/gallery/sample-flowers.mp4',
 ];
 
 // --- Animation Variants ---
