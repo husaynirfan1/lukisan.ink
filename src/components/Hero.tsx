@@ -33,7 +33,7 @@ const mediaShowcaseOpacity = useTransform(scrollYProgress, opacityRange, [1, 0])
 
 
 return (
-
+ 
 <>
 
 {/* Maintenance Banner */}
