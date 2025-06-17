@@ -32,6 +32,17 @@ export default {
         'wider': '0.05em',
         'widest': '0.1em',
       },
+      // --- ADDED FOR GRADIENT ANIMATION ---
+      animation: {
+        'gradient-flow': 'gradient-flow 6s ease infinite',
+      },
+      keyframes: {
+        'gradient-flow': {
+          '0%, 100%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+        },
+      },
+      // --- END OF ADDED CODE ---
     },
   },
   plugins: [],
