@@ -17,9 +17,9 @@ const logoUrls = [
 
 const videoThumbnails = [
   '/assets/videos/gallery/sample-berger.mp4',
-  '/videos/thumbnail-2.jpg',
-  '/videos/thumbnail-3.jpg',
-  '/videos/thumbnail-4.jpg',
+  '/assets/videos/gallery/sample-berger.mp4',
+ '/assets/videos/gallery/sample-berger.mp4',
+  '/assets/videos/gallery/sample-berger.mp4',
 ];
 
 // --- Animation Variants ---
