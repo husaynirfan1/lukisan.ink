@@ -4,6 +4,7 @@ import { Sparkles, Zap, Download, Video, Users, Megaphone, AlertTriangle } from 
 import { AnimatedTagline } from './AnimatedTagline';
 import { GuestLogoGenerator } from './GuestLogoGenerator';
 import { MediaShowcase } from './UpdatedMediaShowcase';
+import { AuroraBackground } from './aurora-background'; // Adjust the path if necessary
 
 export const Hero: React.FC = () => {
 const guestLogoGeneratorRef = useRef<HTMLDivElement>(null);
