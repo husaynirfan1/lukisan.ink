@@ -323,13 +323,6 @@ export const getUsageStats = (): {
 
 // Preset configurations for common use cases
 export const presetConfigurations = {
-  // High quality for final logos
-  highQuality: {
-    size: 'full' as const,
-    type: 'auto' as const,
-    format: 'png' as const,
-    channels: 'rgba' as const,
-  },
   
   // Fast preview for testing
   preview: {
