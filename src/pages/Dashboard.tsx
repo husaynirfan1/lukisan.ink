@@ -7,6 +7,7 @@ import { VideoGenerator } from '../components/video/VideoGenerator';
 import { EnhancedVideoLibrary } from '../components/video/EnhancedVideoLibrary';
 import { SubscriptionCard } from '../components/SubscriptionCard';
 import { useAuth } from '../hooks/useAuth';
+import { SupportButton } from '../components/SupportButton'; // Import the new component
 
 type DashboardTab = 'generate' | 'library' | 'video' | 'video-library';
 
@@ -252,6 +253,9 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'video-library' && <EnhancedVideoLibrary />}
         </motion.div>
       </div>
+      
+      {/* Support Chat Button */}
+      <SupportButton />
     </div>
   );
 };
