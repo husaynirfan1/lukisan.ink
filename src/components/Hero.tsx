@@ -13,8 +13,8 @@ import {
 import { AnimatedTagline } from './AnimatedTagline';
 import { GuestLogoGenerator } from './GuestLogoGenerator';
 import { MediaShowcase } from './UpdatedMediaShowcase';
-import { AuroraBackground } from './aurora-background'; // Make sure the path is correct
-import { AuthModal } from './auth/AuthModal'; // Import the AuthModal
+import { AuroraBackground } from './aurora-background';
+import { AuthModal } from './auth/AuthModal';
 
 export const Hero: React.FC = () => {
   const guestLogoGeneratorRef = useRef<HTMLDivElement>(null);
@@ -28,7 +28,6 @@ export const Hero: React.FC = () => {
   const handleAuthSuccess = () => {
     setShowAuthModal(false);
     console.log('Authentication successful!');
-    // Add any further logic here, like redirecting or refetching data
   };
 
   return (
@@ -82,7 +81,6 @@ export const Hero: React.FC = () => {
               Your brand has a story to tell. We'll help you tell it with gorgeous logos and videos, crafted in seconds to connect with your audience.
             </motion.p>
 
-            {/* --- NEW CTA BUTTON IMPLEMENTATION --- */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -97,41 +95,42 @@ export const Hero: React.FC = () => {
                 Get Started Free
               </motion.button>
             </motion.div>
-            
           </div>
 
           {/* Feature Grid */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 my-12" // Added my-12 for spacing
-          >
-            <Feature
-              icon={Sparkles}
-              title="AI Logo Generation"
-              text="Professional logos created instantly"
-              gradient="from-indigo-500 to-purple-600"
-            />
-            <Feature
-              icon={Users}
-              title="Welcome Videos"
-              text="Personalized onboarding content"
-              gradient="from-purple-500 to-pink-600"
-            />
-            <Feature
-              icon={Megaphone}
-              title="Marketing Snippets"
-              text="Engaging promotional videos"
-              gradient="from-pink-500 to-red-600"
-            />
-            <Feature
-              icon={Download}
-              title="High-Quality Downloads"
-              text="Multiple formats available"
-              gradient="from-cyan-500 to-blue-600"
-            />
-          </motion.div>
+          <div className="px-2 sm:px-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 my-12"
+            >
+              <Feature
+                icon={Sparkles}
+                title="AI Logo Generation"
+                text="Professional logos created instantly"
+                gradient="from-indigo-500 to-purple-600"
+              />
+              <Feature
+                icon={Users}
+                title="Welcome Videos"
+                text="Personalized onboarding content"
+                gradient="from-purple-500 to-pink-600"
+              />
+              <Feature
+                icon={Megaphone}
+                title="Marketing Snippets"
+                text="Engaging promotional videos"
+                gradient="from-pink-500 to-red-600"
+              />
+              <Feature
+                icon={Download}
+                title="High-Quality Downloads"
+                text="Multiple formats available"
+                gradient="from-cyan-500 to-blue-600"
+              />
+            </motion.div>
+          </div>
 
           {/* Try It Now Section */}
           <div ref={guestLogoGeneratorRef} className="mt-16">
@@ -154,7 +153,7 @@ export const Hero: React.FC = () => {
         </div>
       </AuroraBackground>
 
-      {/* --- AUTH MODAL --- */}
+      {/* Auth Modal */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -176,11 +175,11 @@ const Feature = ({
   text: string;
   gradient: string;
 }) => (
-  <div className="flex flex-col items-center space-y-3 p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/50 hover:bg-white/80 transition-all duration-300">
-    <div className={`p-3 bg-gradient-to-br ${gradient} rounded-xl`}>
-      <Icon className="h-6 w-6 text-white" />
+  <div className="flex flex-col items-center space-y-2 sm:space-y-3 p-4 sm:p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/50 hover:bg-white/80 transition-all duration-300">
+    <div className={`p-2 sm:p-3 bg-gradient-to-br ${gradient} rounded-xl`}>
+      <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
     </div>
-    <h3 className="heading-quaternary text-gray-900">{title}</h3>
-    <p className="body-small text-gray-600 text-center">{text}</p>
+    <h3 className="text-sm sm:text-base font-semibold text-gray-900 text-center">{title}</h3>
+    <p className="text-xs sm:text-sm text-gray-600 text-center">{text}</p>
   </div>
 );
