@@ -1,25 +1,24 @@
-// src/components/MediaShowcase.tsx
-
 import React from 'react';
 import { motion } from 'framer-motion';
-import { PlayCircle } from 'lucide-react';
 
 // --- Placeholder Data ---
 // In a real application, you would fetch these from a CMS or an API.
+// Using placeholder image service for demonstration.
 const logoUrls = [
-  '/assets/images/gallery/sample-1.png',
-  '/assets/images/gallery/sample-2.png',
-  '/assets/images/gallery/sample-3.png',
-  '/assets/images/gallery/sample-4.png',
-  '/assets/images/gallery/sample-5.png',
-  '/assets/images/gallery/sample-6.png',
+  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+1',
+  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+2',
+  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+3',
+  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+4',
+  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+5',
+  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+6',
 ];
 
-const videoThumbnails = [
-  '/assets/videos/gallery/demo-video-1.mp4',
-  '/videos/thumbnail-2.jpg',
-  '/videos/thumbnail-3.jpg',
-  '/videos/thumbnail-4.jpg',
+// Using placeholder video URLs for demonstration.
+const videoUrls = [
+    'https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-small.mp4',
+    'https://assets.mixkit.co/videos/preview/mixkit-abstract-video-of-a-man-with-head-down-3248-small.mp4',
+    'https://assets.mixkit.co/videos/preview/mixkit-a-girl-in-a-leather-jacket-turning-her-head-3525-small.mp4',
+    'https://assets.mixkit.co/videos/preview/mixkit-close-up-of-a-person-working-on-a-laptop-3485-small.mp4',
 ];
 
 // --- Animation Variants ---
@@ -30,7 +29,7 @@ const marqueeVariants = {
       y: {
         repeat: Infinity,
         repeatType: 'loop',
-        duration: 20, // Adjust duration for speed
+        duration: 30, // Slower duration for a smoother scroll
         ease: 'linear',
       },
     },
@@ -44,7 +43,7 @@ const marqueeVariantsReverse = {
         y: {
           repeat: Infinity,
           repeatType: 'loop',
-          duration: 25, // Adjust duration for speed
+          duration: 35, // Varied duration for a more dynamic feel
           ease: 'linear',
         },
       },
@@ -65,7 +64,7 @@ export const MediaShowcase: React.FC = () => {
           {/* We need to duplicate the content to create a seamless loop */}
           <div className="flex flex-col items-center justify-around h-full gap-4 py-2">
             {[...logoUrls, ...logoUrls].map((url, index) => (
-              <div key={`logo-${index}`} className="w-40 h-40 flex-shrink-0 bg-white/80 backdrop-blur-sm rounded-2xl border-2 p-4 flex items-center justify-center">
+              <div key={`logo-${index}`} className="w-40 h-40 flex-shrink-0 bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-gray-200/50 p-4 flex items-center justify-center">
                 <img src={url} alt={`Logo ${index + 1}`} className="max-w-full max-h-full object-contain" />
               </div>
             ))}
@@ -81,12 +80,17 @@ export const MediaShowcase: React.FC = () => {
             animate="animate"
         >
           <div className="flex flex-col items-center justify-around h-full gap-4 py-2">
-           {[...videoThumbnails, ...videoThumbnails].map((url, index) => (
-             <div key={`video-${index}`} className="w-52 h-32 flex-shrink-0 bg-gray-900 rounded-2xl border-2 border-gray-700/80 p-1 flex items-center justify-center relative overflow-hidden">
-                <img src={url} alt={`Video thumbnail ${index + 1}`} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                    <PlayCircle className="w-10 h-10 text-white/70" />
-                </div>
+           {/* Duplicate videos for seamless looping */}
+           {[...videoUrls, ...videoUrls].map((url, index) => (
+             <div key={`video-${index}`} className="w-52 h-32 flex-shrink-0 bg-gray-900 rounded-2xl border-2 border-gray-700/80 overflow-hidden">
+                <video
+                  src={url}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline // Essential for autoplay on mobile browsers
+                  className="w-full h-full object-cover"
+                />
              </div>
            ))}
           </div>
