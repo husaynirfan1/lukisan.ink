@@ -173,7 +173,7 @@ export const Dashboard: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
       {/* Dashboard Header */}
       <div className="bg-white/60 backdrop-blur-sm border-b border-gray-200/50 sticky top-16 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="px-4 sm:px-6 lg:px-8">
           <div className="py-6">
             {/* Welcome Section */}
             <div className="flex items-center justify-between mb-6">
@@ -232,7 +232,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Dashboard Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="px-4 sm:px-6 lg:px-8 py-8">
         {/* Tab Content */}
         <motion.div
           key={activeTab}
