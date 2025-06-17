@@ -16,7 +16,7 @@ const logoUrls = [
 ];
 
 const videoThumbnails = [
-  '/videos/thumbnail-1.jpg',
+  '/assets/videos/gallery/demo-video-1.mp4',
   '/videos/thumbnail-2.jpg',
   '/videos/thumbnail-3.jpg',
   '/videos/thumbnail-4.jpg',
