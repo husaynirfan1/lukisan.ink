@@ -1,4 +1,9 @@
- const [currentIndex, setCurrentIndex] = useState(0);
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
+
+// A more seamless, vertically scrolling animated tagline
+const AnimatedTagline = () => {
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   // An array of different video types and their corresponding colors for the animation
   const videoTypes = useMemo(
@@ -49,3 +54,4 @@
       </div>
     </div>
   );
+};
