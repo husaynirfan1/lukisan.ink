@@ -15,7 +15,7 @@ const logoUrls = [
 
 // Using placeholder video URLs for demonstration.
 const videoUrls = [
-    'https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-small.mp4',
+    '/assets/videos/gallery/sample-berger.mp4',
     'https://assets.mixkit.co/videos/preview/mixkit-abstract-video-of-a-man-with-head-down-3248-small.mp4',
     'https://assets.mixkit.co/videos/preview/mixkit-a-girl-in-a-leather-jacket-turning-her-head-3525-small.mp4',
     'https://assets.mixkit.co/videos/preview/mixkit-close-up-of-a-person-working-on-a-laptop-3485-small.mp4',
