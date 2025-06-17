@@ -46,17 +46,7 @@ return (
 
 </div>
 
-<AuroraBackground>
-      <motion.div
-        initial={{ opacity: 0.0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        transition={{
-          delay: 0.3,
-          duration: 0.8,
-          ease: "easeInOut",
-        }}
-        className="relative flex flex-col gap-4 items-center justify-center px-4"
-      >
+
 
   <div className="relative overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-purple-50">
 
@@ -277,8 +267,7 @@ return (
       </div>
 
     </div>
-</motion.div>
-    </AuroraBackground>
+
   </div>
 
 </>
