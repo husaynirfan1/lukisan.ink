@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Sparkles, Zap, Download, Video, Users, Megaphone, AlertTriangle } from 'lucide-react';
 import { AnimatedTagline } from './AnimatedTagline';
 import { GuestLogoGenerator } from './GuestLogoGenerator';
-import { MediaShowcase } from './MediaShowcase';
+import { MediaShowcase } from './UpdatedMediaShowcase';
 
 export const Hero: React.FC = () => {
   return (
