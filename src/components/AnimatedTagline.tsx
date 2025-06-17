@@ -48,7 +48,7 @@ export const AnimatedTagline = () => {
             }
             transition={{ type: "spring", stiffness: 90, damping: 20 }}
           >
-            Personalized {item.text}
+             {item.text}
           </motion.span>
         ))}
       </div>
