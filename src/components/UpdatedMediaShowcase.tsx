@@ -64,7 +64,7 @@ export const MediaShowcase: React.FC = () => {
           {/* We need to duplicate the content to create a seamless loop */}
           <div className="flex flex-col items-center justify-around h-full gap-4 py-2">
             {[...logoUrls, ...logoUrls].map((url, index) => (
-              <div key={`logo-${index}`} className="w-40 h-40 flex-shrink-0 bg-white/80 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+              <div key={`logo-${index}`} className="w-40 h-40 flex-shrink-0 bg-white/80 backdrop-blur-sm rounded-2xl p-2 flex items-center justify-center">
                 <img src={url} alt={`Logo ${index + 1}`} className="max-w-full max-h-full object-contain" />
               </div>
             ))}
