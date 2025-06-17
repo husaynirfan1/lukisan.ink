@@ -8,10 +8,10 @@ export const AnimatedTagline = () => {
   // An array of different video types and their corresponding colors for the animation
   const videoTypes = useMemo(
     () => [
-      { text: 'welcoming videos', color: 'from-purple-600 to-pink-600' },
-      { text: 'business videos', color: 'from-indigo-600 to-purple-600' },
-      { text: 'marketing content', color: 'from-pink-600 to-red-600' },
-      { text: 'brand stories', color: 'from-cyan-600 to-blue-600' },
+      { text: 'Stunning promo videos', color: 'from-purple-600 to-pink-600' },
+      { text: 'Powerful brand anthems', color: 'from-indigo-600 to-purple-600' },
+      { text: 'Engaging social clips', color: 'from-pink-600 to-red-600' },
+      { text: 'Cinematic sales pitches', color: 'from-cyan-600 to-blue-600' },
     ],
     []
   );
