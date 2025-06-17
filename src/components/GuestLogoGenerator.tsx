@@ -681,7 +681,7 @@ export const GuestLogoGenerator: React.FC = () => {
                         ) : !user && !generatedLogo.isTransferred ? (
                           <div className="text-center">
                             <User className="h-8 w-8 text-indigo-600 mx-auto mb-2" />
-                            <h5 className="font-semibold text-gray-900 mb-2">Sign in to Download</h5>
+                            <h5 className="font-semibold text-gray-900 mb-2">Sign up to Download</h5>
                             <p className="text-sm text-gray-600 mb-4">
                               Create a free account to download your logo and save it to your library
                             </p>
