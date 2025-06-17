@@ -5,12 +5,12 @@ import { motion } from 'framer-motion';
 // In a real application, you would fetch these from a CMS or an API.
 // Using placeholder image service for demonstration.
 const logoUrls = [
-  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+1',
-  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+2',
-  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+3',
-  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+4',
-  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+5',
-  'https://placehold.co/150x150/FFFFFF/E0E7FF?text=Logo+6',
+   '/assets/images/gallery/sample-1.png',
+  '/assets/images/gallery/sample-2.png',
+  '/assets/images/gallery/sample-3.png',
+  '/assets/images/gallery/sample-4.png',
+  '/assets/images/gallery/sample-5.png',
+  '/assets/images/gallery/sample-6.png',
 ];
 
 // Using placeholder video URLs for demonstration.
