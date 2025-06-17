@@ -38,7 +38,7 @@ export const Header: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50"
       >
-        <div className="max-w-xs px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <motion.button 
               onClick={handleLogoClick}
