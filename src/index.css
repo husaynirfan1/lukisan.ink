@@ -30,6 +30,11 @@
 }
 
 @layer components {
+  /* --- ADDED FOR GRADIENT ANIMATION --- */
+  .animated-gradient-text {
+    background-size: 200% 200%;
+  }
+  /* --- END OF ADDED CODE --- */
   /* Typography Component Classes */
   .heading-primary {
     font-family: 'Raleway', sans-serif;
