@@ -16,7 +16,7 @@ const opacityRange = [0, 0.3]; // Start fading when the top of the Hero is at 0%
 const mediaShowcaseOpacity = useTransform(scrollYProgress, opacityRange, [1, 0]);
 
 return (
-&lt;>
+
 {/* Maintenance Banner */}
 &lt;div className="bg-orange-500 text-white text-center p-2 flex items-center justify-center space-x-2">
 &lt;AlertTriangle className="h-5 w-5" />
