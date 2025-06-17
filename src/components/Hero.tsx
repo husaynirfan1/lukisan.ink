@@ -33,8 +33,6 @@ const mediaShowcaseOpacity = useTransform(scrollYProgress, opacityRange, [1, 0])
 
 
 return (
-
-<>
 <AuroraBackground>
       <motion.div
         initial={{ opacity: 0.0, y: 40 }}
@@ -46,6 +44,8 @@ return (
         }}
         className="relative flex flex-col gap-4 items-center justify-center px-4"
       >
+<>
+
 {/* Maintenance Banner */}
 
 <div className="bg-orange-500 text-white text-center p-2 flex items-center justify-center space-x-2">
@@ -279,10 +279,10 @@ return (
     </div>
 
   </div>
+
+</>
 </motion.div>
     </AuroraBackground> 
-</>
-
 );
 
 };
