@@ -8,13 +8,11 @@ import { PlayCircle } from 'lucide-react';
 // In a real application, you would fetch these from a CMS or an API.
 const logoUrls = [
   '/assets/images/gallery/sample-1.png',
-  '/logos/logo-2.svg',
-  '/logos/logo-3.svg',
-  '/logos/logo-4.svg',
-  '/logos/logo-5.svg',
-  '/logos/logo-6.svg',
-  '/logos/logo-7.svg',
-  '/logos/logo-8.svg',
+  '/assets/images/gallery/sample-2.png',
+  '/assets/images/gallery/sample-3.png',
+  '/assets/images/gallery/sample-4png',
+  '/assets/images/gallery/sample-5.png',
+  '/assets/images/gallery/sample-6.png',
 ];
 
 const videoThumbnails = [
