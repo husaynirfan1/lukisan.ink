@@ -33,26 +33,25 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <motion.header
+      <motion.header 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50"
       >
         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <motion.button
+            <motion.button 
               onClick={handleLogoClick}
               className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
               whileHover={{ scale: 1.05 }}
             >
               <div className="h-8 w-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl overflow-hidden">
-                <img
-                  src="/favicon.png"
-                  alt="Lukisan Logo"
-                  className="w-full h-full object-cover"
+                <img 
+                  src="/favicon.png" 
+                  alt="Lukisan Logo" 
+                  className="w-full h-full object-cover" 
                 />
               </div>
-              {/* --- UPDATED LINE --- */}
               <span className="heading-quaternary bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent animated-gradient-text animate-gradient-flow">
                 Lukisan
               </span>
@@ -106,7 +105,7 @@ export const Header: React.FC = () => {
                       {user.name}
                     </span>
                   </div>
-
+ 
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -135,8 +134,8 @@ export const Header: React.FC = () => {
         </div>
       </motion.header>
 
-      <AuthModal
-        isOpen={showAuthModal}
+      <AuthModal 
+        isOpen={showAuthModal} 
         onClose={() => setShowAuthModal(false)}
         onSuccess={handleSignInSuccess}
       />
