@@ -7,7 +7,7 @@ import { PlayCircle } from 'lucide-react';
 // --- Placeholder Data ---
 // In a real application, you would fetch these from a CMS or an API.
 const logoUrls = [
-  '/logos/logo-1.svg',
+  '/assets/images/gallery/sample-1.png',
   '/logos/logo-2.svg',
   '/logos/logo-3.svg',
   '/logos/logo-4.svg',
