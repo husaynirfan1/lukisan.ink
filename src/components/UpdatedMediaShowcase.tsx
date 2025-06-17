@@ -10,16 +10,16 @@ const logoUrls = [
   '/assets/images/gallery/sample-1.png',
   '/assets/images/gallery/sample-2.png',
   '/assets/images/gallery/sample-3.png',
-  '/assets/images/gallery/sample-4png',
+  '/assets/images/gallery/sample-4.png',
   '/assets/images/gallery/sample-5.png',
   '/assets/images/gallery/sample-6.png',
 ];
 
 const videoThumbnails = [
-  '/assets/videos/gallery/sample-berger.mp4',
-  '/assets/videos/gallery/sample-berger.mp4',
- '/assets/videos/gallery/sample-berger.mp4',
-  '/assets/videos/gallery/sample-berger.mp4',
+  '/assets/videos/gallery/demo-video-1.mp4',
+  '/videos/thumbnail-2.jpg',
+  '/videos/thumbnail-3.jpg',
+  '/videos/thumbnail-4.jpg',
 ];
 
 // --- Animation Variants ---
