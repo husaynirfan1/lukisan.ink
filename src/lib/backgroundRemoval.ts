@@ -323,6 +323,13 @@ export const getUsageStats = (): {
 
 // Preset configurations for common use cases
 export const presetConfigurations = {
+  // High quality for final logos
+  // highQuality: {
+  //   size: 'full' as const,
+  //   type: 'auto' as const,
+  //   format: 'png' as const,
+  //   channels: 'rgba' as const,
+  // },
   
   // Fast preview for testing
   preview: {
@@ -332,27 +339,27 @@ export const presetConfigurations = {
   },
   
   // Product/logo optimized
-  product: {
-    size: 'full' as const,
-    type: 'product' as const,
-    format: 'png' as const,
-    channels: 'rgba' as const,
-    crop: true,
-  },
+  // product: {
+  //   size: 'full' as const,
+  //   type: 'product' as const,
+  //   format: 'png' as const,
+  //   channels: 'rgba' as const,
+  //   crop: true,
+  // },
   
   // With white background
-  whiteBackground: {
-    size: 'full' as const,
-    type: 'auto' as const,
-    format: 'png' as const,
-    bg_color: 'ffffff',
-  },
+  // whiteBackground: {
+  //   size: 'full' as const,
+  //   type: 'auto' as const,
+  //   format: 'png' as const,
+  //   bg_color: 'ffffff', 
+  // },
   
   // With shadow effect
-  withShadow: {
-    size: 'full' as const,
-    type: 'auto' as const,
-    format: 'png' as const,
-    add_shadow: true,
-  },
+  // withShadow: {
+  //   size: 'full' as const,
+  //   type: 'auto' as const,
+  //   format: 'png' as const,
+  //   add_shadow: true,
+  // },
 };
