@@ -267,7 +267,7 @@ return (
     </div>
 
   </div>
- </div>
+
     </AuroraBackground>
 </>
 
