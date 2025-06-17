@@ -279,10 +279,10 @@ return (
     </div>
 
   </div>
-
-</>
 </motion.div>
     </AuroraBackground>
+</>
+
 );
 
 };
