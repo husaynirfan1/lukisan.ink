@@ -744,14 +744,20 @@ export const GuestLogoGenerator: React.FC = () => {
                 <p className="text-gray-600 mb-4">
                   Sign up for free to download your logos, access your library, and get 3 free generations daily!
                 </p>
+                 <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setShowAuthModal(true)}
-                  className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-                >
+                  className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
                   Get Started Free
                 </motion.button>
+                    </motion.div>
               </div>
             )}
           </div>
