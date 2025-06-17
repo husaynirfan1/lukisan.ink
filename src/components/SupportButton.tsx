@@ -1,7 +1,8 @@
 // src/components/SupportButton.tsx
-import React from 'reac';
+import React from 'react';
 import { motion } from 'framer-motion';
-import { LifeBuoy } from 'lucide-react';
+// Changed the icon import from LifeBuoy to MessageSquare
+import { MessageSquare } from 'lucide-react';
 
 export const SupportButton: React.FC = () => {
   const handleSupportClick = () => {
@@ -16,7 +17,8 @@ export const SupportButton: React.FC = () => {
       className="fixed bottom-8 right-8 z-50 w-16 h-16 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg hover:bg-indigo-700 transition-colors duration-300"
       aria-label="Contact Support"
     >
-      <LifeBuoy className="w-8 h-8" />
+      {/* Replaced the icon component */}
+      <MessageSquare className="w-8 h-8" />
     </motion.button>
   );
 };
