@@ -6,7 +6,7 @@ import { GuestLogoGenerator } from './GuestLogoGenerator';
 import { MediaShowcase } from './MediaShowcase';
 
 export const Hero: React.FC = () => {
-const guestLogoGeneratorRef = useRef&lt;HTMLDivElement>(null);
+const guestLogoGeneratorRef = useRefHTMLDivElement>(null);
 const { scrollYProgress } = useScroll();
 
 // Define the scroll range where the fade-out should happen
@@ -18,10 +18,10 @@ const mediaShowcaseOpacity = useTransform(scrollYProgress, opacityRange, [1, 0])
 return (
 
 {/* Maintenance Banner */}
-&lt;div className="bg-orange-500 text-white text-center p-2 flex items-center justify-center space-x-2">
-&lt;AlertTriangle className="h-5 w-5" />
-&lt;span className="font-medium">We're performing improvements on our video services. Video generation is unaffected, but you may experience minor issues.&lt;/span>
-&lt;/div>
+div className="bg-orange-500 text-white text-center p-2 flex items-center justify-center space-x-2">
+AlertTriangle className="h-5 w-5" />
+span className="font-medium">We're performing improvements on our video services. Video generation is unaffected, but you may experience minor issues.</span>
+</div>
 
   <div className="relative overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-purple-50">
     {/* Background decoration */}
