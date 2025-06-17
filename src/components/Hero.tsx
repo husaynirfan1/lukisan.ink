@@ -69,7 +69,7 @@ return (
           transition={{ duration: 0.6, delay: 0.2 }}
           className="body-large text-gray-600 mb-12 max-w-2xl mx-auto"
         >
-          Transform your ideas into professional logos and personalized videos with cutting-edge AI technology. Create stunning visuals and engaging content that elevates your brand in seconds.
+          Turn your ideas into stunning logos and videos in seconds with our AI.
         </motion.p>
       </div>
 
