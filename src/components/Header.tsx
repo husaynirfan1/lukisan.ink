@@ -52,9 +52,10 @@ export const Header: React.FC = () => {
                   className="w-full h-full object-cover" 
                 />
               </div>
-              <span className="heading-quaternary bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent animated-gradient-text animate-gradient-flow">
-                Lukisan
-              </span>
+              <span className="text-xl sm:text-2xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent animate-gradient-x">
+  Lukisan
+</span>
+
             </motion.button>
 
             <div className="flex items-center space-x-4">
