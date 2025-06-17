@@ -11,6 +11,8 @@ const logoUrls = [
   '/assets/images/gallery/sample-4.png',
   '/assets/images/gallery/sample-5.png',
   '/assets/images/gallery/sample-6.png',
+   '/assets/images/gallery/sample-consulting.png',
+   '/assets/images/gallery/sample-ikhsan.png',
 ];
 
 // Using placeholder video URLs for demonstration.
