@@ -692,7 +692,7 @@ export const GuestLogoGenerator: React.FC = () => {
                               className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center space-x-2"
                             >
                               <Download className="h-4 w-4" />
-                              <span>Sign In & Download</span>
+                              <span>Sign Up & Download</span>
                             </motion.button>
                           </div>
                         ) : (
