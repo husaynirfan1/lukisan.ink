@@ -615,7 +615,7 @@ export const GuestLogoGenerator: React.FC = () => {
                         {!user && !generatedLogo.isTransferred && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div className="bg-black/10 text-white/60 px-3 py-1 rounded-lg text-xs font-medium backdrop-blur-sm">
-                              Sign in to download
+                              Sign up to download
                             </div>
                           </div>
                         )}
