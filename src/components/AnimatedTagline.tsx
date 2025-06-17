@@ -30,10 +30,10 @@ export const AnimatedTagline = () => {
   }, [currentIndex, videoTypes]);
 
   return (
-    <div className="text-xl md:text-2xl text-gray-700 text-center space-y-2">
+    <div className="text-3xl md:text-4xl text-gray-700 text-center space-y-2">
       <span>Then, Elevate Your Brand with</span>
       {/* Container for the animated text, hiding overflow */}
-      <div className="relative h-12 flex items-center justify-center overflow-hidden">
+      <div className="relative h-16 flex items-center justify-center overflow-hidden">
         {videoTypes.map((item, index) => (
           <motion.span
             key={index}
