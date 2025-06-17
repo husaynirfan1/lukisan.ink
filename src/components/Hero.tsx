@@ -159,7 +159,7 @@ export const Hero: React.FC = () => {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSuccess={handleAuthSuccess}
-        initalMode='signup'
+        initalMode="signup"
       />
     </>
   );
