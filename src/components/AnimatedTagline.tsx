@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 
 // A more seamless, vertically scrolling animated tagline
-const AnimatedTagline = () => {
+export const AnimatedTagline = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // An array of different video types and their corresponding colors for the animation
