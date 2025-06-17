@@ -275,12 +275,12 @@ return (
         <GuestLogoGenerator />
 
       </div>
-
+</motion.div>
+    </AuroraBackground>
     </div>
 
   </div>
-</motion.div>
-    </AuroraBackground>
+
 </>
 
 );
