@@ -1,8 +1,27 @@
+import flattenColorPalette from "tailwindcss/lib/util/flattenColorPalette.js";
+
+/**
+ * This plugin adds each Tailwind color as a global CSS variable, e.g. var(--gray-200).
+ * This is the new plugin from your example.
+ */
+function addVariablesForColors({ addBase, theme }) {
+  let allColors = flattenColorPalette(theme("colors"));
+  let newVars = Object.fromEntries(
+    Object.entries(allColors).map(([key, val]) => [`--${key}`, val])
+  );
+
+  addBase({
+    ":root": newVars,
+  });
+}
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  darkMode: "class", // Added from your new example
   theme: {
     extend: {
+      // Your existing font and spacing configuration
       fontFamily: {
         'sans': ['Raleway', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'sans-serif'],
         'serif': ['Merriweather', 'ui-serif', 'Georgia', 'Cambria', 'Times New Roman', 'Times', 'serif'],
@@ -32,18 +51,34 @@ export default {
         'wider': '0.05em',
         'widest': '0.1em',
       },
-      // --- ADDED FOR GRADIENT ANIMATION ---
+
+      // --- COMBINED ANIMATIONS ---
       animation: {
+        // From our previous steps
         'gradient-flow': 'gradient-flow 6s ease infinite',
+        // From your new example
+        'aurora': "aurora 60s linear infinite",
       },
       keyframes: {
+        // From our previous steps
         'gradient-flow': {
           '0%, 100%': { backgroundPosition: '0% 50%' },
           '50%': { backgroundPosition: '100% 50%' },
         },
+        // From your new example
+        'aurora': {
+          from: {
+            backgroundPosition: "50% 50%, 50% 50%",
+          },
+          to: {
+            backgroundPosition: "350% 50%, 350% 50%",
+          },
+        },
       },
-      // --- END OF ADDED CODE ---
     },
   },
-  plugins: [],
+  // --- ADDED PLUGIN ---
+  plugins: [
+    addVariablesForColors
+  ],
 };
