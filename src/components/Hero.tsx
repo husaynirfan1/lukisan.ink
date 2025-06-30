@@ -51,20 +51,29 @@ export const Hero: React.FC = () => {
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
           <div className="text-center">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <a 
-                href="https://bolt.new/" 
-                className="absolute -top-8 left-1/2 transform -translate-x-1/2 -translate-y-full hover:scale-110 transition-transform"
-              >
-                <img 
-                  src="/bolt_black.svg" 
-                  alt="Bolt Icon" 
-                  className="h-12 w-12 sm:h-16 sm:w-16" 
-                />
-              </a>
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.6 }}
+  className="relative" // Added relative positioning here
+>
+  <a 
+    href="https://bolt.new/" 
+    target="_blank" // Added target blank for external link
+    rel="noopener noreferrer" // Security best practice
+    className="absolute -top-8 left-1/2 transform -translate-x-1/2 -translate-y-full hover:scale-110 transition-transform"
+  >
+    <img 
+      src="/bolt_black.svg" 
+      alt="Bolt Icon" 
+      className="h-12 w-12 sm:h-16 sm:w-16" 
+      onError={(e) => {
+        // Fallback in case image fails to load
+        const target = e.target as HTMLImageElement;
+        target.onerror = null;
+        target.src = "/bolt.svg"; // Try alternative filename
+      }}
+    />
+  </a>
               <h1 className="heading-primary text-gray-900 mb-6">
                 Create Stunning
                 <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent pb-4">
