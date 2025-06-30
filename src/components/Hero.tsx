@@ -65,7 +65,7 @@ export const Hero: React.FC = () => {
 <img 
   src="/bolt_black.svg" 
   alt="Bolt Icon"
-  className="h-12 w-12 sm:h-16 sm:w-16 scale-125" // Adds 25% scaling
+  className="h-12 w-12 sm:h-16 sm:w-16 scale-110" // Adds 25% scaling
       onError={(e) => {
         // Fallback in case image fails to load
         const target = e.target as HTMLImageElement;
