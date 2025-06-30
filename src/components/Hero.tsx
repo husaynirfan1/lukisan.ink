@@ -62,10 +62,10 @@ export const Hero: React.FC = () => {
     rel="noopener noreferrer" // Security best practice
     className="absolute -top-4 left-1/2 transform -translate-x-1/2 -translate-y-full hover:scale-110 transition-transform"
   >
-    <img 
-      src="/bolt_black.svg" 
-      alt="Bolt Icon" 
-      className="h-15 w-15 sm:h-16 sm:w-16" 
+<img 
+  src="/bolt_black.svg" 
+  alt="Bolt Icon"
+  className="h-12 w-12 sm:h-16 sm:w-16 scale-125" // Adds 25% scaling
       onError={(e) => {
         // Fallback in case image fails to load
         const target = e.target as HTMLImageElement;
