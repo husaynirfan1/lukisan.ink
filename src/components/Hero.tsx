@@ -55,6 +55,16 @@ export const Hero: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
+              <a 
+                href="https://bolt.new/" 
+                className="absolute -top-8 left-1/2 transform -translate-x-1/2 -translate-y-full hover:scale-110 transition-transform"
+              >
+                <img 
+                  src="/bolt_black.svg" 
+                  alt="Bolt Icon" 
+                  className="h-12 w-12 sm:h-16 sm:w-16" 
+                />
+              </a>
               <h1 className="heading-primary text-gray-900 mb-6">
                 Create Stunning
                 <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent pb-4">
