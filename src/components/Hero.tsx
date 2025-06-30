@@ -60,7 +60,7 @@ export const Hero: React.FC = () => {
     href="https://bolt.new/" 
     target="_blank" // Added target blank for external link
     rel="noopener noreferrer" // Security best practice
-    className="absolute -top-8 left-1/2 transform -translate-x-1/2 -translate-y-full hover:scale-110 transition-transform"
+    className="absolute -top-12 left-1/2 transform -translate-x-1/2 -translate-y-full hover:scale-110 transition-transform"
   >
     <img 
       src="/bolt_black.svg" 
